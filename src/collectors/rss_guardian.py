@@ -1,54 +1,73 @@
-import os, json, datetime, feedparser
-from urllib.parse import urlparse
-from src.storage.azure_blob import put_text, utc_now_iso
-
-ACCOUNT_CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
-
-LEAGUE = "premier_league"
-FEED_NAME = "guardian_football"
-FEED_URL  = "https://www.theguardian.com/football/rss"
-
-def normalize(entry):
-    # Minimalt normaliserad post
-    return {
-        "title": entry.get("title", "").strip(),
-        "link": entry.get("link"),
-        "published": entry.get("published", ""),
-        "summary": entry.get("summary", ""),
-        "source": "The Guardian",
-    }
-
-def blob_date():
-    # yyyy-mm-dd (UTC)
-    return datetime.datetime.utcnow().strftime("%Y-%m-%d")
+import os
+import requests
+import feedparser
+from azure.storage.blob import BlobServiceClient
+from datetime import datetime
 
 def main():
-    d = feedparser.parse(FEED_URL)
-    items = [normalize(e) for e in d.entries[:50]]
+    print("🚀 RSS Guardian collector started")
 
-    base_raw = f"raw/news/{FEED_NAME}/{blob_date()}/"
-    base_cur = f"curated/news/{FEED_NAME}/{LEAGUE}/{blob_date()}/"
+    # Hämta miljövariabler
+    storage_account = os.getenv("AZURE_STORAGE_ACCOUNT")
+    container_name = os.getenv("AZURE_CONTAINER")
+    league = os.getenv("LEAGUE", "unknown_league")
+    feed_name = os.getenv("FEED_NAME", "rss_feed")
+    feed_url = os.getenv("FEED_URL")
+    section_id = os.getenv("SECTION_ID", "S.NEWS.TOP3")
+    lang = os.getenv("LANG", "en")
+    top_n = int(os.getenv("TOP_N", "3"))
 
-    put_text(ACCOUNT_CONTAINER, base_raw + "rss.json",
-             json.dumps({"feed": FEED_URL, "fetched_at": utc_now_iso(), "items": items},
-                        ensure_ascii=False, indent=2),
-             "application/json")
+    if not feed_url:
+        print("❌ No FEED_URL provided, exiting...")
+        return
 
-    # Minimal filtrering (behåll alla – vi kan förfina senare med keywords)
-    curated = {
-        "league": LEAGUE,
-        "feed": FEED_URL,
-        "fetched_at": utc_now_iso(),
-        "items": items
-    }
-    put_text(ACCOUNT_CONTAINER, base_cur + "items.json",
-             json.dumps(curated, ensure_ascii=False, indent=2),
-             "application/json")
+    try:
+        print(f"📡 Fetching RSS feed: {feed_url}")
+        # Timeout = 15 sekunder
+        response = requests.get(feed_url, timeout=15)
+        response.raise_for_status()
+    except requests.exceptions.Timeout:
+        print(f"⏰ Timeout: RSS fetch from {feed_url} took too long")
+        return
+    except Exception as e:
+        print(f"❌ Failed to fetch RSS feed: {e}")
+        return
 
-    put_text(ACCOUNT_CONTAINER, base_cur + "input_manifest.json",
-             json.dumps({"source": FEED_NAME, "count": len(items), "generated_at": utc_now_iso()},
-                        ensure_ascii=False, indent=2),
-             "application/json")
+    # Parsar flödet
+    feed = feedparser.parse(response.content)
+    items = feed.entries[:top_n]
+
+    if not items:
+        print("⚠️ No items found in RSS feed")
+        return
+
+    # Förbereda data för blob
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    blob_name = f"raw/{league}/{section_id}/{feed_name}_{timestamp}.json"
+
+    data = []
+    for item in items:
+        data.append({
+            "title": item.get("title"),
+            "link": item.get("link"),
+            "published": item.get("published", ""),
+            "summary": item.get("summary", "")
+        })
+
+    # Spara till Azure Blob
+    try:
+        blob_service = BlobServiceClient(
+            f"https://{storage_account}.blob.core.windows.net/",
+            credential=None  # Hanterad identitet används
+        )
+        container = blob_service.get_container_client(container_name)
+        container.upload_blob(blob_name, str(data), overwrite=True)
+        print(f"✅ RSS data saved to blob: {blob_name}")
+    except Exception as e:
+        print(f"❌ Failed to upload to blob storage: {e}")
+        return
+
+    print("🏁 RSS Guardian collector finished successfully")
 
 if __name__ == "__main__":
     main()
