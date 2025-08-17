@@ -1,0 +1,17 @@
+pods:
+  PL_daily_africa_en:
+    status: on
+    leagues: ["premier_league"]
+    langs: ["en"]
+    jingles: { intro: "jingles/J2.mp3", outro: "jingles/J2.mp3" }
+    personas_active: ["p1","p2"]
+    sections: ["S1","S2","S3"]
+    rules:
+      type: micro
+      min_sections: 1
+      max_sections: 3
+      freshness_hours: 24
+    overrides:
+      S1:
+        target_duration_s: 55
+        lead_persona: "p1"

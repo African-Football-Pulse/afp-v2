@@ -1,0 +1,45 @@
+aliases:
+  S1: S.STATS.TOP_AFRICAN_PLAYERS
+  S2: S.NEWS.CLUB_HIGHLIGHT
+  S3: S.OPINION.EXPERT_COMMENT
+
+sections:
+  - id: S.STATS.TOP_AFRICAN_PLAYERS
+    version: 1
+    name: "Top African Players"
+    type: stats
+    default_langs: ["en"]
+    default_personas: ["p1","p2"]
+    default_duration_s: 60
+    duration_tolerance: { minus: 5, plus: 10 }
+    lead_persona: "p1"
+    tts_policy: { style: conversational, pace: normal }
+    inputs:
+      - key: stats_fbref_players
+      - key: stats_matches
+    selectors:
+      top_n: 3
+      filter:
+        nationality_region: "Africa"
+        league: "${league}"
+        date: "${date}"
+    template: "templates/sections/top_african_players.j2"
+    freshness: { max_age_hours: 24, require_min_items: 1 }
+    fallback: { on_empty: skip }
+    output_contract: { files: ["section.txt","section.mp3","section_manifest.json"] }
+
+  - id: S.NEWS.CLUB_HIGHLIGHT
+    version: 1
+    name: "Club RSS Highlight"
+    type: news
+    default_langs: ["en"]
+    default_personas: ["p2"]
+    default_duration_s: 45
+
+  - id: S.OPINION.EXPERT_COMMENT
+    version: 1
+    name: "Expert Comment"
+    type: opinion
+    default_langs: ["en"]
+    default_personas: ["p4"]
+    default_duration_s: 45

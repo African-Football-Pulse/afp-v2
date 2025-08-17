@@ -1,0 +1,5 @@
+languages:
+  en:
+    tts_voice: "en-GB-RyanNeural"
+  sw:
+    tts_voice: "sv-SE-HilleviNeural"

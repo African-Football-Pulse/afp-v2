@@ -1,0 +1,5 @@
+{{ date }} — {{ league|title }} micro episode
+Sections:
+{% for s in sections %}
+- {{ s.section_id }} ({{ s.lang }}) duration ~{{ s.duration_s }}s
+{% endfor %}

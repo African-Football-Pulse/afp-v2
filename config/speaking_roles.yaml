@@ -1,0 +1,4 @@
+roles:
+  S.STATS.TOP_AFRICAN_PLAYERS:
+    lead: "p1"
+    pattern: ["p1:intro","p2:stat","p1:wrap"]
