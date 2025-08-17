@@ -10,22 +10,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Az login (OIDC)
+      - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: ACR login
-        uses: azure/CLI@v2
-        with:
-          inlineScript: |
-            az acr login --name afpacr
+      - name: Ensure subscription context
+        run: az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build & push
+      # Server-side build – kräver INTE Docker på runnern
+      - name: ACR build (server-side)
         run: |
-          IMAGE=afpacr.azurecr.io/afp-runner
-          TAG=latest
-          docker build -t $IMAGE:$TAG .
-          docker push $IMAGE:$TAG
+          az acr build \
+            --registry afpacr \
+            --image afp-runner:latest \
+            .
