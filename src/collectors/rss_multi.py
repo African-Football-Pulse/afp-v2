@@ -6,8 +6,28 @@ from zoneinfo import ZoneInfo
 import requests
 import feedparser
 
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, ContentSettings
+# --- Local Mode helpers (no Azure needed) ---
+USE_LOCAL = os.environ.get("STORAGE_MODE", "").lower() == "local"
+LOCAL_ROOT = os.environ.get("LOCAL_OUT_DIR", "_out")
+
+def _ensure_parent(fp: str):
+    os.makedirs(os.path.dirname(fp), exist_ok=True)
+
+def _upload_json_local(path: str, obj):
+    fp = os.path.join(LOCAL_ROOT, path)
+    _ensure_parent(fp)
+    with open(fp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+    return path
+# --- /Local Mode ---
+
+# Azure imports endast om vi kör mot Blob
+if not USE_LOCAL:
+    from azure.identity import DefaultAzureCredential
+    from azure.storage.blob import BlobServiceClient, ContentSettings
+else:
+    class ContentSettings:  # dummy så koden kompilerar i local mode
+        def __init__(self, *args, **kwargs): ...
 
 TZ = ZoneInfo("Europe/Stockholm")
 
@@ -26,6 +46,8 @@ def get_blob_clients():
     return svc.get_container_client(container)
 
 def upload_json(container_client, path, obj):
+    if USE_LOCAL:
+        return _upload_json_local(path, obj)
     data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
     container_client.upload_blob(
         name=path,
@@ -46,9 +68,7 @@ def load_feeds_config():
 def parse_items(feed, source_name):
     items = []
     for e in feed.entries:
-        # feedparser fält kan saknas; hantera robust
-        published = getattr(e, "published", None) or getattr(e, "updated", None)
-        # ISO om möjligt
+        published_iso = None
         try:
             if getattr(e, "published_parsed", None):
                 dt = datetime(*e.published_parsed[:6], tzinfo=timezone.utc).astimezone(TZ)
@@ -56,16 +76,14 @@ def parse_items(feed, source_name):
             elif getattr(e, "updated_parsed", None):
                 dt = datetime(*e.updated_parsed[:6], tzinfo=timezone.utc).astimezone(TZ)
                 published_iso = dt.isoformat()
-            else:
-                published_iso = None
         except Exception:
             published_iso = None
         items.append({
             "id": getattr(e, "id", None) or str(uuid.uuid4()),
-            "title": getattr(e, "title", "").strip(),
+            "title": (getattr(e, "title", "") or "").strip(),
             "link": getattr(e, "link", None),
-            "summary": getattr(e, "summary", "")[:1000],
-            "published": published,
+            "summary": (getattr(e, "summary", "") or "")[:1000],
+            "published": getattr(e, "published", None) or getattr(e, "updated", None),
             "published_iso": published_iso,
             "source": source_name,
         })
@@ -99,7 +117,6 @@ def collect_one(source, timeout_s, container_client, league, day):
         print(f"[{name}] ERROR -> {path}")
         return
 
-    # Parse & spara RAW (som JSON)
     feed = feedparser.parse(r.content)
     raw_obj = {
         "source": name,
@@ -111,7 +128,6 @@ def collect_one(source, timeout_s, container_client, league, day):
     }
     upload_json(container_client, f"{raw_prefix}/rss.json", raw_obj)
 
-    # Curera
     items = parse_items(feed, name)
     curated_items_path = upload_json(container_client, f"{curated_prefix}/items.json", items)
 
@@ -138,16 +154,15 @@ def main():
     timeout_s = int(cfg.get("timeout_s", 15))
     sources = cfg["sources"]
 
-    container_client = get_blob_clients()
+    container_client = None if USE_LOCAL else get_blob_clients()
     day = today_str()
 
-    print(f"[collector] League={league} | Sources={len(sources)} | Day={day} | Timeout={timeout_s}s")
+    print(f"[collector] League={league} | Sources={len(sources)} | Day={day} | Timeout={timeout_s}s | Mode={'LOCAL' if USE_LOCAL else 'AZURE'}")
 
     for src in sources:
         try:
             collect_one(src, timeout_s, container_client, league, day)
         except Exception as e:
-            # Hårdsäkra så en källa aldrig fäller resten
             name = src.get("name", "unknown")
             prefix = f"raw/news/{name}/{day}"
             upload_json(container_client, f"{prefix}/error.json", {
