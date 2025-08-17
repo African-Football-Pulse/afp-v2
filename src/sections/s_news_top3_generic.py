@@ -1,15 +1,55 @@
 # src/sections/s_news_top3_generic.py
 """
-Läser första bästa curated items.json för dagens datum och skriver en enkel Top 3-sektion
-till: sections/{YYYY-MM-DD}/{league}/_/S.NEWS.TOP3.GENERIC/en/section.txt
-"""
+Läser första bästa curated items.json för dagens datum och skriver en Top 3-sektion till:
+sections/{YYYY-MM-DD}/{league}/_/S.NEWS.TOP3.GENERIC/en/section.txt
 
-import os, io, json, sys
+Stöd för:
+- Azure Blob via Managed Identity (DefaultAzureCredential)
+- Local Mode (STORAGE_MODE=local) -> skriver/läser i ./_out
+"""
+import os, json, sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, ContentSettings
+# --- Local Mode helpers ---
+USE_LOCAL = os.environ.get("STORAGE_MODE", "").lower() == "local"
+LOCAL_ROOT = os.environ.get("LOCAL_OUT_DIR", "_out")
+
+def _ensure_parent(fp: str):
+    os.makedirs(os.path.dirname(fp), exist_ok=True)
+
+def _upload_text_local(path: str, text: str):
+    fp = os.path.join(LOCAL_ROOT, path)
+    _ensure_parent(fp)
+    with open(fp, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+def download_json_local(path):
+    fp = os.path.join(LOCAL_ROOT, path)
+    with open(fp, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def list_local_item_paths(prefix):
+    base = os.path.join(LOCAL_ROOT, prefix)
+    if not os.path.exists(base):
+        return []
+    hits = []
+    for root, _, files in os.walk(base):
+        for fn in files:
+            if fn == "items.json":
+                rel = os.path.relpath(os.path.join(root, fn), LOCAL_ROOT)
+                hits.append(rel)
+    return hits
+# --- /Local Mode ---
+
+# Azure imports endast om vi kör mot Blob
+if not USE_LOCAL:
+    from azure.identity import DefaultAzureCredential
+    from azure.storage.blob import BlobServiceClient, ContentSettings
+else:
+    class ContentSettings:
+        def __init__(self, *args, **kwargs): ...
 
 TZ = ZoneInfo("Europe/Stockholm")
 
@@ -25,13 +65,23 @@ def blob_client():
     return svc.get_container_client(container)
 
 def list_blobs(container_client, prefix):
+    if USE_LOCAL:
+        class B: pass
+        for rel in list_local_item_paths(prefix):
+            b = B(); b.name = rel
+            yield b
+        return
     return container_client.list_blobs(name_starts_with=prefix)
 
 def download_json(container_client, path):
+    if USE_LOCAL:
+        return download_json_local(path)
     stream = container_client.download_blob(path)
     return json.loads(stream.readall().decode("utf-8"))
 
 def upload_text(container_client, path, text):
+    if USE_LOCAL:
+        return _upload_text_local(path, text)
     container_client.upload_blob(
         name=path,
         data=text.encode("utf-8"),
@@ -41,11 +91,9 @@ def upload_text(container_client, path, text):
     return path
 
 def pick_items_blob_for_day(container_client, league, day):
-    # Sök efter curated/news/*/{league}/{day}/items.json och ta första icke-tomma
     prefix = f"curated/news/"
     for blob in list_blobs(container_client, prefix):
         name = blob.name
-        # Snabbfilter
         if not name.endswith("/items.json"):
             continue
         parts = name.split("/")
@@ -67,7 +115,6 @@ def pick_items_blob_for_day(container_client, league, day):
     return None, None
 
 def top3(items):
-    # Sortera på published_iso (fall-back: bibehåll ordning)
     def key(x):
         ts = x.get("published_iso")
         try:
@@ -90,14 +137,14 @@ def render_section(league, day, items3):
     return "\n".join(lines).strip() + "\n"
 
 def main():
-    league = os.environ.get("LEAGUE", "premier_league")  # valfritt override via env
+    league = os.environ.get("LEAGUE", "premier_league")
     day = os.environ.get("DAY", today_str())
 
-    cc = blob_client()
+    cc = None if USE_LOCAL else blob_client()
     blob_name, items = pick_items_blob_for_day(cc, league, day)
 
     if not items:
-        print(f"[top3] Hittar inga curated items för {league} {day}. Avbryter med exit code 3.")
+        print(f"[top3] Hittar inga curated items för {league} {day}. Exit 3.")
         sys.exit(3)
 
     top = top3(items)
@@ -106,7 +153,6 @@ def main():
     out_path = f"sections/{day}/{league}/_/S.NEWS.TOP3.GENERIC/en/section.txt"
     upload_text(cc, out_path, section_text)
 
-    # Liten manifest för spårbarhet
     manifest = {
         "league": league,
         "day": day,
@@ -116,12 +162,16 @@ def main():
         "generated_at": datetime.now(timezone.utc).astimezone(TZ).isoformat()
     }
     manifest_path = f"sections/{day}/{league}/_/S.NEWS.TOP3.GENERIC/en/input_manifest.json"
-    cc.upload_blob(
-        name=manifest_path,
-        data=json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"),
-        overwrite=True,
-        content_settings=ContentSettings(content_type="application/json; charset=utf-8")
-    )
+    if USE_LOCAL:
+        _upload_text_local(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2))
+    else:
+        from azure.storage.blob import ContentSettings
+        cc.upload_blob(
+            name=manifest_path,
+            data=json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"),
+            overwrite=True,
+            content_settings=ContentSettings(content_type="application/json; charset=utf-8")
+        )
 
     print(f"[top3] OK -> {out_path}")
 
