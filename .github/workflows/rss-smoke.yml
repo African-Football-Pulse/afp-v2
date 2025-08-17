@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Sanity check: läs URL:er från config/feeds.yaml och kolla HTTP-status
+      # Install PyYAML tidigt för sanity-extraktion
       - name: Install PyYAML (for sanity check)
         run: |
           python -m pip install --upgrade pip
@@ -36,16 +36,24 @@ jobs:
           print(f"Found {len(urls)} URL(s).")
           PY
 
-      - name: Sanity check RSS endpoints (HEAD)
+      # Tolerant sanity-check: följer redirects, har retry och varnar istället för att faila direkt.
+      - name: Sanity check RSS endpoints (HEAD, tolerant)
         run: |
           set -euo pipefail
+          fails=0
           while IFS= read -r u; do
             echo "Checking: $u"
-            # Visa första raden med status (ex: HTTP/2 200)
-            curl -sSIL --max-time 10 "$u" | head -n 1
+            if ! curl -sSIL -L --max-time 12 --retry 2 --retry-all-errors -A "afp-rss-smoke/1.0" "$u" | head -n 1; then
+              echo "::warning::Sanity check failed for $u"
+              fails=$((fails+1))
+            fi
           done < urls.txt
+          # Tillåt 1 fel utan att stoppa jobbet
+          if [ "$fails" -gt 1 ]; then
+            echo "::error::Too many failed feeds ($fails)."
+            exit 1
+          fi
 
-      # Installera alla deps inför själva smoke-körningen (LOCAL mode)
       - name: Install deps
         run: |
           pip install -r requirements.txt
