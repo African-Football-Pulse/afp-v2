@@ -1,0 +1,38 @@
+name: rss-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run collector in LOCAL mode
+        env:
+          STORAGE_MODE: local
+          LOCAL_OUT_DIR: _out
+        run: python -m src.collectors.rss_multi
+
+      - name: Run top3 in LOCAL mode
+        env:
+          STORAGE_MODE: local
+          LOCAL_OUT_DIR: _out
+          LEAGUE: premier_league
+        run: python -m src.sections.s_news_top3_generic
+
+      - name: Upload artifact (_out)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rss-smoke-out
+          path: _out/
