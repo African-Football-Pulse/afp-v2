@@ -43,3 +43,19 @@ sections:
     default_langs: ["en"]
     default_personas: ["p4"]
     default_duration_s: 45
+
+  - id: S.NEWS.TOP3_GUARDIAN
+    version: 1
+    name: "Top 3 Headlines (Guardian)"
+    type: news
+    default_langs: ["en"]
+    default_personas: ["p1"]
+    default_duration_s: 45
+    inputs:
+      - key: curated_guardian_items
+    template: "templates/sections/top3_headlines.j2"
+    freshness:
+      max_age_hours: 12
+      require_min_items: 1
+    output_contract:
+      files: ["section.txt","section_manifest.json"]
