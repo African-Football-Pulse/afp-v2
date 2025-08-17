@@ -6,6 +6,6 @@ sources:
     url: http://feeds.bbci.co.uk/sport/football/rss.xml
   - name: sky_sports_premier_league
     url: https://www.skysports.com/rss/12040
-  - name: reuters_soccer
-    url: https://feeds.reuters.com/reuters/UKsoccerNews
+  - name: independent_football
+    url: https://www.independent.co.uk/sport/football/rss
 timeout_s: 15
