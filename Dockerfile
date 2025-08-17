@@ -16,7 +16,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Kopiera resten av koden
-COPY . .
+COPY . /app  # Kopiera hela koden till /app
+
+# Lista filer i /app/src/sections/ för felsökning
+RUN ls /app/src/sections/
 
 # Standardkommando kan override:as i ACA-jobben
-CMD ["python", "-m", "src.collectors.rss_multi"]
+CMD ["python", "-m", "src.collectors.rss_multi"]  # Default för collect-jobbet
