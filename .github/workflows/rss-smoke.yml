@@ -6,16 +6,48 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install deps
+      # Sanity check: läs URL:er från config/feeds.yaml och kolla HTTP-status
+      - name: Install PyYAML (for sanity check)
         run: |
           python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Extract RSS URLs from config/feeds.yaml
+        id: extract_urls
+        run: |
+          python - <<'PY'
+          import yaml, sys
+          with open("config/feeds.yaml", "r", encoding="utf-8") as f:
+              cfg = yaml.safe_load(f)
+          urls = [s["url"] for s in cfg.get("sources", []) if "url" in s]
+          with open("urls.txt", "w", encoding="utf-8") as f:
+              for u in urls:
+                  f.write(u.strip() + "\n")
+          print(f"Found {len(urls)} URL(s).")
+          PY
+
+      - name: Sanity check RSS endpoints (HEAD)
+        run: |
+          set -euo pipefail
+          while IFS= read -r u; do
+            echo "Checking: $u"
+            # Visa första raden med status (ex: HTTP/2 200)
+            curl -sSIL --max-time 10 "$u" | head -n 1
+          done < urls.txt
+
+      # Installera alla deps inför själva smoke-körningen (LOCAL mode)
+      - name: Install deps
+        run: |
           pip install -r requirements.txt
 
       - name: Run collector in LOCAL mode
