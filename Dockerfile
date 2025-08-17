@@ -3,4 +3,4 @@ WORKDIR /app
 COPY . /app
 RUN pip install --no-cache-dir azure-storage-blob azure-identity pyyaml jinja2
 ENV PYTHONUNBUFFERED=1
-ENTRYPOINT ["python"]
+ENTRYPOINT ["python", "-m", "src.collectors.collect_data"]
