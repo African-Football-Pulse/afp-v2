@@ -14,7 +14,8 @@ def _client():
     if sas:
         url = f"https://{account}.blob.core.windows.net{sas}"
         return BlobServiceClient(account_url=url)
-    raise RuntimeError("Provide AZURE_STORAGE_KEY or AZURE_BLOB_SAS")
+    # Managed Identity path (works in ACA if identity has RBAC)
+    return BlobServiceClient(account_url=f"https://{account}.blob.core.windows.net")
 
 def put_bytes(container: str, blob_path: str, data: bytes, content_type: str = "application/octet-stream"):
     svc = _client()
@@ -29,11 +30,6 @@ def put_bytes(container: str, blob_path: str, data: bytes, content_type: str = "
 
 def put_text(container: str, blob_path: str, text: str, content_type: str = "text/plain; charset=utf-8"):
     return put_bytes(container, blob_path, text.encode("utf-8"), content_type)
-
-def exists(container: str, blob_path: str) -> bool:
-    svc = _client()
-    blob = svc.get_blob_client(container, blob_path)
-    return blob.exists()
 
 def list_prefix(container: str, prefix: str):
     svc = _client()

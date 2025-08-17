@@ -25,8 +25,7 @@ def render_text(data, lang="en"):
     for p in data["players"]:
         lines.append(f"- {p['name']} ({p['club']}): xG {p['xg']}, xA {p['xa']}, minutes {p['minutes']}")
     lines.append("More tomorrow.")
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 def main():
     date = today()
