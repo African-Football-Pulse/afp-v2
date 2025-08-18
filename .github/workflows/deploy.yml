@@ -1,0 +1,40 @@
+name: Deploy AFP Jobs
+
+on:
+  workflow_dispatch:   # manuell trigger
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ---- Secrets in Azure ----
+      - name: Set SAS secret for collector
+        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collector --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+
+      - name: Set SAS secret for producer
+        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-producer --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+
+      - name: Set SAS secret for assembler
+        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assembler --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+
+      # ---- Update jobs ----
+      - name: Update collector job
+        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collector --yaml .github/workflows/collector-job.yaml
+
+      - name: Update producer job
+        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-producer --yaml .github/workflows/producer-job.yaml
+
+      - name: Update assembler job
+        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assembler --yaml .github/workflows/assembler-job.yaml
