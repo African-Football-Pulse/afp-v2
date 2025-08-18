@@ -5,10 +5,6 @@ location: westeurope
 properties:
   configuration:
     triggerType: Manual
-    secrets:
-      - name: BLOB_CONTAINER_SAS_URL
-        value: "https://afpstoragepilot.blob.core.windows.net/afp?sp=rcwl&st=2025-08-18T06:07:15Z&se=2025-09-30T14:22:15Z&spr=https&sv=2024-11-04&sr=c&sig=eXkVRxRs%2ByTXVlNGq5%2BF2at3uYf4EyCZvjE3jlWaN54%3D"
-
   template:
     containers:
       - name: afp
