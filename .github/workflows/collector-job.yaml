@@ -1,17 +1,22 @@
-# collector-job.yaml
 name: afp-collector
 type: Microsoft.App/jobs
 location: westeurope
+
 properties:
   configuration:
-    triggerType: Manual          # eller Scheduled (se nedan)
+    triggerType: Manual
+    secrets:
+      - name: BLOB_CONTAINER_SAS_URL
+        value: "https://afpstoragepilot.blob.core.windows.net/afp?sp=rcwl&st=2025-08-18T06:07:15Z&se=2025-09-30T14:22:15Z&spr=https&sv=2024-11-04&sr=c&sig=eXkVRxRs%2ByTXVlNGq5%2BF2at3uYf4EyCZvjE3jlWaN54%3D"
+
   template:
     containers:
       - name: afp
-        image: ghcr.io/<org>/<repo>:<tag>
+        image: afpacr.azurecr.io/afp-runner:latest
         env:
           - name: JOB_TYPE
             value: collector
-          # - name: JOB_ARGS
-          #   value: "--limit 50"
-    # scale, resources etc. kan ligga här om du använder dem
+          - name: BLOB_PREFIX
+            value: "collector/"
+          - name: BLOB_CONTAINER_SAS_URL
+            secretRef: BLOB_CONTAINER_SAS_URL
