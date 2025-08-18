@@ -1,0 +1,17 @@
+# collector-job.yaml
+name: afp-collector
+type: Microsoft.App/jobs
+location: westeurope
+properties:
+  configuration:
+    triggerType: Manual          # eller Scheduled (se nedan)
+  template:
+    containers:
+      - name: afp
+        image: ghcr.io/<org>/<repo>:<tag>
+        env:
+          - name: JOB_TYPE
+            value: collector
+          # - name: JOB_ARGS
+          #   value: "--limit 50"
+    # scale, resources etc. kan ligga här om du använder dem
