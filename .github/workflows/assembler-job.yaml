@@ -1,0 +1,18 @@
+name: afp-assembler
+type: Microsoft.App/jobs
+location: westeurope
+
+properties:
+  configuration:
+    triggerType: Manual
+  template:
+    containers:
+      - name: afp
+        image: afpacr.azurecr.io/afp-runner:latest
+        env:
+          - name: JOB_TYPE
+            value: assembler
+          - name: BLOB_PREFIX
+            value: "assembler/"
+          - name: BLOB_CONTAINER_SAS_URL
+            secretRef: BLOB_CONTAINER_SAS_URL
