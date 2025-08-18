@@ -15,8 +15,10 @@ properties:
     containers:
       - name: afp-produce-job
         image: afpacr.azurecr.io/afp-runner:latest
-        command: ["python"]
-        args: ["-m", "src.sections.s_news_top3_guardian"]
+        command: python
+        args:
+          - -m
+          - src.sections.s_news_top3_guardian
         env:
           - name: AZURE_STORAGE_ACCOUNT
             value: afpstoragepilot
