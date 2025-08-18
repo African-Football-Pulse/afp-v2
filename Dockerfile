@@ -21,5 +21,7 @@ COPY . /app/
 # Lista filer i /app/src/sections/ för felsökning (valfritt felsökningssteg)
 RUN ls /app/src/sections/ || true
 
-# Standardkommando, kan override:as i ACA-jobben
-CMD ["python", "-m", "src.collectors.rss_multi"]
+# Standardkommando: styrs av JOB_TYPE i ACA
+COPY job_entrypoint.py /app/job_entrypoint.py
+CMD ["python", "/app/job_entrypoint.py"]
+
