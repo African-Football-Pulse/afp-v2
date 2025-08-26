@@ -20,21 +20,21 @@ jobs:
           subscription-id:  ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # --- Sätt/rotera SAS-hemligheten i respektive Azure Job ---
-      - name: Set SAS secret (collector)
-        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collector --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+      - name: Set SAS secret (collect)
+        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collect-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
       - name: Set SAS secret (produce)
         run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
-      - name: Set SAS secret (assembler)
-        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assembler --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+      - name: Set SAS secret (assemble)
+        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assemble-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
       # --- Uppdatera jobben med YAML-definitionerna ---
-      - name: Update collector job
-        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collector --yaml .github/workflows/collector-job.yaml
+      - name: Update collect job
+        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collect-job --yaml .github/workflows/collect-job.yaml
 
       - name: Update produce job
         run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --yaml .github/workflows/produce-job.yaml
 
-      - name: Update assembler job
-        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assembler --yaml .github/workflows/assembler-job.yaml
+      - name: Update assemble job
+        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assemble-job --yaml .github/workflows/assemble-job.yaml
