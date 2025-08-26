@@ -19,22 +19,34 @@ jobs:
           tenant-id:        ${{ secrets.AZURE_TENANT_ID }}
           subscription-id:  ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # --- Sätt/rotera SAS-hemligheten i respektive Azure Job ---
+      # ===============================
+      #   Set secrets in Azure Jobs
+      # ===============================
+
+      # afp-collect-job → JOB_TYPE=collect
       - name: Set SAS secret (collect)
         run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collect-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
+      # afp-produce-job → JOB_TYPE=produce
       - name: Set SAS secret (produce)
         run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
+      # afp-assemble-job → JOB_TYPE=assemble
       - name: Set SAS secret (assemble)
         run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assemble-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
-      # --- Uppdatera jobben med YAML-definitionerna ---
+      # ===============================
+      #   Update job definitions
+      # ===============================
+
+      # afp-collect-job → JOB_TYPE=collect
       - name: Update collect job
         run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collect-job --yaml .github/workflows/collect-job.yaml
 
+      # afp-produce-job → JOB_TYPE=produce
       - name: Update produce job
         run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --yaml .github/workflows/produce-job.yaml
 
+      # afp-assemble-job → JOB_TYPE=assemble
       - name: Update assemble job
         run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assemble-job --yaml .github/workflows/assemble-job.yaml
