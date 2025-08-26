@@ -4,14 +4,15 @@ import shlex
 import subprocess
 import sys
 
+# Mappning: JOB_TYPE → Python-modul att köra
 JOBS = {
-    "collector": "src.collectors.rss_multi",
-    "producer":  "src.sections.s_news_top3_guardian",
-    "assembler": "src.assembler.main",
+    "collect":  "src.collectors.rss_multi",
+    "produce":  "src.sections.s_news_top3_guardian",
+    "assemble": "src.assembler.main",
 }
 
 def main():
-    job = os.getenv("JOB_TYPE", "collector").strip().lower()
+    job = os.getenv("JOB_TYPE", "collect").strip().lower()
     mod = JOBS.get(job)
     if not mod:
         print(f"[ENTRYPOINT] Unknown JOB_TYPE={job!r}. Valid: {', '.join(JOBS)}", file=sys.stderr)
