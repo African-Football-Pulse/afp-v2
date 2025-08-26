@@ -1,4 +1,4 @@
-name: afp-assembler
+name: afp-assemble-job
 type: Microsoft.App/jobs
 location: westeurope
 
