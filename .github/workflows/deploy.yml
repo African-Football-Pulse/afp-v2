@@ -23,8 +23,8 @@ jobs:
       - name: Set SAS secret (collector)
         run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collector --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
-      - name: Set SAS secret (producer)
-        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-producer  --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+      - name: Set SAS secret (produce)
+        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
       - name: Set SAS secret (assembler)
         run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assembler --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
@@ -33,8 +33,8 @@ jobs:
       - name: Update collector job
         run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collector --yaml .github/workflows/collector-job.yaml
 
-      - name: Update producer job
-        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-producer --yaml .github/workflows/produce-job.yaml
+      - name: Update produce job
+        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --yaml .github/workflows/produce-job.yaml
 
       - name: Update assembler job
         run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assembler --yaml .github/workflows/assembler-job.yaml
