@@ -1,4 +1,4 @@
-name: afp-collector
+name: afp-collect-job
 type: Microsoft.App/jobs
 location: westeurope
 
