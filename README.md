@@ -1,22 +1,59 @@
-# AFP v2 (Modular, Section-First Architecture)
+# AFP Jobs – Struktur & Samband
 
-Sections are the atomic unit. Pipelines:
-1) collect_data → raw → curated (+ input_manifest.json)
-2) produce_sections → section.txt + (later TTS) section.mp3 + section_manifest.json
-3) assemble_episode → episode_script.txt + episode_manifest.json (+ later mp3)
+Det här repot innehåller definitioner för tre Azure Container Apps Jobs som kör olika delar av **African Football Pulse**-pipeline.  
+För att undvika förvirring används en konsekvent namngivning genom hela kedjan: **Azure-resurs → YAML-fil → JOB_TYPE → Python-modul**.
 
-Storage: Azure Blob (not Git). GitHub Actions only ships logs/manifests.
+---
 
-## Quick start
-1. Add GitHub Secrets:
-   - AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
-   - AZURE_STORAGE_ACCOUNT (e.g., afpstoragepilot)
-   - AZURE_CONTAINER (e.g., afp)
-2. Run workflow `build_and_push` to build/push image to ACR.
-3. In Azure Container Apps Jobs, use image `afpacr.azurecr.io/afp-runner:latest`:
-   - collect:   python -m src.collectors.collect_data
-   - produce:   python -m src.sections.s_top_african_players
-   - assemble:  python -m src.assembler.build_episode
+## Översikt
 
-Artifacts will appear under:
-raw/, curated/, sections/, episodes/ in your Blob container.
+| Azure Job (resursnamn) | YAML-fil                          | JOB_TYPE (env) | Python-modul som körs                          |
+|-------------------------|-----------------------------------|----------------|------------------------------------------------|
+| `afp-collect-job`       | `.github/workflows/collect-job.yaml`   | `collect`      | `src.collectors.rss_multi`                     |
+| `afp-produce-job`       | `.github/workflows/produce-job.yaml`   | `produce`      | `src.sections.s_news_top3_guardian`            |
+| `afp-assemble-job`      | `.github/workflows/assemble-job.yaml`  | `assemble`     | `src.assembler.main`                           |
+
+---
+
+## Hur det fungerar
+
+- **Entrypoint (`job_entrypoint.py`)**
+  - Läser `JOB_TYPE` från env.
+  - Matchar värdet mot `JOBS`-mappningen och kör motsvarande Python-modul.
+  - Default är `collect` om `JOB_TYPE` saknas.
+
+- **YAML-filer**
+  - Beskriver varje jobb (`collect`, `produce`, `assemble`).
+  - Sätter rätt `JOB_TYPE` och `BLOB_PREFIX`.
+  - Refererar till hemligheten `BLOB_CONTAINER_SAS_URL` som injiceras från GitHub Secrets → Azure Secrets.
+
+- **Deploy-workflow (`.github/workflows/deploy.yml`)**
+  - Loggar in i Azure.
+  - Synkar in hemligheten `BLOB_CONTAINER_SAS_URL` till alla tre jobben i Azure.
+  - Uppdaterar respektive jobb med dess YAML-fil.
+
+---
+
+## Secrets
+
+- `BLOB_CONTAINER_SAS_URL` – full SAS-URL för Azure Blob Container.
+  - Ligger som **GitHub Secret** i repot.
+  - Sätts in i varje Azure Job via `az containerapp job secret set`.
+  - Används i koden för att läsa/skriva blobs.
+
+---
+
+## Flöde vid deployment
+
+1. **Push till `main`** eller **manuell trigger** startar workflow `deploy.yml`.
+2. `deploy.yml` loggar in i Azure och sätter/uppdaterar `BLOB_CONTAINER_SAS_URL` för alla tre jobs.
+3. Varje job uppdateras med motsvarande YAML-definition (`collect-job.yaml`, `produce-job.yaml`, `assemble-job.yaml`).
+4. När jobben körs i Azure används `job_entrypoint.py` för att starta rätt modul utifrån `JOB_TYPE`.
+
+---
+
+## Viktiga kommandon
+
+- Uppdatera secrets i Azure (körs normalt via Actions):
+  ```bash
+  az containerapp job secret set --resource-group <RG> --name afp-collect-job --secrets BLOB_CONTAINER_SAS_URL="<SAS-URL>"
