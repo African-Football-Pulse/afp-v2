@@ -1,18 +1,22 @@
-name: afp-assemble-job
-type: Microsoft.App/jobs
-location: westeurope
-
+# assemble-job.yaml (utdrag)
 properties:
   configuration:
     triggerType: Manual
   template:
     containers:
       - name: afp
-        image: afpacr.azurecr.io/afp-runner:latest
+        image: afpacr.azurecr.io/afp-runner:gh-PLACEHOLDER
         env:
           - name: JOB_TYPE
-            value: assembler
+            value: assemble
+          - name: READ_PREFIX
+            value: "producer/"
           - name: BLOB_PREFIX
             value: "assembler/"
+          - name: LANG
+            value: "en"
           - name: BLOB_CONTAINER_SAS_URL
-            secretRef: BLOB_CONTAINER_SAS_URL
+            secretRef: blob-container-sas-url
+        resources:
+          cpu: 0.5
+          memory: "1Gi"
