@@ -1,3 +1,4 @@
+# collect-job.yaml
 name: afp-collect-job
 type: Microsoft.App/jobs
 location: westeurope
@@ -5,14 +6,24 @@ location: westeurope
 properties:
   configuration:
     triggerType: Manual
+
   template:
+    # (valfritt) deklarera hemlighetens NAMN här – värdet sätts av Actions-steget
+    # secrets:
+    #   - name: blob-container-sas-url
+
     containers:
       - name: afp
-        image: afpacr.azurecr.io/afp-runner:latest
+        # Sätt en specifik tag (inte :latest). Actions byter vanligtvis detta med --image.
+        image: afpacr.azurecr.io/afp-runner:gh-PLACEHOLDER
         env:
           - name: JOB_TYPE
-            value: collector
+            value: collect
           - name: BLOB_PREFIX
             value: "collector/"
           - name: BLOB_CONTAINER_SAS_URL
-            secretRef: BLOB_CONTAINER_SAS_URL
+            # OBS: detta är NAMNET på hemligheten i ACA (gemener, inga underscore)
+            secretRef: blob-container-sas-url
+        resources:
+          cpu: 0.5
+          memory: "1Gi"
