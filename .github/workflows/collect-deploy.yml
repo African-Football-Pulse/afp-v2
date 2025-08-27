@@ -1,0 +1,66 @@
+name: Collect — Deploy & Run (ACA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: "Azure Resource Group (t.ex. afp-rg)"
+        required: true
+        type: string
+      job_name:
+        description: "ACA Job name"
+        required: true
+        default: "afp-collect-job"
+        type: string
+      image_ref:
+        description: "(Valfritt) Ny image att använda, t.ex. afpacr.azurecr.io/afp-runner:v123"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  deploy-run:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write      # för OIDC-inloggning
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure Container Apps CLI is available
+        run: |
+          az extension add --name containerapp --upgrade -y
+          az config set extension.use_dynamic_install=yes_without_prompt
+
+      # (Valfritt) uppdatera image om en image_ref angavs vid start
+      - name: Update image (optional)
+        if: ${{ inputs.image_ref != '' }}
+        run: |
+          az containerapp job update \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --image "${{ inputs.image_ref }}"
+
+      # Sätt env + secret enligt vår nya standard
+      - name: Update env & secret
+        run: |
+          az containerapp job update \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --set-env-vars JOB_TYPE=collect BLOB_PREFIX=collector/ \
+            --set-secrets "BLOB_CONTAINER_SAS_URL=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+
+      # Starta körningen
+      - name: Start job run
+        run: |
+          az containerapp job start \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}"
