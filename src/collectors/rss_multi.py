@@ -47,21 +47,20 @@ def _join_blob_url(container_sas_url: str, blob_name: str) -> str:
     return f"{base}{blob_name}?{qs}"
 
 def get_blob_clients():
-    """
-    Prioritet:
-    1) BLOB_CONTAINER_SAS_URL (+ BLOB_PREFIX)
-    2) AZURE_STORAGE_ACCOUNT + (AZURE_CONTAINER|AZURE_STORAGE_CONTAINER) + (AZURE_SAS|AZURE_STORAGE_SAS)
-    """
     sas_url = os.getenv("BLOB_CONTAINER_SAS_URL")
-    prefix = os.getenv("BLOB_PREFIX", "")
-
     if sas_url:
-        container = ContainerClient.from_container_url(sas_url)
+        return ContainerClient.from_container_url(sas_url)
 
-        def make_blob_client(name: str) -> BlobClient:
-            return BlobClient.from_blob_url(_join_blob_url(sas_url, prefix + name))
+    account   = os.environ["AZURE_STORAGE_ACCOUNT"]
+    container = os.getenv("AZURE_CONTAINER") or os.getenv("AZURE_STORAGE_CONTAINER")
+    if not container:
+        raise RuntimeError("Saknar AZURE_CONTAINER eller AZURE_STORAGE_CONTAINER")
+    sas = os.getenv("AZURE_BLOB_SAS") or os.getenv("AZURE_SAS") or os.getenv("AZURE_STORAGE_SAS")
+    if not sas:
+        raise RuntimeError("Saknar SAS-token i env")
 
-        return container, make_blob_client
+    account_url = f"https://{account}.blob.core.windows.net"
+    return ContainerClient(account_url=account_url, container_name=container, credential=sas)
 
     # Fallback: gamla env-namn
     account   = os.environ["AZURE_STORAGE_ACCOUNT"]
