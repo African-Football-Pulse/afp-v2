@@ -1,7 +1,7 @@
 # src/sections/s_news_top3_guardian.py
 import os, json, datetime, pathlib, hashlib, sys
 from typing import List, Dict, Optional
-from src.common.blob_io import get_container_client, make_blob_client  # används bara online
+from src.common.blob_io import get_container_client  # OBS: vi använder inte make_blob_client här
 
 LEAGUE      = os.getenv("LEAGUE", "premier_league")
 SECTION_ID  = os.getenv("SECTION_ID", "S.NEWS.TOP3_GUARDIAN")
@@ -14,6 +14,9 @@ LOCAL_ROOT  = pathlib.Path("/app/local_out")
 
 READ_PREFIX  = "" if USE_LOCAL else os.getenv("READ_PREFIX", "collector/")
 WRITE_PREFIX = "" if USE_LOCAL else os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "producer/"))
+
+# Sätts i main() om online
+_CONTAINER = None  # type: ignore
 
 def log(msg: str) -> None:
     print(f"[section] {msg}", flush=True)
@@ -42,13 +45,15 @@ def _write_text_local(rel_path: str, text: str) -> str:
 def read_text(rel_path: str) -> str:
     if USE_LOCAL:
         return _read_text_local(rel_path)
-    blob = make_blob_client(READ_PREFIX + rel_path)
+    # ONLINE: läs via container-klienten utan att blanda in BLOB_PREFIX
+    blob = _CONTAINER.get_blob_client(blob=READ_PREFIX + rel_path)  # type: ignore[attr-defined]
     return blob.download_blob().readall().decode("utf-8")
 
 def write_text(rel_path: str, text: str, content_type: str = "text/plain; charset=utf-8") -> str:
     if USE_LOCAL:
         return _write_text_local(rel_path, text)
-    blob = make_blob_client(WRITE_PREFIX + rel_path)
+    # ONLINE: skriv explicit med WRITE_PREFIX (ingen auto-prefix)
+    blob = _CONTAINER.get_blob_client(blob=WRITE_PREFIX + rel_path)  # type: ignore[attr-defined]
     blob.upload_blob(text.encode("utf-8"), overwrite=True, content_type=content_type)
     return WRITE_PREFIX + rel_path
 
@@ -94,12 +99,12 @@ def render_text(items: List[Dict]) -> str:
     return "\n".join(lines)
 
 def main():
+    global _CONTAINER
     mode = "LOCAL" if USE_LOCAL else "SAS"
     log(f"start mode={mode} league={LEAGUE} feed={FEED_NAME} top_n={TOP_N}")
 
-    # Initiera online-klient vid behov (säkerställer att SAS finns)
     if not USE_LOCAL:
-        get_container_client()
+        _CONTAINER = get_container_client()  # säkerställer att SAS finns
 
     date = today_utc()
     curated_rel = curated_items_rel(date)
