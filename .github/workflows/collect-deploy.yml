@@ -60,14 +60,18 @@ jobs:
             --resource-group "${{ inputs.resource_group }}" \
             --image "${{ inputs.image_ref }}"
 
-      # 2) Sätt vanliga env + exponera hemligheten som env-var som koden läser
-      - name: Update env & secret-env
+
+      # 2) Sätt vanliga env + mappa hemligheten som env-var
+      - name: Update env (incl. secretref)
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --set-env-vars JOB_TYPE=collect BLOB_PREFIX=collector/ \
-            --set-secret-env-vars "BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}"
+            --set-env-vars \
+              JOB_TYPE=collect \
+              BLOB_PREFIX=collector/ \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+
 
       # 3) Starta körningen
       - name: Start job run
