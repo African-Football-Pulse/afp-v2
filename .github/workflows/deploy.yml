@@ -1,9 +1,17 @@
-name: Deploy AFP Jobs
+name: Build & Deploy AFP Jobs
 
 on:
   workflow_dispatch: {}
   push:
     branches: [ "main" ]
+
+env:
+  ACR_NAME: ${{ secrets.ACR_NAME }}                  # t.ex. myregistry (utan .azurecr.io)
+  ACR_LOGIN_SERVER: ${{ secrets.ACR_NAME }}.azurecr.io
+  IMAGE_NAME: afp-runner
+  IMAGE_TAG: v${{ github.run_number }}-${{ github.sha }}
+  # Full image referens som vi sätter på alla tre jobben:
+  IMAGE_REF: ${{ secrets.ACR_NAME }}.azurecr.io/afp-runner:v${{ github.run_number }}-${{ github.sha }}
 
 jobs:
   deploy:
@@ -13,40 +21,46 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Azure login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
-          client-id:        ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id:        ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id:  ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}   # JSON från az ad sp create-for-rbac
 
-      # ===============================
-      #   Set secrets in Azure Jobs
-      # ===============================
+      - name: ACR login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}     # service principal / admin user
+          password: ${{ secrets.ACR_PASSWORD }}
 
-      # afp-collect-job → JOB_TYPE=collect
-      - name: Set SAS secret (collect)
-        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collect-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+      - name: Build & push image
+        run: |
+          docker build -t $IMAGE_REF .
+          docker push $IMAGE_REF
 
-      # afp-produce-job → JOB_TYPE=produce
-      - name: Set SAS secret (produce)
-        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+      # Uppdatera ACA-jobs med ny image + env/secrets
+      - name: Update collect job (JOB_TYPE=collect)
+        run: |
+          az containerapp job update \
+            --name afp-collect-job \
+            --resource-group ${{ secrets.AZ_RESOURCE_GROUP }} \
+            --image $IMAGE_REF \
+            --set-env-vars JOB_TYPE=collect BLOB_PREFIX=collector/ \
+            --set-secrets "BLOB_CONTAINER_SAS_URL=${{ secrets.AZ_SAS_SECRET_NAME }}"
 
-      # afp-assemble-job → JOB_TYPE=assemble
-      - name: Set SAS secret (assemble)
-        run: az containerapp job secret set --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assemble-job --secrets BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+      - name: Update produce job (JOB_TYPE=produce)
+        run: |
+          az containerapp job update \
+            --name afp-produce-job \
+            --resource-group ${{ secrets.AZ_RESOURCE_GROUP }} \
+            --image $IMAGE_REF \
+            --set-env-vars JOB_TYPE=produce BLOB_PREFIX=producer/ \
+            --set-secrets "BLOB_CONTAINER_SAS_URL=${{ secrets.AZ_SAS_SECRET_NAME }}"
 
-      # ===============================
-      #   Update job definitions
-      # ===============================
-
-      # afp-collect-job → JOB_TYPE=collect
-      - name: Update collect job
-        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-collect-job --yaml .github/workflows/collect-job.yaml
-
-      # afp-produce-job → JOB_TYPE=produce
-      - name: Update produce job
-        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-produce-job --yaml .github/workflows/produce-job.yaml
-
-      # afp-assemble-job → JOB_TYPE=assemble
-      - name: Update assemble job
-        run: az containerapp job update --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name afp-assemble-job --yaml .github/workflows/assemble-job.yaml
+      - name: Update assemble job (JOB_TYPE=assemble)
+        run: |
+          az containerapp job update \
+            --name afp-assemble-job \
+            --resource-group ${{ secrets.AZ_RESOURCE_GROUP }} \
+            --image $IMAGE_REF \
+            --set-env-vars JOB_TYPE=assemble BLOB_PREFIX=assembler/ \
+            --set-secrets "BLOB_CONTAINER_SAS_URL=${{ secrets.AZ_SAS_SECRET_NAME }}"
