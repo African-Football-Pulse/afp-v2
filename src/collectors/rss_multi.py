@@ -1,35 +1,11 @@
-# src/collectors/rss_multi.py
-import os, json, uuid, sys
+import os, json, uuid, sys, pathlib
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from azure.storage.blob import ContainerClient, BlobClient
-
-
 import requests
 import feedparser
 
-# --- Local Mode helpers (no Azure needed) ---
-USE_LOCAL = os.environ.get("STORAGE_MODE", "").lower() == "local"
-LOCAL_ROOT = os.environ.get("LOCAL_OUT_DIR", "_out")
-
-def _ensure_parent(fp: str):
-    os.makedirs(os.path.dirname(fp), exist_ok=True)
-
-def _upload_json_local(path: str, obj):
-    fp = os.path.join(LOCAL_ROOT, path)
-    _ensure_parent(fp)
-    with open(fp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-    return path
-# --- /Local Mode ---
-
-# Azure imports endast om vi kör mot Blob
-if not USE_LOCAL:
-    from azure.identity import DefaultAzureCredential
-    from azure.storage.blob import BlobServiceClient, ContentSettings
-else:
-    class ContentSettings:  # dummy så koden kompilerar i local mode
-        def __init__(self, *args, **kwargs): ...
+# Våra gemensamma helpers
+from src.common.blob_io import get_container_client, make_blob_client
 
 TZ = ZoneInfo("Europe/Stockholm")
 
@@ -39,57 +15,27 @@ def now_iso():
 def today_str():
     return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
 
-def _join_blob_url(container_sas_url: str, blob_name: str) -> str:
-    # Säker join: lägger blob-namnet före frågetecknet (SAS-parametrarna)
-    base, qs = container_sas_url.split("?", 1)
-    if not base.endswith("/"):
-        base += "/"
-    return f"{base}{blob_name}?{qs}"
+# Offline-mode
+USE_LOCAL = os.getenv("USE_LOCAL", "0") == "1"
+LOCAL_ROOT = "/app/local_out"
 
-def get_blob_clients():
-    sas_url = os.getenv("BLOB_CONTAINER_SAS_URL")
-    if sas_url:
-        return ContainerClient.from_container_url(sas_url)
+def _ensure_parent(fp: pathlib.Path):
+    fp.parent.mkdir(parents=True, exist_ok=True)
 
-    account   = os.environ["AZURE_STORAGE_ACCOUNT"]
-    container = os.getenv("AZURE_CONTAINER") or os.getenv("AZURE_STORAGE_CONTAINER")
-    if not container:
-        raise RuntimeError("Saknar AZURE_CONTAINER eller AZURE_STORAGE_CONTAINER")
-    sas = os.getenv("AZURE_BLOB_SAS") or os.getenv("AZURE_SAS") or os.getenv("AZURE_STORAGE_SAS")
-    if not sas:
-        raise RuntimeError("Saknar SAS-token i env")
+def _upload_json_local(path: str, obj):
+    fp = pathlib.Path(LOCAL_ROOT) / path
+    _ensure_parent(fp)
+    fp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(fp)
 
-    account_url = f"https://{account}.blob.core.windows.net"
-    return ContainerClient(account_url=account_url, container_name=container, credential=sas)
-
-    # Fallback: gamla env-namn
-    account   = os.environ["AZURE_STORAGE_ACCOUNT"]
-    container = os.getenv("AZURE_CONTAINER") or os.getenv("AZURE_STORAGE_CONTAINER")
-    if not container:
-        raise RuntimeError("Saknar AZURE_CONTAINER eller AZURE_STORAGE_CONTAINER")
-    sas = os.getenv("AZURE_SAS") or os.getenv("AZURE_STORAGE_SAS")
-    if not sas:
-        raise RuntimeError("Saknar AZURE_SAS eller AZURE_STORAGE_SAS (endast token-delen, utan '?')")
-
-    account_url = f"https://{account}.blob.core.windows.net"
-    cont_client = ContainerClient(account_url=account_url, container_name=container, credential=sas)
-
-    def make_blob_client(name: str) -> BlobClient:
-        return BlobClient(account_url, container, prefix + name, credential=sas)
-
-    return cont_client, make_blob_client
-
-def upload_json(container_client, path, obj):
+def upload_json(container_client, path: str, obj):
+    data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
     if USE_LOCAL:
         return _upload_json_local(path, obj)
-    data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
-    container_client.upload_blob(
-        name=path,
-        data=data,
-        overwrite=True,
-        content_settings=ContentSettings(content_type="application/json; charset=utf-8"),
-    )
-    return path
+    else:
+        # Upload direkt via container_client
+        container_client.upload_blob(name=path, data=data, overwrite=True)
+        return path
 
 def load_feeds_config():
     import yaml
@@ -123,13 +69,13 @@ def parse_items(feed, source_name):
         })
     return items
 
-def collect_one(source, timeout_s, container_client, league, day):
+def collect_one(source, timeout_s, container_client, league, day, prefix=""):
     name = source["name"]
     url = source["url"]
     print(f"[{name}] START {url}")
 
-    raw_prefix = f"raw/news/{name}/{day}"
-    curated_prefix = f"curated/news/{name}/{league}/{day}"
+    raw_prefix = f"{prefix}raw/news/{name}/{day}"
+    curated_prefix = f"{prefix}curated/news/{name}/{league}/{day}"
 
     try:
         r = requests.get(
@@ -188,19 +134,20 @@ def main():
     timeout_s = int(cfg.get("timeout_s", 15))
     sources = cfg["sources"]
 
-    container_client = None if USE_LOCAL else get_blob_clients()
+    container_client = None if USE_LOCAL else get_container_client()
+    prefix = os.getenv("BLOB_PREFIX", "")
 
     day = today_str()
 
-    print(f"[collector] League={league} | Sources={len(sources)} | Day={day} | Timeout={timeout_s}s | Mode={'LOCAL' if USE_LOCAL else 'AZURE'}")
+    print(f"[collector] League={league} | Sources={len(sources)} | Day={day} | Timeout={timeout_s}s | Mode={'LOCAL' if USE_LOCAL else 'SAS'}")
 
     for src in sources:
         try:
-            collect_one(src, timeout_s, container_client, league, day)
+            collect_one(src, timeout_s, container_client, league, day, prefix)
         except Exception as e:
             name = src.get("name", "unknown")
-            prefix = f"raw/news/{name}/{day}"
-            upload_json(container_client, f"{prefix}/error.json", {
+            raw_prefix = f"{prefix}raw/news/{name}/{day}"
+            upload_json(container_client, f"{raw_prefix}/error.json", {
                 "source": name, "kind": "unexpected_error", "error": str(e), "ts": now_iso()
             })
             print(f"[{name}] UNEXPECTED ERROR: {e}")
