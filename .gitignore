@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+echo ".env.local" >> .gitignore
+git add .gitignore
+git commit -m "Stop tracking .env.local and ignore it"
+
