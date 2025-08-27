@@ -1,30 +1,27 @@
 # src/sections/s_news_top3_guardian.py
-import os, json, datetime, pathlib, hashlib
+import os, json, datetime, pathlib, hashlib, sys
 from typing import List, Dict, Optional
+from src.common.blob_io import get_container_client, make_blob_client  # används bara online
 
-# Gemensamma helpers (samma som collect använder)
-from src.common.blob_io import get_container_client, make_blob_client
-
-# --- Parametrar via env (med rimliga defaults)
 LEAGUE      = os.getenv("LEAGUE", "premier_league")
 SECTION_ID  = os.getenv("SECTION_ID", "S.NEWS.TOP3_GUARDIAN")
 LANG        = os.getenv("LANG", "en")
 FEED_NAME   = os.getenv("FEED_NAME", "guardian_football")
 TOP_N       = int(os.getenv("TOP_N", "3"))
 
-# I/O-läge
 USE_LOCAL   = os.getenv("USE_LOCAL", "0") == "1"
 LOCAL_ROOT  = pathlib.Path("/app/local_out")
 
-# Läs- och skrivprefix
 READ_PREFIX  = "" if USE_LOCAL else os.getenv("READ_PREFIX", "collector/")
 WRITE_PREFIX = "" if USE_LOCAL else os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "producer/"))
+
+def log(msg: str) -> None:
+    print(f"[section] {msg}", flush=True)
 
 def today_utc() -> str:
     return datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
 def curated_items_rel(date: str) -> str:
-    # Matchar collector-layouten: curated/news/{source}/{league}/{date}/items.json
     return f"curated/news/{FEED_NAME}/{LEAGUE}/{date}/items.json"
 
 def _ensure_parent(fp: pathlib.Path) -> None:
@@ -43,19 +40,12 @@ def _write_text_local(rel_path: str, text: str) -> str:
     return str(fp)
 
 def read_text(rel_path: str) -> str:
-    """
-    Läser text antingen från lokal disk (offline) eller från Blob (online).
-    rel_path ska vara relativ path utan WRITE_PREFIX. READ_PREFIX adderas i online-läget.
-    """
     if USE_LOCAL:
         return _read_text_local(rel_path)
     blob = make_blob_client(READ_PREFIX + rel_path)
     return blob.download_blob().readall().decode("utf-8")
 
 def write_text(rel_path: str, text: str, content_type: str = "text/plain; charset=utf-8") -> str:
-    """
-    Skriver text lokalt eller till Blob. I online-läget skrivs under WRITE_PREFIX.
-    """
     if USE_LOCAL:
         return _write_text_local(rel_path, text)
     blob = make_blob_client(WRITE_PREFIX + rel_path)
@@ -63,9 +53,6 @@ def write_text(rel_path: str, text: str, content_type: str = "text/plain; charse
     return WRITE_PREFIX + rel_path
 
 def find_latest_local_items_rel() -> Optional[str]:
-    """
-    Om dagens fil saknas i offline-läget: hitta senaste datum som har items.json.
-    """
     base = LOCAL_ROOT / "curated" / "news" / FEED_NAME / LEAGUE
     if not base.exists():
         return None
@@ -77,14 +64,12 @@ def find_latest_local_items_rel() -> Optional[str]:
     return None
 
 def normalize_items(raw_json) -> List[Dict]:
-    """Accepterar både list och dict({'items': [...]}); returnerar normaliserad lista."""
     if isinstance(raw_json, dict):
         items = raw_json.get("items", [])
     elif isinstance(raw_json, list):
         items = raw_json
     else:
         items = []
-
     norm: List[Dict] = []
     for it in items:
         if not isinstance(it, dict):
@@ -106,4 +91,66 @@ def render_text(items: List[Dict]) -> str:
     if not items:
         lines.append("- (no items available)")
     lines.append("More later.")
-    return "\n".jo
+    return "\n".join(lines)
+
+def main():
+    mode = "LOCAL" if USE_LOCAL else "SAS"
+    log(f"start mode={mode} league={LEAGUE} feed={FEED_NAME} top_n={TOP_N}")
+
+    # Initiera online-klient vid behov (säkerställer att SAS finns)
+    if not USE_LOCAL:
+        get_container_client()
+
+    date = today_utc()
+    curated_rel = curated_items_rel(date)
+    try:
+        log(f"reading curated: {(READ_PREFIX + curated_rel) if not USE_LOCAL else curated_rel}")
+        raw_text = read_text(curated_rel)
+    except FileNotFoundError:
+        if USE_LOCAL:
+            latest = find_latest_local_items_rel()
+            log(f"today missing, latest local is: {latest}")
+            if not latest:
+                log("ERROR: no local curated/items.json found")
+                sys.exit(2)
+            curated_rel = latest
+            raw_text = read_text(curated_rel)
+        else:
+            log("ERROR: curated not found in Blob")
+            sys.exit(2)
+
+    inputs_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    raw_json = json.loads(raw_text)
+    items = normalize_items(raw_json)
+    log(f"normalized items: {len(items)}")
+    if TOP_N > 0:
+        items = items[:TOP_N]
+        log(f"top_n applied -> {len(items)}")
+
+    text = render_text(items)
+    base = f"sections/{date}/{LEAGUE}/_/{SECTION_ID}/{LANG}/"
+
+    out_txt = base + "section.txt"
+    out_manifest = base + "section_manifest.json"
+
+    write_text(out_txt, text, "text/plain; charset=utf-8")
+    write_text(out_manifest,
+               json.dumps({
+                   "section_id": SECTION_ID,
+                   "version": 1,
+                   "lang": LANG,
+                   "date": date,
+                   "league": LEAGUE,
+                   "inputs": {"curated_ref": (READ_PREFIX + curated_rel) if not USE_LOCAL else curated_rel},
+                   "inputs_hash": inputs_hash,
+                   "target_duration_s": 45,
+                   "count": len(items),
+               }, ensure_ascii=False, indent=2),
+               "application/json")
+
+    log(f"wrote: {(WRITE_PREFIX or '[local]/')}{out_txt}")
+    log(f"wrote: {(WRITE_PREFIX or '[local]/')}{out_manifest}")
+    log("done")
+
+if __name__ == "__main__":
+    main()
