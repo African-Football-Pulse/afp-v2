@@ -189,6 +189,7 @@ def main():
     sources = cfg["sources"]
 
     container_client = None if USE_LOCAL else get_blob_clients()
+
     day = today_str()
 
     print(f"[collector] League={league} | Sources={len(sources)} | Day={day} | Timeout={timeout_s}s | Mode={'LOCAL' if USE_LOCAL else 'AZURE'}")
