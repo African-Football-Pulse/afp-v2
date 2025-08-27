@@ -1,6 +1,6 @@
 # src/sections/s_news_top3_guardian.py
-import os, json, datetime, pathlib
-from typing import Tuple, List, Dict
+import os, json, datetime, pathlib, hashlib
+from typing import List, Dict, Optional
 
 # Gemensamma helpers (samma som collect använder)
 from src.common.blob_io import get_container_client, make_blob_client
@@ -17,8 +17,6 @@ USE_LOCAL   = os.getenv("USE_LOCAL", "0") == "1"
 LOCAL_ROOT  = pathlib.Path("/app/local_out")
 
 # Läs- och skrivprefix
-# - Offline: inga prefix (collect skrev direkt under /curated/…)
-# - Online: läs från collector/, skriv till producer/ (kan ändras via env)
 READ_PREFIX  = "" if USE_LOCAL else os.getenv("READ_PREFIX", "collector/")
 WRITE_PREFIX = "" if USE_LOCAL else os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "producer/"))
 
@@ -51,7 +49,6 @@ def read_text(rel_path: str) -> str:
     """
     if USE_LOCAL:
         return _read_text_local(rel_path)
-    # online: läs från READ_PREFIX + rel_path
     blob = make_blob_client(READ_PREFIX + rel_path)
     return blob.download_blob().readall().decode("utf-8")
 
@@ -60,10 +57,24 @@ def write_text(rel_path: str, text: str, content_type: str = "text/plain; charse
     Skriver text lokalt eller till Blob. I online-läget skrivs under WRITE_PREFIX.
     """
     if USE_LOCAL:
-        return _write_text_local(rel_path)
+        return _write_text_local(rel_path, text)
     blob = make_blob_client(WRITE_PREFIX + rel_path)
     blob.upload_blob(text.encode("utf-8"), overwrite=True, content_type=content_type)
     return WRITE_PREFIX + rel_path
+
+def find_latest_local_items_rel() -> Optional[str]:
+    """
+    Om dagens fil saknas i offline-läget: hitta senaste datum som har items.json.
+    """
+    base = LOCAL_ROOT / "curated" / "news" / FEED_NAME / LEAGUE
+    if not base.exists():
+        return None
+    dates = sorted([p.name for p in base.iterdir() if p.is_dir()], reverse=True)
+    for d in dates:
+        candidate = base / d / "items.json"
+        if candidate.exists():
+            return candidate.relative_to(LOCAL_ROOT).as_posix()
+    return None
 
 def normalize_items(raw_json) -> List[Dict]:
     """Accepterar både list och dict({'items': [...]}); returnerar normaliserad lista."""
@@ -74,7 +85,7 @@ def normalize_items(raw_json) -> List[Dict]:
     else:
         items = []
 
-    norm = []
+    norm: List[Dict] = []
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -82,4 +93,17 @@ def normalize_items(raw_json) -> List[Dict]:
         link = it.get("link") or it.get("url") or ""
         src  = it.get("source") or it.get("site") or "The Guardian"
         published = it.get("published") or it.get("pubDate") or it.get("date") or ""
-        norm.append({"title": title, "link": link, "source": src,
+        norm.append({"title": title, "link": link, "source": src, "published": published})
+    return norm
+
+def render_text(items: List[Dict]) -> str:
+    lines = ["Here are the top headlines today:"]
+    for it in items:
+        title = it.get("title", "").strip()
+        src   = it.get("source", "")
+        link  = it.get("link", "")
+        lines.append(f"- {title} ({src}) — {link}")
+    if not items:
+        lines.append("- (no items available)")
+    lines.append("More later.")
+    return "\n".jo
