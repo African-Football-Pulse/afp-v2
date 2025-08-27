@@ -21,11 +21,6 @@ on:
         required: true
         default: "afp-runner"
         type: string
-      image_tag:
-        description: "Tag (t.ex. gh-${{ github.run_number }})"
-        required: true
-        default: "gh-${{ github.run_number }}"
-        type: string
       blob_prefix:
         description: "BLOB_PREFIX (t.ex. collector/)"
         required: true
@@ -33,7 +28,7 @@ on:
         type: string
 
 env:
-  SECRET_NAME: blob-container-sas-url  # giltigt hemlighetsnamn (gemener, inga _)
+  SECRET_NAME: blob-container-sas-url  # giltigt hemlighetsnamn i ACA (gemener, inga _)
 
 jobs:
   build-deploy:
@@ -41,6 +36,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+
     steps:
       - uses: actions/checkout@v4
 
@@ -59,13 +55,15 @@ jobs:
       - name: ACR login (AAD)
         run: az acr login --name "${{ inputs.acr_name }}"
 
-      - name: Build & Push image
-        env:
-          IMAGE_REF: ${{ inputs.acr_name }}.azurecr.io/${{ inputs.image_name }}:${{ inputs.image_tag }}
+      - name: Compute image ref (uses run number)
+        run: |
+          echo "IMAGE_TAG=gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          echo "IMAGE_REF=${{ inputs.acr_name }}.azurecr.io/${{ inputs.image_name }}:gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+
+      - name: Build & push image
         run: |
           docker build -t "$IMAGE_REF" .
           docker push "$IMAGE_REF"
-          echo "IMAGE_REF=$IMAGE_REF" >> $GITHUB_ENV
 
       - name: Set SAS secret on job
         run: |
@@ -79,7 +77,7 @@ jobs:
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --image "${{ env.IMAGE_REF }}" \
+            --image "$IMAGE_REF" \
             --set-env-vars \
               JOB_TYPE=collect \
               BLOB_PREFIX="${{ inputs.blob_prefix }}" \
