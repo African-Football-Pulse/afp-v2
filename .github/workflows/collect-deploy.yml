@@ -13,10 +13,13 @@ on:
         default: "afp-collect-job"
         type: string
       image_ref:
-        description: "(Valfritt) Ny image att använda, t.ex. afpacr.azurecr.io/afp-runner:v123"
+        description: "(Valfritt) Ny image, t.ex. afpacr.azurecr.io/afp-runner:v123"
         required: false
         default: ""
         type: string
+
+env:
+  SECRET_NAME: blob-container-sas-url      # giltigt namn i ACA
 
 jobs:
   deploy-run:
@@ -40,15 +43,15 @@ jobs:
           az extension add --name containerapp --upgrade -y || true
           az config set extension.use_dynamic_install=yes_without_prompt
 
-      # 1) Sätt/uppdatera själva hemligheten på jobbet
+      # 1) Sätt/uppdatera job-hemligheten (namn i gemener med bindestreck)
       - name: Set SAS secret on job
         run: |
           az containerapp job secret set \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --secrets "BLOB_CONTAINER_SAS_URL=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+            --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
-      # (valfritt) peka jobbet till en ny image
+      # (valfritt) byt image om angivet
       - name: Update image (optional)
         if: ${{ inputs.image_ref != '' }}
         run: |
@@ -57,14 +60,14 @@ jobs:
             --resource-group "${{ inputs.resource_group }}" \
             --image "${{ inputs.image_ref }}"
 
-      # 2) Sätt vanliga env + mappa env från secret
+      # 2) Sätt vanliga env + exponera hemligheten som env-var som koden läser
       - name: Update env & secret-env
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
             --set-env-vars JOB_TYPE=collect BLOB_PREFIX=collector/ \
-            --set-secret-env-vars "BLOB_CONTAINER_SAS_URL=secretref:BLOB_CONTAINER_SAS_URL"
+            --set-secret-env-vars "BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}"
 
       # 3) Starta körningen
       - name: Start job run
