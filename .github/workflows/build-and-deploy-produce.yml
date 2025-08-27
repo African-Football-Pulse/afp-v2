@@ -1,0 +1,103 @@
+name: Build + Deploy Produce (ACA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: "Azure Resource Group (t.ex. afp-rg)"
+        required: true
+        type: string
+      job_name:
+        description: "ACA Job name"
+        required: true
+        default: "afp-produce-job"
+        type: string
+      acr_name:
+        description: "ACR (utan .azurecr.io), t.ex. afpacr"
+        required: true
+        type: string
+      image_name:
+        description: "Image-namn"
+        required: true
+        default: "afp-runner"
+        type: string
+      blob_prefix:
+        description: "Skrivprefix (t.ex. producer/)"
+        required: true
+        default: "producer/"
+        type: string
+      read_prefix:
+        description: "Läsprefix (t.ex. collector/)"
+        required: true
+        default: "collector/"
+        type: string
+
+env:
+  SECRET_NAME: blob-container-sas-url   # giltigt namn (gemener, inga underscore)
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Enable Container Apps CLI
+        run: |
+          az extension add --name containerapp --upgrade -y || true
+          az config set extension.use_dynamic_install=yes_without_prompt
+
+      - name: ACR login (AAD)
+        run: az acr login --name "${{ inputs.acr_name }}"
+
+      - name: Compute image ref (uses run number)
+        run: |
+          echo "IMAGE_TAG=gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          echo "IMAGE_REF=${{ inputs.acr_name }}.azurecr.io/${{ inputs.image_name }}:gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+
+      - name: Build & push image
+        run: |
+          docker build -t "$IMAGE_REF" .
+          docker push "$IMAGE_REF"
+
+      # Säkerställ att SAS-hemligheten finns på jobbet (värdet tas från repo secret)
+      - name: Ensure SAS secret on job
+        run: |
+          az containerapp job secret set \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+
+      # Uppdatera image + env; exponera SAS som env via secretref
+      - name: Update job (image + env)
+        run: |
+          az containerapp job update \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --image "$IMAGE_REF" \
+            --set-env-vars \
+              JOB_TYPE=produce \
+              BLOB_PREFIX="${{ inputs.blob_prefix }}" \
+              READ_PREFIX="${{ inputs.read_prefix }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+
+      - name: Start job run
+        run: |
+          az containerapp job start \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}"
+
+      - name: Summary
+        run: |
+          echo "### Pushed image" >> $GITHUB_STEP_SUMMARY
+          echo "\`$IMAGE_REF\`" >> $GITHUB_STEP_SUMMARY
