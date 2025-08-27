@@ -1,0 +1,260 @@
+name: E2E Smoke — Collect → Produce → Assemble
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: "Azure Resource Group (t.ex. afp-rg)"
+        required: true
+        type: string
+      acr_name:
+        description: "ACR (utan .azurecr.io), t.ex. afpacr"
+        required: true
+        type: string
+      image_name:
+        description: "Image-namn i ACR"
+        required: true
+        default: "afp-runner"
+        type: string
+      collect_job:
+        description: "Collect job name"
+        required: true
+        default: "afp-collect-job"
+        type: string
+      produce_job:
+        description: "Produce job name"
+        required: true
+        default: "afp-produce-job"
+        type: string
+      assemble_job:
+        description: "Assemble job name"
+        required: true
+        default: "afp-assemble-job"
+        type: string
+      league:
+        description: "League (mappnamn)"
+        required: true
+        default: "premier_league"
+        type: string
+      feed_name:
+        description: "Feed name under curated/news/"
+        required: true
+        default: "guardian_football"
+        type: string
+      lang:
+        description: "Språk-stig för sections/episodes"
+        required: true
+        default: "en"
+        type: string
+      collector_prefix:
+        description: "Skrivprefix för collect"
+        required: true
+        default: "collector/"
+        type: string
+      producer_prefix:
+        description: "Skrivprefix för produce (och läs för assemble)"
+        required: true
+        default: "producer/"
+        type: string
+      assembler_prefix:
+        description: "Skrivprefix för assemble"
+        required: true
+        default: "assembler/"
+        type: string
+
+env:
+  SECRET_NAME: blob-container-sas-url   # hemlighetsnamn i ACA (gemener, inga underscore)
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Enable Container Apps CLI
+        run: |
+          az extension add --name containerapp --upgrade -y || true
+          az config set extension.use_dynamic_install=yes_without_prompt
+
+      - name: ACR login (AAD)
+        run: az acr login --name "${{ inputs.acr_name }}"
+
+      - name: Compute image ref
+        run: |
+          echo "DATE_UTC=$(date -u +%F)" >> $GITHUB_ENV
+          echo "IMAGE_TAG=gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          echo "IMAGE_REF=${{ inputs.acr_name }}.azurecr.io/${{ inputs.image_name }}:gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+
+      - name: Build & push image
+        run: |
+          docker build -t "$IMAGE_REF" .
+          docker push "$IMAGE_REF"
+
+      # Säkerställ SAS-hemlighet på alla tre jobb
+      - name: Ensure SAS secret on jobs
+        run: |
+          for JOB in "${{ inputs.collect_job }}" "${{ inputs.produce_job }}" "${{ inputs.assemble_job }}"; do
+            az containerapp job secret set \
+              --name "$JOB" \
+              --resource-group "${{ inputs.resource_group }}" \
+              --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+          done
+
+      # -------- Collect --------
+      - name: Update COLLECT (image + env)
+        run: |
+          az containerapp job update \
+            --name "${{ inputs.collect_job }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --image "$IMAGE_REF" \
+            --set-env-vars \
+              JOB_TYPE=collect \
+              BLOB_PREFIX="${{ inputs.collector_prefix }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+
+      - name: Start COLLECT
+        run: |
+          az containerapp job start \
+            --name "${{ inputs.collect_job }}" \
+            --resource-group "${{ inputs.resource_group }}"
+
+      - name: Wait for COLLECT output (curated items.json)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+          ACCOUNT=$(echo "$SAS_URL"   | sed -n 's~https://\([^\.]*\)\.blob.core.windows.net/.*~\1~p')
+          CONTAINER=$(echo "$SAS_URL" | sed -n 's~https://[^/]*/\([^?]*\)\?.*~\1~p')
+          TOKEN=$(echo "$SAS_URL"     | sed -n 's~[^?]*?\(.*\)~\1~p')
+
+          TARGET="${{ inputs.collector_prefix }}curated/news/${{ inputs.feed_name }}/${{ inputs.league }}/$DATE_UTC/items.json"
+          echo "Expecting blob: $TARGET"
+          for i in {1..36}; do
+            ok=$(az storage blob exists \
+                  --account-name "$ACCOUNT" \
+                  --container-name "$CONTAINER" \
+                  --name "$TARGET" \
+                  --sas-token "$TOKEN" \
+                  --query exists -o tsv || echo "false")
+            if [ "$ok" = "true" ]; then
+              echo "Found $TARGET"
+              exit 0
+            fi
+            echo "Waiting for collect... ($i)"
+            sleep 10
+          done
+          echo "ERROR: Collect output not found: $TARGET"
+          exit 1
+
+      # -------- Produce --------
+      - name: Update PRODUCE (image + env)
+        run: |
+          az containerapp job update \
+            --name "${{ inputs.produce_job }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --image "$IMAGE_REF" \
+            --set-env-vars \
+              JOB_TYPE=produce \
+              READ_PREFIX="${{ inputs.collector_prefix }}" \
+              BLOB_PREFIX="${{ inputs.producer_prefix }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+
+      - name: Start PRODUCE
+        run: |
+          az containerapp job start \
+            --name "${{ inputs.produce_job }}" \
+            --resource-group "${{ inputs.resource_group }}"
+
+      - name: Wait for PRODUCE output (section.txt)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+          ACCOUNT=$(echo "$SAS_URL"   | sed -n 's~https://\([^\.]*\)\.blob.core.windows.net/.*~\1~p')
+          CONTAINER=$(echo "$SAS_URL" | sed -n 's~https://[^/]*/\([^?]*\)\?.*~\1~p')
+          TOKEN=$(echo "$SAS_URL"     | sed -n 's~[^?]*?\(.*\)~\1~p')
+
+          TARGET="${{ inputs.producer_prefix }}sections/$DATE_UTC/${{ inputs.league }}/_/S.NEWS.TOP3_GUARDIAN/${{ inputs.lang }}/section.txt"
+          echo "Expecting blob: $TARGET"
+          for i in {1..36}; do
+            ok=$(az storage blob exists \
+                  --account-name "$ACCOUNT" \
+                  --container-name "$CONTAINER" \
+                  --name "$TARGET" \
+                  --sas-token "$TOKEN" \
+                  --query exists -o tsv || echo "false")
+            if [ "$ok" = "true" ]; then
+              echo "Found $TARGET"
+              exit 0
+            fi
+            echo "Waiting for produce... ($i)"
+            sleep 10
+          done
+          echo "ERROR: Produce output not found: $TARGET"
+          exit 1
+
+      # -------- Assemble --------
+      - name: Update ASSEMBLE (image + env)
+        run: |
+          az containerapp job update \
+            --name "${{ inputs.assemble_job }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --image "$IMAGE_REF" \
+            --set-env-vars \
+              JOB_TYPE=assemble \
+              READ_PREFIX="${{ inputs.producer_prefix }}" \
+              BLOB_PREFIX="${{ inputs.assembler_prefix }}" \
+              LANG="${{ inputs.lang }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+
+      - name: Start ASSEMBLE
+        run: |
+          az containerapp job start \
+            --name "${{ inputs.assemble_job }}" \
+            --resource-group "${{ inputs.resource_group }}"
+
+      - name: Wait for ASSEMBLE output (episode_manifest.json)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
+          ACCOUNT=$(echo "$SAS_URL"   | sed -n 's~https://\([^\.]*\)\.blob.core.windows.net/.*~\1~p')
+          CONTAINER=$(echo "$SAS_URL" | sed -n 's~https://[^/]*/\([^?]*\)\?.*~\1~p')
+          TOKEN=$(echo "$SAS_URL"     | sed -n 's~[^?]*?\(.*\)~\1~p')
+
+          TARGET="${{ inputs.assembler_prefix }}episodes/$DATE_UTC/${{ inputs.league }}/daily/${{ inputs.lang }}/episode_manifest.json"
+          echo "Expecting blob: $TARGET"
+          for i in {1..36}; do
+            ok=$(az storage blob exists \
+                  --account-name "$ACCOUNT" \
+                  --container-name "$CONTAINER" \
+                  --name "$TARGET" \
+                  --sas-token "$TOKEN" \
+                  --query exists -o tsv || echo "false")
+            if [ "$ok" = "true" ]; then
+              echo "Found $TARGET"
+              exit 0
+            fi
+            echo "Waiting for assemble... ($i)"
+            sleep 10
+          done
+          echo "ERROR: Assemble output not found: $TARGET"
+          exit 1
+
+      - name: Summary
+        run: |
+          echo "### E2E succeeded" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`$IMAGE_REF\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Date (UTC): \`$DATE_UTC\`" >> $GITHUB_STEP_SUMMARY
+          echo "- League: \`${{ inputs.league }}\`, Lang: \`${{ inputs.lang }}\`" >> $GITHUB_STEP_SUMMARY
