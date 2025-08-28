@@ -21,7 +21,7 @@ def resolve_section(library: dict, section_code: str) -> dict:
 
 def main():
     ap = argparse.ArgumentParser(description="Produce a section from the library (config-driven).")
-    ap.add_argument("--library", default="sections_library.yaml")
+    ap.add_argument("--library", default="config/sections_library.yaml")
     ap.add_argument("--section-code", required=True, help="e.g., S.OPINION.EXPERT_COMMENT")
     ap.add_argument("--news", required=True, help="Path to news .txt/.md")
     ap.add_argument("--date", default=datetime.now(UTC).strftime("%Y-%m-%d"))
