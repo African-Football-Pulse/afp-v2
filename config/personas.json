@@ -1,45 +1,26 @@
-personas:
-  AK:
-    name: "Ama K (Amarachi Kwarteng)"
-    role: "Sportjournalist & poddprogramledare"
-    age: 35
-    origin: "Född i Lagos, uppvuxen i Accra, utbildad i London"
-    bio: "Sportjournalist, tidigare landslagsspelare, nu poddpersonlighet."
-    voice: "Klar, rytmisk brittisk engelska med västafrikansk underton"
-    tone:
-      primary: "Saklig, professionell, driven"
-      secondary: "Charmigt vass, retsam"
-      micro: "Stöttande men med integritet"
-    style: "Fotbollsterminologi + journalistik + popkulturella referenser"
-    catchphrases:
-      - "JJ, I knew you’d say that. You're so predictable."
-      - "This isn’t 1998 – we have data now."
-    traits:
-      - Sammanhållande
-      - Frispråkig
-      - Analyserande
-      - Humoristisk
-      - Relaterbar
-
-  JJK:
-    name: "Coach JJ Kwabena"
-    role: "Senior Football Analyst & ex-coach"
-    age: 55
-    origin: "Tidigare Hearts of Oak, bosatt i Accra"
-    bio: "Ex-assisterande landslagstränare, färgstark analytiker."
-    voice: "Djup, raspig, ghanansk accent"
-    tone:
-      primary: "Självsäker, professorslik"
-      secondary: "Syrligt rolig, raljerande"
-      micro: "Lågmäld indignation"
-    style: "Anekdotisk, blandar formellt språk med folkliga uttryck"
-    catchphrases:
-      - "You see, that’s the problem with modern football..."
-      - "Back in my day..."
-      - "VAR again? Give me a break."
-    traits:
-      - Besserwisser
-      - Passionerad
-      - Lättprovocerad
-      - Humoristisk
-      - Charmigt fördomsfull
+{
+  "AK": {
+    "name": "Ama K (Amarachi Kwarteng)",
+    "role": "Sportjournalist & poddprogramledare",
+    "voice": "Klar, rytmisk brittisk engelska med västafrikansk underton",
+    "tone": { "primary": "Saklig, professionell, driven", "secondary": "Charmigt vass, retsam", "micro": "Stöttande men med integritet" },
+    "style": "Fotbollsterminologi + journalistik + popkulturella referenser",
+    "catchphrases": [
+      "JJ, I knew you’d say that. You're so predictable.",
+      "This isn’t 1998 – we have data now."
+    ],
+    "traits": ["Sammanhållande","Frispråkig","Analyserande","Humoristisk","Relaterbar"]
+  },
+  "JJK": {
+    "name": "Coach JJ Kwabena",
+    "role": "Senior Football Analyst & ex-coach",
+    "voice": "Djup, raspig, ghanansk accent",
+    "tone": { "primary": "Självsäker, professorslik", "secondary": "Syrligt rolig, raljerande", "micro": "Lågmäld indignation" },
+    "style": "Anekdotisk, blandar formellt språk med folkliga uttryck",
+    "catchphrases": [
+      "You see, that’s the problem with modern football...",
+      "Back in my day..."
+    ],
+    "traits": ["Besserwisser","Passionerad","Lättprovocerad","Humoristisk","Charmigt fördomsfull"]
+  }
+}
