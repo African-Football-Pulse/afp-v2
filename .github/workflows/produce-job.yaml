@@ -1,28 +1,122 @@
-# produce-job.yaml
-name: afp-produce-job
-type: Microsoft.App/jobs
-location: westeurope
+name: Produce (Top-N)
 
-properties:
-  configuration:
-    triggerType: Manual
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "DAY (YYYY-MM-DD)"
+        required: true
+        default: ""
+      league:
+        description: "LEAGUE (e.g. premier_league)"
+        required: true
+        default: "premier_league"
+      lang:
+        description: "LANG"
+        required: true
+        default: "en"
+      feeds:
+        description: "FEEDS (comma-separated)"
+        required: true
+        default: "guardian_football,bbc_football,sky_sports_premier_league,independent_football"
+      top_n:
+        description: "TOP_N"
+        required: true
+        default: "3"
+      section_id:
+        description: "SECTION_ID"
+        required: true
+        default: "S.NEWS.TOPN"
 
-  template:
-    containers:
-      - name: afp
-        # Sätt en specifik tag (inte :latest). Workflowsen skriver ofta över detta med --image.
-        image: afpacr.azurecr.io/afp-runner:gh-PLACEHOLDER
-        env:
-          - name: JOB_TYPE
-            value: produce
-          - name: READ_PREFIX
-            value: "collector/"
-          - name: BLOB_PREFIX
-            value: "producer/"
-          - name: BLOB_CONTAINER_SAS_URL
-            # OBS: detta är NAMNET på hemligheten i ACA (gemener, inga underscore)
-            secretRef: blob-container-sas-url
+jobs:
+  produce:
+    runs-on: ubuntu-latest
 
-    resources:
-      cpu: 0.5
-      memory: "1Gi"
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      RESOURCE_GROUP: afp-rg
+      JOB_NAME: afp-produce-job
+
+      # Inputs → env (med fallback)
+      DAY: ${{ github.event.inputs.day }}
+      LEAGUE: ${{ github.event.inputs.league }}
+      LANG: ${{ github.event.inputs.lang }}
+      FEEDS: ${{ github.event.inputs.feeds }}
+      TOP_N: ${{ github.event.inputs.top_n }}
+      SECTION_ID: ${{ github.event.inputs.section_id }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ env.AZURE_CREDENTIALS }}
+
+      - name: Select subscription
+        run: az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+      # Sätt ENV-VARS på själva Container Apps Job-template
+      - name: Update job env vars (SECTION_ID, FEEDS, TOP_N, LEAGUE, DAY, LANG)
+        run: |
+          # Säkerställ att DAY alltid är satt (default = dagens datum)
+          if [ -z "${DAY}" ] || [ "${DAY}" = "null" ]; then
+            DAY=$(date -u +"%Y-%m-%d")
+          fi
+          echo "Using DAY=${DAY}"
+
+          az containerapp job update \
+            --name "$JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --set-env-vars \
+              SECTION_ID="${SECTION_ID}" \
+              FEEDS="${FEEDS}" \
+              TOP_N="${TOP_N}" \
+              LEAGUE="${LEAGUE}" \
+              DAY="${DAY}" \
+              LANG="${LANG}"
+
+      # Starta körningen
+      - name: Start job
+        id: start
+        run: |
+          az containerapp job start \
+            --name "$JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP"
+
+      # (Valfritt) Hämta senaste execution-namn och skriv ut status i loggen
+      - name: Get latest execution
+        id: exec
+        run: |
+          # Hämtar senast skapade execution (för info/loggning)
+          EXEC_NAME=$(az containerapp job execution list \
+            --name "$JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[0].name" -o tsv)
+          echo "execution_name=$EXEC_NAME" >> $GITHUB_OUTPUT
+          echo "Latest execution: $EXEC_NAME"
+
+      # (Valfritt) Visa status för senaste execution
+      - name: Show execution status
+        if: steps.exec.outputs.execution_name != ''
+        run: |
+          az containerapp job execution show \
+            --name "$JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --job-execution-name "${{ steps.exec.outputs.execution_name }}" \
+            -o table
+
+      - name: Summary
+        run: |
+          {
+            echo "### Produce triggered"
+            echo ""
+            echo "- SECTION_ID: ${SECTION_ID}"
+            echo "- FEEDS: ${FEEDS}"
+            echo "- TOP_N: ${TOP_N}"
+            echo "- LEAGUE: ${LEAGUE}"
+            echo "- DAY: ${DAY}"
+            echo "- LANG: ${LANG}"
+          } >> "$GITHUB_STEP_SUMMARY"
