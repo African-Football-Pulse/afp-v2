@@ -95,14 +95,29 @@ jobs:
               LANG="${{ inputs.lang }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
 
-      # 🔧 Sätt korrekt kommando i exec-form via --set (inte tomt kommando)
-      - name: Force correct command (exec form via --set)
+      # 🔧 Sätt korrekt kommando via dedikerade flaggor (för container "afp")
+      - name: Force correct command (exec form)
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --set "template.containers[0].command=['/usr/local/bin/python','-m','src.assembler.main']" \
-                 "template.containers[0].args=[]"
+            --container-name afp \
+            --command "/usr/local/bin/python" \
+            --args "-m" "src.assembler.main"
+
+      # (valfritt) Visa vad som faktiskt ligger sparat som command/args
+      - name: Show command/args on job
+        run: |
+          echo "Command:"
+          az containerapp job show \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --query "properties.template.containers[0].command" -o tsv || true
+          echo "Args:"
+          az containerapp job show \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --query "properties.template.containers[0].args" -o tsv || true
 
       # Starta och fånga execution-namnet
       - name: Start job (capture execution name)
