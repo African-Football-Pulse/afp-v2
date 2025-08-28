@@ -7,7 +7,7 @@ import sys
 # Mappning: JOB_TYPE → Python-modul att köra
 JOBS = {
     "collect":  "src.collectors.rss_multi",
-    "produce":  "src.sections.s_news_top3_guardian",
+    "produce":  "src.produce_section",
     "assemble": "src.assembler.main",
 }
 
@@ -18,7 +18,7 @@ def main():
         print(f"[ENTRYPOINT] Unknown JOB_TYPE={job!r}. Valid: {', '.join(JOBS)}", file=sys.stderr)
         sys.exit(2)
 
-    # Valfritt: extra args via env (säkert split med shlex)
+    # Extra args via env (säkert split med shlex)
     extra = shlex.split(os.getenv("JOB_ARGS", ""))
 
     cmd = [sys.executable, "-m", mod] + extra
