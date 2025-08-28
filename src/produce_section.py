@@ -6,7 +6,18 @@ from datetime import datetime, UTC
 try:
     import yaml
 except ImportError:
-    print("pip install pyyaml", file=sys.stderr); raise
+    print("PyYAML saknas. Kör: pip install pyyaml", file=sys.stderr)
+    raise
+
+# --- Gör att scriptet funkar både som "python -m src.produce_section"
+# --- och "python src/produce_section.py"
+THIS_FILE = Path(__file__).resolve()
+SRC_DIR = THIS_FILE.parent
+REPO_ROOT = SRC_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))  # lägg till projektroten
+
+DEFAULT_LIBRARY = "config/sections_library.yaml"
 
 def load_library(path: Path) -> dict:
     if not path.exists():
@@ -19,11 +30,28 @@ def resolve_section(library: dict, section_code: str) -> dict:
         raise SystemExit(f"Section code not found in library: {section_code}")
     return sections[section_code]
 
+def import_section_module(module_name: str):
+    """
+    Försök först med 'src.sections.<modul>', sedan 'sections.<modul>'.
+    Detta gör att import funkar både när man kör som modul (-m) eller som skript.
+    """
+    tried = []
+    for fq in (f"src.sections.{module_name}", f"sections.{module_name}"):
+        try:
+            return importlib.import_module(fq)
+        except ModuleNotFoundError as e:
+            tried.append((fq, str(e)))
+            continue
+    msg = "Kunde inte importera sektionmodulen.\n"
+    for fq, err in tried:
+        msg += f"- {fq}: {err}\n"
+    raise ModuleNotFoundError(msg)
+
 def main():
     ap = argparse.ArgumentParser(description="Produce a section from the library (config-driven).")
-    ap.add_argument("--library", default="config/sections_library.yaml")
-    ap.add_argument("--section-code", required=True, help="e.g., S.OPINION.EXPERT_COMMENT")
-    ap.add_argument("--news", required=True, help="Path to news .txt/.md")
+    ap.add_argument("--library", default=DEFAULT_LIBRARY)
+    ap.add_argument("--section-code", required=True, help="t.ex. S.OPINION.EXPERT_COMMENT")
+    ap.add_argument("--news", required=True, help="Path till nyhetsunderlag (.txt/.md)")
     ap.add_argument("--date", default=datetime.now(UTC).strftime("%Y-%m-%d"))
     ap.add_argument("--league", default="_")
     ap.add_argument("--topic", default="_")
@@ -42,7 +70,9 @@ def main():
 
     module_name = cfg["module"]
     runner_name = cfg.get("runner", "build_section")
-    mod = importlib.import_module(f"src.sections.{module_name}")
+    mod = import_section_module(module_name)
+    if not hasattr(mod, runner_name):
+        raise SystemExit(f"Runner '{runner_name}' saknas i modul '{module_name}'")
     runner = getattr(mod, runner_name)
 
     # merge defaults from library + CLI overrides
@@ -53,7 +83,7 @@ def main():
         "date": args.date,
         "league": args.league,
         "topic": args.topic,
-        "speaker": args.speaker or cfg.get("default_speaker"),   # may be None if not needed
+        "speaker": args.speaker or cfg.get("default_speaker"),   # låser JJK om satt i library
         "layout": args.layout or cfg.get("layout", "alias-first"),
         "path_scope": args.path_scope or cfg.get("path_scope", "single"),
         "write_latest": args.write_latest or bool(cfg.get("write_latest", False)),
