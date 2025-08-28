@@ -22,7 +22,7 @@ on:
         default: "afp-runner"
         type: string
       blob_prefix:
-        description: "Skrivprefix (där assemble ska lägga output)"
+        description: "Skrivprefix (där assemble lägger output)"
         required: true
         default: "assembler/"
         type: string
@@ -38,7 +38,7 @@ on:
         type: string
 
 env:
-  SECRET_NAME: blob-container-sas-url   # hemlighetsnamn i ACA (gemener, inga underscore)
+  SECRET_NAME: blob-container-sas-url
 
 jobs:
   build-deploy:
@@ -75,7 +75,6 @@ jobs:
           docker build -t "$IMAGE_REF" .
           docker push "$IMAGE_REF"
 
-      # Säkerställ att SAS-hemligheten finns på jobbet (värdet tas från repo secret)
       - name: Ensure SAS secret on job
         run: |
           az containerapp job secret set \
@@ -83,7 +82,6 @@ jobs:
             --resource-group "${{ inputs.resource_group }}" \
             --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
-      # Uppdatera image + env (exponera SAS som env via secretref)
       - name: Update job (image + env)
         run: |
           az containerapp job update \
@@ -97,16 +95,15 @@ jobs:
               LANG="${{ inputs.lang }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
 
-      # Tvinga korrekt exec-form på kommandot (annars försöker ACA köra en sträng som binär)
-      - name: Force correct command (exec form)
+      # Viktigt: rensa ev. tidigare command/args override så ENTRYPOINT i imagen används
+      - name: Clear command/args override
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --command "/usr/local/bin/python" \
-            --args "-m" "src.assembler.main"
+            --command "" \
+            --args ""
 
-      # Starta och fånga execution-namnet
       - name: Start job (capture execution name)
         id: start_run
         run: |
@@ -118,7 +115,6 @@ jobs:
           EXEC_NAME=$(echo "$OUT" | jq -r '.name')
           echo "EXEC_NAME=$EXEC_NAME" >> $GITHUB_ENV
 
-      # Vänta in status; visa sista loggraderna vid fail/timeout
       - name: Wait for execution status
         run: |
           echo "Waiting for execution: $EXEC_NAME"
