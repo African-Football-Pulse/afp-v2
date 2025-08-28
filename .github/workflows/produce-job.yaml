@@ -1,31 +1,19 @@
-# produce-job.yaml
-name: afp-produce-job
-type: Microsoft.App/jobs
-location: westeurope
-
-properties:
-  configuration:
-    triggerType: Manual
-
-  template:
-    containers:
-      - name: afp
-        image: afpacr.azurecr.io/afp-runner:gh-PLACEHOLDER
-        env:
-          - name: JOB_TYPE
-            value: produce
-          - name: SECTION_ID
-            value: S.NEWS.TOPN   # default, kan skrivas över i Actions
-          - name: FEEDS
-            value: guardian_football,bbc_football,sky_sports_premier_league,independent_football
-          - name: TOP_N
-            value: "3"
-          - name: LEAGUE
-            value: premier_league
-          - name: DAY
-            value: "2025-08-28"  # default, Actions kan skriva över
-          - name: LANG
-            value: en
-        resources:
-          cpu: 0.5
-          memory: "1Gi"
+jobs:
+- name: afp-produce
+  type: job
+  properties:
+    configuration:
+      image: <ACR_OR_DOCKERHUB_IMAGE_TAG>
+      env:
+        - name: JOB_TYPE
+          value: "produce"
+        - name: JOB_ARGS
+          # Exempel: kör expertkommentaren (JJK) på Arsenal
+          value: "--section-code S.OPINION.EXPERT_COMMENT --news inputs/sample_news.md --league premier_league --topic arsenal --write-latest"
+        - name: AFP_OPENAI_SECRETKEY
+          secretRef: afp-openai-secret
+        - name: BLOB_CONTAINER_SAS_URL
+          secretRef: afp-sas-url
+    scale:
+      minExecutions: 0
+      maxExecutions: 1
