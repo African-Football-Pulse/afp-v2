@@ -98,8 +98,9 @@ def main():
     if not hasattr(mod, runner_name):
         raise SystemExit(f"Runner '{runner_name}' saknas i modul '{module_name}'")
     runner = getattr(mod, runner_name)
-
+    
     # merge defaults from library + CLI overrides
+    speaker_val = args.speaker or cfg.get("default_speaker")  # kan vara None
     opts = {
         "section_code": args.section_code,
         "news_path": args.news,
@@ -107,7 +108,6 @@ def main():
         "date": args.date,
         "league": args.league,
         "topic": args.topic,
-        "speaker": args.speaker or cfg.get("default_speaker"),   # låser JJK om satt i library
         "layout": args.layout or cfg.get("layout", "alias-first"),
         "path_scope": args.path_scope or cfg.get("path_scope", "single"),
         "write_latest": args.write_latest or bool(cfg.get("write_latest", False)),
@@ -116,6 +116,10 @@ def main():
         "model": args.model or cfg.get("model") or os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         "type": cfg.get("type", "generic"),
     }
+    # bara skicka 'speaker' om den faktiskt behövs
+    if speaker_val is not None:
+        opts["speaker"] = speaker_val
+
 
     manifest = runner(**opts)
     print(json.dumps({"ok": True, "manifest": manifest}, ensure_ascii=False, indent=2))
