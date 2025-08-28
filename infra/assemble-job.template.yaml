@@ -1,0 +1,33 @@
+# infra/assemble-job.template.yaml
+name: afp-assemble-job
+type: Microsoft.App/jobs
+location: westeurope
+
+properties:
+  configuration:
+    triggerType: Manual
+
+  template:
+    containers:
+      - name: afp
+        image: __IMAGE_REF__
+        command:
+          - /usr/local/bin/python
+        args:
+          - -m
+          - src.assembler.main
+        env:
+          - name: JOB_TYPE
+            value: assemble
+          - name: READ_PREFIX
+            value: "__READ_PREFIX__"
+          - name: BLOB_PREFIX
+            value: "__BLOB_PREFIX__"
+          - name: LANG
+            value: "__LANG__"
+          - name: BLOB_CONTAINER_SAS_URL
+            # OBS: endast referensnamn, själva hemlighetsvärdet sätts i Actions-steget
+            secretRef: blob-container-sas-url
+        resources:
+          cpu: 0.5
+          memory: "1Gi"
