@@ -3,6 +3,7 @@ aliases:
   S2: S.NEWS.CLUB_HIGHLIGHT
   S3: S.OPINION.EXPERT_COMMENT
   S4: S.NEWS.TOP3
+  S5: S.OPINION.DUO_EXPERTS  
 
 sections:
   S.NEWS.TOP3:
@@ -27,5 +28,14 @@ sections:
     personas_path: config/personas.json
     layout: alias-first
     path_scope: single            # set to "speaker" if you ever want AK+JJK side-by-side
+    write_latest: true
+    model: gpt-4o-mini
+
+  S.OPINION.DUO_EXPERTS:
+    type: opinion
+    module: s_opinion_duo_experts
+    runner: build_section
+    personas_path: config/personas.json
+    layout: alias-first
     write_latest: true
     model: gpt-4o-mini
