@@ -1,19 +1,41 @@
-jobs:
-- name: afp-produce
-  type: job
-  properties:
-    configuration:
-      image: <ACR_OR_DOCKERHUB_IMAGE_TAG>
-      env:
-        - name: JOB_TYPE
-          value: "produce"
-        - name: JOB_ARGS
-          # Exempel: kör expertkommentaren (JJK) på Arsenal
-          value: "--section-code S.OPINION.EXPERT_COMMENT --news inputs/sample_news.md --league premier_league --topic arsenal --write-latest"
-        - name: AFP_OPENAI_SECRETKEY
-          secretRef: afp-openai-secret
-        - name: BLOB_CONTAINER_SAS_URL
-          secretRef: afp-sas-url
-    scale:
-      minExecutions: 0
-      maxExecutions: 1
+# produce-job.yaml
+type: Microsoft.App/job
+apiVersion: 2023-05-01
+name: afp-produce-job
+location: westeurope
+properties:
+  configuration:
+    triggerType: Manual   # Körs on-demand via ACA Job
+    secrets:
+      - name: afp-openai-secretkey
+        value: ${AFP_OPENAI_SECRETKEY}
+      - name: blob-container-sas-url
+        value: ${BLOB_CONTAINER_SAS_URL}
+      - name: azure-storage-account
+        value: ${AZURE_STORAGE_ACCOUNT}
+      - name: azure-container
+        value: ${AZURE_CONTAINER}
+  template:
+    containers:
+      - name: produce
+        image: ghcr.io/<org>/<repo>:latest   # Overridas i GH Actions med :${{ github.sha }}
+        env:
+          - name: JOB_TYPE
+            value: "produce"
+          - name: JOB_ARGS
+            value: >
+              --section-code S.NEWS.TOP3
+              --news https://<storageaccount>.blob.core.windows.net/afp/curated/news/guardian_football/premier_league/2025-08-29/items.json?<sas>
+              --outdir /app/blob_out/produce
+              --write-latest
+          - name: LOG_LEVEL
+            value: "INFO"
+          - name: AFP_OPENAI_SECRETKEY
+            secretRef: afp-openai-secretkey
+          - name: BLOB_CONTAINER_SAS_URL
+            secretRef: blob-container-sas-url
+          - name: AZURE_STORAGE_ACCOUNT
+            secretRef: azure-storage-account
+          - name: AZURE_CONTAINER
+            secretRef: azure-container
+    restartPolicy: Never
