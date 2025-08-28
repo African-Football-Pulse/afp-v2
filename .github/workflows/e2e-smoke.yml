@@ -46,24 +46,12 @@ on:
         required: true
         default: "en"
         type: string
-      collector_prefix:
-        description: "Skrivprefix för collect"
-        required: true
-        default: "collector/"
-        type: string
-      producer_prefix:
-        description: "Skrivprefix för produce (och READ för assemble)"
-        required: true
-        default: "producer/"
-        type: string
-      assembler_prefix:
-        description: "Skrivprefix för assemble"
-        required: true
-        default: "assembler/"
-        type: string
 
 env:
   SECRET_NAME: blob-container-sas-url
+  COLLECT_PREFIX: collector/
+  PRODUCE_PREFIX: producer/
+  ASSEMBLE_PREFIX: assembler/
 
 jobs:
   e2e:
@@ -119,7 +107,7 @@ jobs:
             --image "$IMAGE_REF" \
             --set-env-vars \
               JOB_TYPE=collect \
-              BLOB_PREFIX="${{ inputs.collector_prefix }}" \
+              BLOB_PREFIX="${{ env.COLLECT_PREFIX }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
 
       - name: Start COLLECT (capture exec)
@@ -156,7 +144,7 @@ jobs:
           ACC=$(echo "$SAS" | sed -n 's~https://\([^\.]*\)\.blob.core.windows.net/.*~\1~p')
           CON=$(echo "$SAS" | sed -n 's~https://[^/]*/\([^?]*\)\?.*~\1~p')
           TOK=$(echo "$SAS" | sed -n 's~[^?]*?\(.*\)~\1~p')
-          TGT="${{ inputs.collector_prefix }}curated/news/${{ inputs.feed_name }}/${{ inputs.league }}/$DATE_UTC/items.json"
+          TGT="${{ env.COLLECT_PREFIX }}curated/news/${{ inputs.feed_name }}/${{ inputs.league }}/$DATE_UTC/items.json"
           echo "Expecting: $TGT"
           for i in {1..36}; do
             ok=$(az storage blob exists --account-name "$ACC" --container-name "$CON" --name "$TGT" --sas-token "$TOK" --query exists -o tsv || echo false)
@@ -174,8 +162,8 @@ jobs:
             --image "$IMAGE_REF" \
             --set-env-vars \
               JOB_TYPE=produce \
-              READ_PREFIX="${{ inputs.collector_prefix }}" \
-              BLOB_PREFIX="${{ inputs.producer_prefix }}" \
+              READ_PREFIX="${{ env.COLLECT_PREFIX }}" \
+              BLOB_PREFIX="${{ env.PRODUCE_PREFIX }}" \
               LANG="${{ inputs.lang }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
 
@@ -213,7 +201,7 @@ jobs:
           ACC=$(echo "$SAS" | sed -n 's~https://\([^\.]*\)\.blob.core.windows.net/.*~\1~p')
           CON=$(echo "$SAS" | sed -n 's~https://[^/]*/\([^?]*\)\?.*~\1~p')
           TOK=$(echo "$SAS" | sed -n 's~[^?]*?\(.*\)~\1~p')
-          TGT="${{ inputs.producer_prefix }}sections/$DATE_UTC/${{ inputs.league }}/_/S.NEWS.TOP3_GUARDIAN/${{ inputs.lang }}/section.txt"
+          TGT="${{ env.PRODUCE_PREFIX }}sections/$DATE_UTC/${{ inputs.league }}/_/S.NEWS.TOP3_GUARDIAN/${{ inputs.lang }}/section.txt"
           echo "Expecting: $TGT"
           for i in {1..36}; do
             ok=$(az storage blob exists --account-name "$ACC" --container-name "$CON" --name "$TGT" --sas-token "$TOK" --query exists -o tsv || echo false)
@@ -226,7 +214,7 @@ jobs:
       - name: Render assemble YAML
         run: |
           mkdir -p infra
-          cat > infra/assemble-job.rendered.yaml <<'YAML'
+          cat > infra/assemble-job.rendered.yaml <<EOF
           name: ${{ inputs.assemble_job }}
           type: Microsoft.App/jobs
           location: westeurope
@@ -241,12 +229,12 @@ jobs:
                   args: [-m, src.assembler.main]
                   env:
                     - { name: JOB_TYPE, value: assemble }
-                    - { name: READ_PREFIX, value: "${{ inputs.producer_prefix }}" }
-                    - { name: BLOB_PREFIX, value: "${{ inputs.assembler_prefix }}" }
+                    - { name: READ_PREFIX, value: "${{ env.PRODUCE_PREFIX }}" }
+                    - { name: BLOB_PREFIX, value: "${{ env.ASSEMBLE_PREFIX }}" }
                     - { name: LANG, value: "${{ inputs.lang }}" }
                     - { name: BLOB_CONTAINER_SAS_URL, secretRef: blob-container-sas-url }
                   resources: { cpu: 0.5, memory: "1Gi" }
-          YAML
+          EOF
           echo '--- rendered YAML ---'
           cat infra/assemble-job.rendered.yaml
 
@@ -291,7 +279,7 @@ jobs:
           ACC=$(echo "$SAS" | sed -n 's~https://\([^\.]*\)\.blob.core.windows.net/.*~\1~p')
           CON=$(echo "$SAS" | sed -n 's~https://[^/]*/\([^?]*\)\?.*~\1~p')
           TOK=$(echo "$SAS" | sed -n 's~[^?]*?\(.*\)~\1~p')
-          TGT="${{ inputs.assembler_prefix }}episodes/$DATE_UTC/${{ inputs.league }}/daily/${{ inputs.lang }}/episode_manifest.json"
+          TGT="${{ env.ASSEMBLE_PREFIX }}episodes/$DATE_UTC/${{ inputs.league }}/daily/${{ inputs.lang }}/episode_manifest.json"
           echo "Expecting: $TGT"
           for i in {1..36}; do
             ok=$(az storage blob exists --account-name "$ACC" --container-name "$CON" --name "$TGT" --sas-token "$TOK" --query exists -o tsv || echo false)
