@@ -69,6 +69,7 @@ jobs:
         run: |
           echo "IMAGE_TAG=gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
           echo "IMAGE_REF=${{ inputs.acr_name }}.azurecr.io/${{ inputs.image_name }}:gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          echo "DATE_UTC=$(date -u +%F)" >> $GITHUB_ENV
 
       - name: Build & push image
         run: |
@@ -82,30 +83,27 @@ jobs:
             --resource-group "${{ inputs.resource_group }}" \
             --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
-      - name: Update job (image + env)
+      # Rendera YAML-mallen med rätt värden
+      - name: Render assemble YAML
+        run: |
+          mkdir -p infra
+          cp infra/assemble-job.template.yaml infra/assemble-job.rendered.yaml
+          sed -i "s|__IMAGE_REF__|$IMAGE_REF|g" infra/assemble-job.rendered.yaml
+          sed -i "s|__READ_PREFIX__|${{ inputs.read_prefix }}|g" infra/assemble-job.rendered.yaml
+          sed -i "s|__BLOB_PREFIX__|${{ inputs.blob_prefix }}|g" infra/assemble-job.rendered.yaml
+          sed -i "s|__LANG__|${{ inputs.lang }}|g" infra/assemble-job.rendered.yaml
+          echo '--- rendered YAML ---'
+          cat infra/assemble-job.rendered.yaml
+
+      # Uppdatera jobbet med YAML (inkl. command/args via YAML)
+      - name: Update job from YAML
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --image "$IMAGE_REF" \
-            --set-env-vars \
-              JOB_TYPE=assemble \
-              READ_PREFIX="${{ inputs.read_prefix }}" \
-              BLOB_PREFIX="${{ inputs.blob_prefix }}" \
-              LANG="${{ inputs.lang }}" \
-              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+            --yaml infra/assemble-job.rendered.yaml
 
-      # 🔧 Sätt korrekt kommando med nya flaggor (container "afp")
-      - name: Force correct command on container 'afp'
-        run: |
-          az containerapp job update \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --container-name afp \
-            --container-command "/usr/local/bin/python" \
-            --container-args "-m" "src.assembler.main"
-
-      # Starta och fånga execution-namnet (utan jq)
+      # Starta och fånga execution-namnet
       - name: Start job (capture execution name)
         id: start_run
         run: |
