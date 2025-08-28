@@ -95,8 +95,9 @@ def main():
     ap.add_argument("--speaker", choices=["AK", "JJK"], required=True, help="Persona key")
     ap.add_argument("--news", required=True, help="Path to news .txt/.md")
     ap.add_argument("--personas", default="config/personas.json", help="Path to personas.json")
-    ap.add_argument("--outdir", default="outputs/sections", help="Output directory")
+    ap.add_argument("--outdir", default="outputs/sections", help="Output directory (fallback if no SAS)")
     ap.add_argument("--model", default=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), help="OpenAI model name")
+    ap.add_argument("--dry-run", action="store_true", help="Print blob URLs instead of uploading")
     args = ap.parse_args()
 
     api_key = os.getenv("AFP_OPENAI_SECRETKEY") or os.getenv("OPENAI_API_KEY")
@@ -140,17 +141,6 @@ def main():
     data["duration_sec"] = approx_duration(word_count)
     data["speaker"] = args.speaker
 
-    outdir = Path(args.outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    stem = f"opinion_{args.speaker}_{ts}"
-
-    # JSON
-    (outdir / f"{stem}.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    # MD (ready-to-read)
-    md = f"""### Opinion — {data['speaker']} ({data['duration_sec']}s / {data['words']} words)
-
-{data['text']}
     # ---- OUTPUT ----
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     stem = f"opinion_{args.speaker}_{ts}"
@@ -161,27 +151,27 @@ def main():
         f"{data['text']}\n"
     ).encode("utf-8")
 
-    # SAS från Secrets / env
     container_sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
 
     if container_sas:
-        # Upload to Azure Blob
         json_path = f"sections/{stem}.json"
         md_path   = f"sections/{stem}.md"
 
-        json_url = upload_bytes_via_sas(container_sas, json_path, json_bytes, "application/json")
-        md_url   = upload_bytes_via_sas(container_sas, md_path, md_bytes, "text/markdown")
-
-        print(f"Uploaded JSON → {json_url}")
-        print(f"Uploaded MD   → {md_url}")
+        if args.dry_run:
+            print("=== DRY RUN ===")
+            print("Would upload JSON →", make_blob_url(container_sas, json_path))
+            print("Would upload MD   →", make_blob_url(container_sas, md_path))
+        else:
+            json_url = upload_bytes_via_sas(container_sas, json_path, json_bytes, "application/json")
+            md_url   = upload_bytes_via_sas(container_sas, md_path, md_bytes, "text/markdown")
+            print(f"Uploaded JSON → {json_url}")
+            print(f"Uploaded MD   → {md_url}")
     else:
-        # Fallback: skriv lokalt
+        # Fallback: write locally
         outdir = Path(args.outdir)
         outdir.mkdir(parents=True, exist_ok=True)
-
         (outdir / f"{stem}.json").write_text(json_bytes.decode("utf-8"), encoding="utf-8")
         (outdir / f"{stem}.md").write_text(md_bytes.decode("utf-8"), encoding="utf-8")
-
         print(f"Wrote local: {outdir / (stem + '.json')}")
         print(f"Wrote local: {outdir / (stem + '.md')}")
 
