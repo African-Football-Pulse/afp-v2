@@ -94,6 +94,14 @@ jobs:
               BLOB_PREFIX="${{ inputs.blob_prefix }}" \
               LANG="${{ inputs.lang }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+      
+      - name: Force correct command (exec form)
+        run: |
+          az containerapp job update \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --set "template.containers[0].command=['/usr/local/bin/python','-m','src.assembler.main']" \
+                  "template.containers[0].args=[]"
 
       - name: Start job run
         run: |
