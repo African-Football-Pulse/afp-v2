@@ -95,41 +95,26 @@ jobs:
               LANG="${{ inputs.lang }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
 
-      # 🔧 Sätt korrekt kommando via dedikerade flaggor (för container "afp")
-      - name: Force correct command (exec form)
+      # 🔧 Sätt korrekt kommando med nya flaggor (container "afp")
+      - name: Force correct command on container 'afp'
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
             --container-name afp \
-            --command "/usr/local/bin/python" \
-            --args "-m" "src.assembler.main"
+            --container-command "/usr/local/bin/python" \
+            --container-args "-m" "src.assembler.main"
 
-      # (valfritt) Visa vad som faktiskt ligger sparat som command/args
-      - name: Show command/args on job
-        run: |
-          echo "Command:"
-          az containerapp job show \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --query "properties.template.containers[0].command" -o tsv || true
-          echo "Args:"
-          az containerapp job show \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --query "properties.template.containers[0].args" -o tsv || true
-
-      # Starta och fånga execution-namnet
+      # Starta och fånga execution-namnet (utan jq)
       - name: Start job (capture execution name)
         id: start_run
         run: |
-          OUT=$(az containerapp job start \
+          EXEC_NAME=$(az containerapp job start \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            -o json)
-          echo "$OUT"
-          EXEC_NAME=$(echo "$OUT" | jq -r '.name')
+            --query name -o tsv)
           echo "EXEC_NAME=$EXEC_NAME" >> $GITHUB_ENV
+          echo "Started: $EXEC_NAME"
 
       # Vänta in status; visa sista loggraderna vid fail/timeout
       - name: Wait for execution status
