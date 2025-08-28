@@ -17,28 +17,28 @@ on:
         required: true
         type: string
       image_name:
-        description: "Image-namn"
+        description: "Image-namn i ACR"
         required: true
         default: "afp-runner"
         type: string
       blob_prefix:
-        description: "Skrivprefix"
+        description: "Skrivprefix (där assemble ska lägga output)"
         required: true
         default: "assembler/"
         type: string
       read_prefix:
-        description: "Läsprefix"
+        description: "Läsprefix (var assemble läser sections från)"
         required: true
         default: "producer/"
         type: string
       lang:
-        description: "Sectionspråk i stigen (ex. en)"
+        description: "Språk-stig för episodes (t.ex. en)"
         required: true
         default: "en"
         type: string
 
 env:
-  SECRET_NAME: blob-container-sas-url   # hemlighetsnamnet i ACA (gemener, inga underscore)
+  SECRET_NAME: blob-container-sas-url   # hemlighetsnamn i ACA (gemener, inga underscore)
 
 jobs:
   build-deploy:
@@ -75,6 +75,7 @@ jobs:
           docker build -t "$IMAGE_REF" .
           docker push "$IMAGE_REF"
 
+      # Säkerställ att SAS-hemligheten finns på jobbet (värdet tas från repo secret)
       - name: Ensure SAS secret on job
         run: |
           az containerapp job secret set \
@@ -82,6 +83,7 @@ jobs:
             --resource-group "${{ inputs.resource_group }}" \
             --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
 
+      # Uppdatera image + env (exponera SAS som env via secretref)
       - name: Update job (image + env)
         run: |
           az containerapp job update \
@@ -94,22 +96,63 @@ jobs:
               BLOB_PREFIX="${{ inputs.blob_prefix }}" \
               LANG="${{ inputs.lang }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
-      
+
+      # Tvinga korrekt exec-form på kommandot (annars försöker ACA köra en sträng som binär)
       - name: Force correct command (exec form)
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --set "template.containers[0].command=['/usr/local/bin/python','-m','src.assembler.main']" \
-                  "template.containers[0].args=[]"
+            --command "/usr/local/bin/python" \
+            --args "-m" "src.assembler.main"
 
-      - name: Start job run
+      # Starta och fånga execution-namnet
+      - name: Start job (capture execution name)
+        id: start_run
         run: |
-          az containerapp job start \
+          OUT=$(az containerapp job start \
             --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}"
+            --resource-group "${{ inputs.resource_group }}" \
+            -o json)
+          echo "$OUT"
+          EXEC_NAME=$(echo "$OUT" | jq -r '.name')
+          echo "EXEC_NAME=$EXEC_NAME" >> $GITHUB_ENV
+
+      # Vänta in status; visa sista loggraderna vid fail/timeout
+      - name: Wait for execution status
+        run: |
+          echo "Waiting for execution: $EXEC_NAME"
+          for i in {1..60}; do
+            ST=$(az containerapp job execution show \
+                  --name "${{ inputs.job_name }}" \
+                  --resource-group "${{ inputs.resource_group }}" \
+                  --execution "$EXEC_NAME" \
+                  --query properties.status -o tsv 2>/dev/null || echo "Pending")
+            echo "[$i] Status: $ST"
+            if [ "$ST" = "Succeeded" ]; then
+              echo "Job Succeeded"; exit 0
+            fi
+            if [ "$ST" = "Failed" ]; then
+              echo "---- Last 200 log lines ----"
+              az containerapp job execution logs show \
+                --name "${{ inputs.job_name }}" \
+                --resource-group "${{ inputs.resource_group }}" \
+                --execution "$EXEC_NAME" \
+                --tail 200 || true
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Timeout waiting for job execution"
+          az containerapp job execution logs show \
+            --name "${{ inputs.job_name }}" \
+            --resource-group "${{ inputs.resource_group }}" \
+            --execution "$EXEC_NAME" \
+            --tail 200 || true
+          exit 1
 
       - name: Summary
         run: |
-          echo "### Pushed image" >> $GITHUB_STEP_SUMMARY
-          echo "\`$IMAGE_REF\`" >> $GITHUB_STEP_SUMMARY
+          echo "### Assemble deployed & ran" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`$IMAGE_REF\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Execution: \`$EXEC_NAME\`" >> $GITHUB_STEP_SUMMARY
