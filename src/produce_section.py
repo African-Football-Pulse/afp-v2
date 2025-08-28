@@ -9,8 +9,7 @@ except ImportError:
     print("PyYAML saknas. Kör: pip install pyyaml", file=sys.stderr)
     raise
 
-# --- Gör att scriptet funkar både som "python -m src.produce_section"
-# --- och "python src/produce_section.py"
+# --- funkar både "python -m src.produce_section" och "python src/produce_section.py"
 THIS_FILE = Path(__file__).resolve()
 SRC_DIR = THIS_FILE.parent
 REPO_ROOT = SRC_DIR.parent
@@ -32,9 +31,8 @@ def resolve_section(library: dict, section_code: str) -> dict:
 
 def import_section_module(module_name: str):
     """
-    Ladda sektionmodulen direkt från fil: src/sections/<module_name>.py
-    Faller tillbaka till paketimport om filen saknas.
-    Detta undviker att andra moduler (med t.ex. azure-importer) laddas i onödan.
+    Ladda sektionmodulen direkt från fil: src/sections/<module_name>.py.
+    Om filen inte finns → fallback till paketimport.
     """
     import importlib.util
     from importlib.machinery import SourceFileLoader
@@ -53,14 +51,17 @@ def import_section_module(module_name: str):
                 raise ModuleNotFoundError(f"Kunde inte skapa spec för: {candidate}")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)  # kör filen deterministiskt
+            print(f"[produce_section] Loaded module from file: {candidate}")
             return mod
         except Exception as e:
             tried.append((str(candidate), repr(e)))
 
-    # Fallback: prova paketimport (om man kör som modul)
+    # Fallback: prova paketimport (om man kör som modul och vill använda paket)
     for fq in (f"src.sections.{module_name}", f"sections.{module_name}"):
         try:
-            return importlib.import_module(fq)
+            mod = importlib.import_module(fq)
+            print(f"[produce_section] Loaded module via package import: {fq} (file={getattr(mod,'__file__','<unknown>')})")
+            return mod
         except ModuleNotFoundError as e:
             tried.append((fq, str(e)))
             continue
