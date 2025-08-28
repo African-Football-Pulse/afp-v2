@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os, json, argparse, datetime, re, time
+from datetime import datetime, UTC
 import urllib.parse as up
 import requests
 from pathlib import Path
@@ -102,8 +103,8 @@ def main():
     ap.add_argument("--model", default=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), help="OpenAI model name")
     ap.add_argument("--dry-run", action="store_true", help="Print blob URLs instead of uploading")
     # Producer-friendly path controls
-    ap.add_argument("--date", default=datetime.datetime.utcnow().strftime("%Y-%m-%d"),
-                    help="ISO date folder, default=UTC today")
+    ap.add_argument("--date", default=datetime.now(UTC).strftime("%Y-%m-%d"),
+                  help="ISO date folder, default=UTC today")
     ap.add_argument("--league", default="_", help="League/competition key, e.g. 'premier_league'")
     ap.add_argument("--topic", default="_", help="Optional topic subfolder, e.g. 'arsenal'")
     ap.add_argument("--layout", choices=["alias-first","date-first"], default="alias-first",
@@ -154,7 +155,7 @@ def main():
     data["speaker"] = args.speaker
 
     # ---- OUTPUT (producer-style) ----
-    ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     section_code = "S.OPINION.EXPERT_COMMENT"
 
     # Build bytes
