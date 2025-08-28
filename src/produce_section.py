@@ -32,19 +32,42 @@ def resolve_section(library: dict, section_code: str) -> dict:
 
 def import_section_module(module_name: str):
     """
-    Försök först med 'src.sections.<modul>', sedan 'sections.<modul>'.
-    Detta gör att import funkar både när man kör som modul (-m) eller som skript.
+    Ladda sektionmodulen direkt från fil: src/sections/<module_name>.py
+    Faller tillbaka till paketimport om filen saknas.
+    Detta undviker att andra moduler (med t.ex. azure-importer) laddas i onödan.
     """
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+
+    candidate = SRC_DIR / "sections" / f"{module_name}.py"
     tried = []
+
+    if candidate.exists():
+        try:
+            spec = importlib.util.spec_from_file_location(
+                f"afp.sections.{module_name}",
+                str(candidate),
+                loader=SourceFileLoader(f"afp.sections.{module_name}", str(candidate))
+            )
+            if spec is None or spec.loader is None:
+                raise ModuleNotFoundError(f"Kunde inte skapa spec för: {candidate}")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # kör filen deterministiskt
+            return mod
+        except Exception as e:
+            tried.append((str(candidate), repr(e)))
+
+    # Fallback: prova paketimport (om man kör som modul)
     for fq in (f"src.sections.{module_name}", f"sections.{module_name}"):
         try:
             return importlib.import_module(fq)
         except ModuleNotFoundError as e:
             tried.append((fq, str(e)))
             continue
+
     msg = "Kunde inte importera sektionmodulen.\n"
-    for fq, err in tried:
-        msg += f"- {fq}: {err}\n"
+    for where, err in tried:
+        msg += f"- {where}: {err}\n"
     raise ModuleNotFoundError(msg)
 
 def main():
