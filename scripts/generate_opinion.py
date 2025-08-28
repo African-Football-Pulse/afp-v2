@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import os, json, sys, argparse, datetime, re
+import urllib.parse as up
+import requests
 from pathlib import Path
 
 # ---- OpenAI SDK v1 ----
@@ -68,6 +70,26 @@ def clamp_words(text: str, min_w=120, max_w=170):
             text += "."
     return text
 
+def make_blob_url(container_sas_url: str, blob_path: str) -> str:
+    """Join container SAS URL with a blob path."""
+    p = up.urlparse(container_sas_url)
+    base = f"{p.scheme}://{p.netloc}{p.path.rstrip('/')}"
+    return f"{base}/{blob_path.lstrip('/')}?{p.query}"
+
+def upload_bytes_via_sas(container_sas_url: str, blob_path: str, data: bytes, content_type: str = "application/octet-stream"):
+    """Upload using plain HTTP PUT + SAS (no SDK)."""
+    blob_url = make_blob_url(container_sas_url, blob_path)
+    headers = {
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": "2020-10-02",
+        "Content-Type": content_type,
+    }
+    r = requests.put(blob_url, headers=headers, data=data, timeout=60)
+    if r.status_code not in (201, 202):
+        raise RuntimeError(f"Blob upload failed ({r.status_code}): {r.text[:300]}")
+    return blob_url
+
+
 def main():
     ap = argparse.ArgumentParser(description="Generate ~45s expert opinion (AK/JJK) from news input.")
     ap.add_argument("--speaker", choices=["AK", "JJK"], required=True, help="Persona key")
@@ -129,11 +151,39 @@ def main():
     md = f"""### Opinion — {data['speaker']} ({data['duration_sec']}s / {data['words']} words)
 
 {data['text']}
-"""
-    (outdir / f"{stem}.md").write_text(md, encoding="utf-8")
+    # ---- OUTPUT ----
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    stem = f"opinion_{args.speaker}_{ts}"
 
-    print(f"Wrote: {outdir / (stem + '.json')}")
-    print(f"Wrote: {outdir / (stem + '.md')}")
+    json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    md_bytes = (
+        f"### Opinion — {data['speaker']} ({data['duration_sec']}s / {data['words']} words)\n\n"
+        f"{data['text']}\n"
+    ).encode("utf-8")
+
+    # SAS från Secrets / env
+    container_sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
+
+    if container_sas:
+        # Upload to Azure Blob
+        json_path = f"sections/{stem}.json"
+        md_path   = f"sections/{stem}.md"
+
+        json_url = upload_bytes_via_sas(container_sas, json_path, json_bytes, "application/json")
+        md_url   = upload_bytes_via_sas(container_sas, md_path, md_bytes, "text/markdown")
+
+        print(f"Uploaded JSON → {json_url}")
+        print(f"Uploaded MD   → {md_url}")
+    else:
+        # Fallback: skriv lokalt
+        outdir = Path(args.outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+
+        (outdir / f"{stem}.json").write_text(json_bytes.decode("utf-8"), encoding="utf-8")
+        (outdir / f"{stem}.md").write_text(md_bytes.decode("utf-8"), encoding="utf-8")
+
+        print(f"Wrote local: {outdir / (stem + '.json')}")
+        print(f"Wrote local: {outdir / (stem + '.md')}")
 
 if __name__ == "__main__":
     main()
