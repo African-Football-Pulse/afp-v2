@@ -95,15 +95,16 @@ jobs:
               LANG="${{ inputs.lang }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
 
-      # Viktigt: rensa ev. tidigare command/args override så ENTRYPOINT i imagen används
-      - name: Clear command/args override
+      # 🔧 Sätt korrekt kommando i exec-form via --set (inte tomt kommando)
+      - name: Force correct command (exec form via --set)
         run: |
           az containerapp job update \
             --name "${{ inputs.job_name }}" \
             --resource-group "${{ inputs.resource_group }}" \
-            --command "" \
-            --args ""
+            --set "template.containers[0].command=['/usr/local/bin/python','-m','src.assembler.main']" \
+                 "template.containers[0].args=[]"
 
+      # Starta och fånga execution-namnet
       - name: Start job (capture execution name)
         id: start_run
         run: |
@@ -115,6 +116,7 @@ jobs:
           EXEC_NAME=$(echo "$OUT" | jq -r '.name')
           echo "EXEC_NAME=$EXEC_NAME" >> $GITHUB_ENV
 
+      # Vänta in status; visa sista loggraderna vid fail/timeout
       - name: Wait for execution status
         run: |
           echo "Waiting for execution: $EXEC_NAME"
