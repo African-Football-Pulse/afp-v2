@@ -1,15 +1,31 @@
 # src/sections/s_news_top3_generic.py
 """
-Läser första bästa curated items.json för dagens datum och skriver en Top 3-sektion till:
-sections/{YYYY-MM-DD}/{league}/_/S.NEWS.TOP3.GENERIC/en/section.txt
+S.NEWS.TOPN – Generic Top-N över flera källor.
 
-Stöd för:
+- Läser curated/news/{feed}/{league}/{day}/items.json för valda FEEDS
+- Sorterar på published_iso (fallback: published) fallande
+- Väljer max 1 per källa tills TOP_N uppnås; fyller på med mest färska
+- Skriver till producer/sections/{day}/{league}/_/S.NEWS.TOPN/{lang}/section.txt
+
+Stöd:
 - Azure Blob via Managed Identity (DefaultAzureCredential)
-- Local Mode (STORAGE_MODE=local) -> skriver/läser i ./_out
+- Local Mode (STORAGE_MODE=local) -> ./_out
+Env:
+  LEAGUE=premier_league
+  DAY=YYYY-MM-DD (default: idag, Europe/Stockholm)
+  FEEDS=guardian_football,bbc_football,sky_sports_premier_league,independent_football
+  TOP_N=3
+  LANG=en
+  SECTION_ID=S.NEWS.TOPN
+  STORAGE_MODE=local|"" (local = läs/skriv i ./_out)
+  LOCAL_OUT_DIR=_out
+  (Azure) AZURE_STORAGE_ACCOUNT, AZURE_CONTAINER
 """
 import os, json, sys
+from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+from typing import List, Dict, Any
 
 # --- Local Mode helpers ---
 USE_LOCAL = os.environ.get("STORAGE_MODE", "").lower() == "local"
@@ -25,23 +41,10 @@ def _upload_text_local(path: str, text: str):
         f.write(text)
     return path
 
-def download_json_local(path):
+def _download_json_local(path: str):
     fp = os.path.join(LOCAL_ROOT, path)
     with open(fp, "r", encoding="utf-8") as f:
         return json.load(f)
-
-def list_local_item_paths(prefix):
-    base = os.path.join(LOCAL_ROOT, prefix)
-    if not os.path.exists(base):
-        return []
-    hits = []
-    for root, _, files in os.walk(base):
-        for fn in files:
-            if fn == "items.json":
-                rel = os.path.relpath(os.path.join(root, fn), LOCAL_ROOT)
-                hits.append(rel)
-    return hits
-# --- /Local Mode ---
 
 # Azure imports endast om vi kör mot Blob
 if not USE_LOCAL:
@@ -56,7 +59,14 @@ TZ = ZoneInfo("Europe/Stockholm")
 def today_str():
     return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
 
-def blob_client():
+def _env(name: str, default: str | None = None) -> str:
+    v = os.environ.get(name, default)
+    if v is None:
+        print(f"[S.NEWS.TOPN] Missing required env var: {name}", file=sys.stderr)
+        sys.exit(2)
+    return v
+
+def _blob_container():
     account = os.environ["AZURE_STORAGE_ACCOUNT"]
     container = os.environ["AZURE_CONTAINER"]
     url = f"https://{account}.blob.core.windows.net"
@@ -64,116 +74,136 @@ def blob_client():
     svc = BlobServiceClient(account_url=url, credential=cred)
     return svc.get_container_client(container)
 
-def list_blobs(container_client, prefix):
-    if USE_LOCAL:
-        class B: pass
-        for rel in list_local_item_paths(prefix):
-            b = B(); b.name = rel
-            yield b
-        return
-    return container_client.list_blobs(name_starts_with=prefix)
-
-def download_json(container_client, path):
-    if USE_LOCAL:
-        return download_json_local(path)
+def _download_json_blob(container_client, path: str):
     stream = container_client.download_blob(path)
     return json.loads(stream.readall().decode("utf-8"))
 
-def upload_text(container_client, path, text):
-    if USE_LOCAL:
-        return _upload_text_local(path, text)
+def _upload_text_blob(container_client, path: str, text: str, content_type: str):
     container_client.upload_blob(
         name=path,
         data=text.encode("utf-8"),
         overwrite=True,
-        content_settings=ContentSettings(content_type="text/plain; charset=utf-8")
+        content_settings=ContentSettings(content_type=content_type),
     )
     return path
 
-def pick_items_blob_for_day(container_client, league, day):
-    prefix = f"curated/news/"
-    for blob in list_blobs(container_client, prefix):
-        name = blob.name
-        if not name.endswith("/items.json"):
-            continue
-        parts = name.split("/")
-        # expected: curated/news/{source}/{league}/{day}/items.json
-        if len(parts) < 6:
-            continue
-        if parts[0] != "curated" or parts[1] != "news":
-            continue
-        b_league = parts[3]
-        b_day = parts[4]
-        if b_league != league or b_day != day:
-            continue
-        try:
-            items = download_json(container_client, name)
-            if isinstance(items, list) and len(items) > 0:
-                return name, items
-        except Exception:
-            continue
-    return None, None
+def _load_items_for_feed(cc, feed: str, league: str, day: str) -> List[Dict[str, Any]]:
+    rel = f"curated/news/{feed}/{league}/{day}/items.json"
+    try:
+        data = _download_json_local(rel) if USE_LOCAL else _download_json_blob(cc, rel)
+    except Exception:
+        return []
+    # items kan vara list eller {"items":[...]}
+    if isinstance(data, dict) and "items" in data:
+        data = data["items"]
+    if not isinstance(data, list):
+        return []
+    for it in data:
+        it.setdefault("source", feed)
+        if "url" not in it and "link" in it:
+            it["url"] = it["link"]
+    return data
 
-def top3(items):
-    def key(x):
-        ts = x.get("published_iso")
+def _parse_dt(it: Dict[str, Any]) -> datetime:
+    # published_iso (ISO-8601) → fallback published (best effort)
+    ts = it.get("published_iso")
+    if ts:
         try:
-            return datetime.fromisoformat(ts) if ts else datetime.min.replace(tzinfo=timezone.utc)
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
         except Exception:
-            return datetime.min.replace(tzinfo=timezone.utc)
-    items_sorted = sorted(items, key=key, reverse=True)
-    return items_sorted[:3]
+            pass
+    p = it.get("published")
+    if p:
+        # försök några vanliga RFC-format; om det spricker → MIN
+        for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z"):
+            try:
+                return datetime.strptime(p, fmt)
+            except Exception:
+                continue
+    return datetime.min.replace(tzinfo=timezone.utc)
 
-def render_section(league, day, items3):
-    lines = [f"Top 3 headlines – {league.replace('_', ' ').title()} – {day}", ""]
-    for i, it in enumerate(items3, 1):
+def _sort_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(items, key=_parse_dt, reverse=True)
+
+def _pick_topn_diverse(items: List[Dict[str, Any]], top_n: int) -> List[Dict[str, Any]]:
+    chosen: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    # Pass 1: max 1 per källa
+    for it in items:
+        src = (it.get("source") or it.get("feed") or "unknown").lower()
+        if src not in seen:
+            chosen.append(it)
+            seen.add(src)
+            if len(chosen) >= top_n:
+                return chosen
+    # Pass 2: fyll på med mest färska
+    for it in items:
+        if it in chosen:
+            continue
+        chosen.append(it)
+        if len(chosen) >= top_n:
+            break
+    return chosen
+
+def _render_section(league: str, day: str, itemsN: List[Dict[str, Any]]) -> str:
+    title = f"Top {len(itemsN)} headlines – {league.replace('_',' ').title()} – {day}"
+    lines = [title, ""]
+    for i, it in enumerate(itemsN, 1):
         title = (it.get("title") or "").strip()
-        link = it.get("link") or ""
-        src = it.get("source") or ""
-        lines.append(f"{i}. {title} ({src})")
-        if link:
-            lines.append(f"   {link}")
+        url = it.get("url") or it.get("link") or ""
+        src = it.get("source") or it.get("feed") or ""
+        pub = it.get("published_iso") or it.get("published") or ""
+        lines.append(f"{i}. {title} ({src}) — {pub}")
+        if url:
+            lines.append(f"   {url}")
     lines.append("")
-    return "\n".join(lines).strip() + "\n"
+    return "\n".join(lines)
 
 def main():
-    league = os.environ.get("LEAGUE", "premier_league")
+    league = _env("LEAGUE", "premier_league")
     day = os.environ.get("DAY", today_str())
+    feeds_csv = _env("FEEDS", "guardian_football,bbc_football,sky_sports_premier_league,independent_football")
+    top_n = int(os.environ.get("TOP_N", "3"))
+    lang = os.environ.get("LANG", "en")
+    section_id = os.environ.get("SECTION_ID", "S.NEWS.TOPN")
 
-    cc = None if USE_LOCAL else blob_client()
-    blob_name, items = pick_items_blob_for_day(cc, league, day)
+    cc = None if USE_LOCAL else _blob_container()
 
-    if not items:
-        print(f"[top3] Hittar inga curated items för {league} {day}. Exit 3.")
+    # Läs och slå ihop alla feeds
+    all_items: List[Dict[str, Any]] = []
+    feeds = [f.strip() for f in feeds_csv.split(",") if f.strip()]
+    for feed in feeds:
+        all_items.extend(_load_items_for_feed(cc, feed, league, day))
+
+    if not all_items:
+        print(f"[{section_id}] Inga items för {league} {day} i feeds={feeds}. Exit 3.")
         sys.exit(3)
 
-    top = top3(items)
-    section_text = render_section(league, day, top)
+    items_sorted = _sort_items(all_items)
+    picked = _pick_topn_diverse(items_sorted, top_n)
+    body = _render_section(league, day, picked)
 
-    out_path = f"sections/{day}/{league}/_/S.NEWS.TOP3.GENERIC/en/section.txt"
-    upload_text(cc, out_path, section_text)
+    out_txt = f"producer/sections/{day}/{league}/_/{section_id}/{lang}/section.txt"
+    out_manifest = f"producer/sections/{day}/{league}/_/{section_id}/{lang}/input_manifest.json"
 
-    manifest = {
-        "league": league,
-        "day": day,
-        "source_items_blob": blob_name,
-        "count_input": len(items),
-        "count_output": len(top),
-        "generated_at": datetime.now(timezone.utc).astimezone(TZ).isoformat()
-    }
-    manifest_path = f"sections/{day}/{league}/_/S.NEWS.TOP3.GENERIC/en/input_manifest.json"
     if USE_LOCAL:
-        _upload_text_local(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2))
+        _upload_text_local(out_txt, body)
+        _upload_text_local(out_manifest, json.dumps({
+            "league": league, "day": day,
+            "feeds": feeds, "count_input": len(all_items),
+            "count_output": len(picked),
+            "generated_at": datetime.now(timezone.utc).astimezone(TZ).isoformat()
+        }, ensure_ascii=False, indent=2))
     else:
-        from azure.storage.blob import ContentSettings
-        cc.upload_blob(
-            name=manifest_path,
-            data=json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"),
-            overwrite=True,
-            content_settings=ContentSettings(content_type="application/json; charset=utf-8")
-        )
+        _upload_text_blob(cc, out_txt, body, "text/plain; charset=utf-8")
+        _upload_text_blob(cc, out_manifest, json.dumps({
+            "league": league, "day": day,
+            "feeds": feeds, "count_input": len(all_items),
+            "count_output": len(picked),
+            "generated_at": datetime.now(timezone.utc).astimezone(TZ).isoformat()
+        }, ensure_ascii=False, indent=2), "application/json; charset=utf-8")
 
-    print(f"[top3] OK -> {out_path}")
+    print(f"[{section_id}] OK -> {out_txt} ({len(picked)}/{len(all_items)})")
 
 if __name__ == "__main__":
     main()
