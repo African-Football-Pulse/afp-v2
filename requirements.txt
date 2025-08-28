@@ -3,3 +3,4 @@ azure-storage-blob
 requests
 feedparser
 pyyaml
+openai
