@@ -1,0 +1,24 @@
+# Vilka defaultvärden som gäller om inte tasken sätter egna:
+defaults:
+  date: ""                 # tomt => "idag" (Europe/Stockholm)
+  league: "premier_league"
+  outdir: "/app/blob_out/produce"
+  write_latest: true
+  layout: "alias-first"
+  path_scope: "single"
+  personas_path: "config/personas.json"
+  model: "gpt-4o-mini"
+
+# Lista av sektioner att producera (ordning = körordning)
+tasks:
+  - section_code: "S.NEWS.TOP3"
+    source: "guardian_football"
+
+  - section_code: "S.NEWS.TOP3"
+    source: "bbc_football"
+
+  # exempel: överstyr datum eller liga per task
+  # - section_code: "S.NEWS.TOP3"
+  #   source: "sky_sports_premier_league"
+  #   date: "2025-08-31"
+  #   league: "premier_league"
