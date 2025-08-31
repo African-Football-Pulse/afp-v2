@@ -1,136 +1,180 @@
-import os, json, pathlib, datetime, sys
+import os, json, pathlib, datetime, sys, tempfile
 import requests
+from pydub import AudioSegment  # kräver ffmpeg i workflow
 
+# ---------- helpers ----------
 def ensure_dir(p: pathlib.Path):
     p.parent.mkdir(parents=True, exist_ok=True)
 
 def read_text(p: pathlib.Path) -> str:
-    return p.read_text(encoding="utf-8")
-
-def write_bytes(p: pathlib.Path, data: bytes):
-    ensure_dir(p)
-    p.write_bytes(data)
+    return p.read_text(encoding="utf-8") if p.exists() else ""
 
 def write_json(p: pathlib.Path, data: dict):
     ensure_dir(p)
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def upload_to_blob_optional(sas_base: str, local_path: pathlib.Path, dest_path: str) -> str | None:
-    """
-    Om AZURE_SAS_URL (container-SAS) finns: PUT till <sas_base>/<dest_path> + SAS-queryn.
-    Exempel: AZURE_SAS_URL="https://acct.blob.core.windows.net/container?<SAS>"
-    """
-    if not sas_base:
-        return None
-    if "?" not in sas_base:
-        print("WARN: AZURE_SAS_URL saknar SAS-query. Hoppar över blob-upload.")
-        return None
-    base, sas = sas_base.split("?", 1)
-    url = f"{base.rstrip('/')}/{dest_path.lstrip('/')}?{sas}"
-    with open(local_path, "rb") as f:
-        r = requests.put(url, data=f, headers={"x-ms-blob-type": "BlockBlob"})
-    if r.status_code not in (200, 201):
-        print(f"WARN: Blob-upload misslyckades: {r.status_code} {r.text[:300]}")
-        return None
-    return url
+def clean_persona(name: str) -> str:
+    return (name or "").strip().lower().replace(" ", "")
 
+def tts_elevenlabs(text: str, voice_id: str, api_key: str, model_id: str, out_fmt: str) -> bytes:
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    headers = {"xi-api-key": api_key, "Accept": "audio/mpeg", "Content-Type": "application/json"}
+    payload = {"text": text, "model_id": model_id, "output_format": out_fmt}
+    r = requests.post(url, headers=headers, json=payload, timeout=180)
+    if r.status_code != 200:
+        raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:400]}")
+    return r.content
+
+# ---------- parsing ----------
+def parse_from_manifest(manifest_path: pathlib.Path):
+    md = {}
+    if manifest_path.exists():
+        try:
+            md = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            md = {}
+    title = md.get("title")
+    sections = []
+    if isinstance(md.get("sections"), list):
+        for s in md["sections"]:
+            txt = (s.get("text") or "").strip()
+            if not txt:
+                continue
+            sections.append({"persona": clean_persona(s.get("persona")), "text": txt})
+    description = md.get("description")
+    language = md.get("language")
+    return title, description, language, sections
+
+def parse_script(script_path: pathlib.Path, default_persona: str):
+    text = read_text(script_path)
+    if not text:
+        return []
+    secs = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if ":" in line:
+            tag, rest = line.split(":", 1)
+            persona = clean_persona(tag)
+            secs.append({"persona": persona, "text": rest.strip()})
+        else:
+            secs.append({"persona": clean_persona(default_persona), "text": line})
+    return secs
+
+# ---------- main ----------
 def main():
-    # Inputs från env (workflow_dispatch kan mappa hit)
     date = os.getenv("DATE") or datetime.date.today().isoformat()
     league = os.getenv("LEAGUE", "epl")
     lang = os.getenv("LANG", "en")
-    voice_id = os.getenv("ELEVENLABS_VOICE_ID", "")  # t.ex. AK/JJK
-    api_key = os.getenv("ELEVENLABS_API_KEY", "")
-    audio_format = os.getenv("AUDIO_FORMAT", "mp3")
-    sample_rate = int(os.getenv("RATE", "22050"))
-    model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
-    title_override = os.getenv("TITLE_OVERRIDE", "")
-    azure_sas = os.getenv("AZURE_SAS_URL", "")  # valfritt
+    default_persona = clean_persona(os.getenv("DEFAULT_PERSONA") or "ak")
 
+    audio_format = os.getenv("AUDIO_FORMAT", "mp3")
+    rate = int(os.getenv("RATE", "22050"))
+    model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    out_fmt = f"{audio_format}_{rate}"  # mp3_22050
+
+    api_key = os.getenv("ELEVENLABS_API_KEY", "")
     if not api_key:
         print("ERROR: ELEVENLABS_API_KEY saknas"); sys.exit(1)
-    if not voice_id:
-        print("ERROR: ELEVENLABS_VOICE_ID saknas"); sys.exit(1)
 
     base_in = pathlib.Path(f"assembler/episodes/{date}/{league}/daily/{lang}")
     base_out = pathlib.Path(f"audio/episodes/{date}/{league}/daily/{lang}")
     script_path = base_in / "episode_script.txt"
-    manifest_in_path = base_in / "episode_manifest.json"
+    manifest_path = base_in / "episode_manifest.json"
     audio_path = base_out / f"episode.{audio_format}"
     render_manifest_path = base_out / "render_manifest.json"
     report_path = base_out / "report.json"
 
-    if not script_path.exists():
-        print(f"ERROR: Hittar inte manus: {script_path}"); sys.exit(1)
-
-    text = read_text(script_path).strip()
-    md = {}
-    if manifest_in_path.exists():
+    # ---- voice config: multi först, annars single ----
+    voice_map = {}
+    multi_voice_secret = os.getenv("ELEVENLABS_VOICE_IDS", "")
+    if multi_voice_secret:
         try:
-            md = json.loads(manifest_in_path.read_text(encoding="utf-8"))
+            vm = json.loads(multi_voice_secret)
+            if isinstance(vm, dict) and vm:
+                voice_map = {clean_persona(k): v for k, v in vm.items() if v}
         except Exception:
-            md = {}
+            voice_map = {}
 
-    # ElevenLabs Text-to-Speech (Create speech)
-    # API: POST https://api.elevenlabs.io/v1/text-to-speech/{voice_id}
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-    headers = {
-        "xi-api-key": api_key,
-        "Accept": "audio/mpeg",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "text": text,
-        "model_id": model_id,
-        # Voice settings (valfritt MVP): låt standard gälla
-        # "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
-        "output_format": f"{audio_format}_{sample_rate}",
-    }
+    single_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "")
 
-    print("Render: skickar manus till ElevenLabs…")
-    r = requests.post(url, headers=headers, json=payload, timeout=120)
-    if r.status_code != 200:
-        print(f"ERROR: ElevenLabs svar {r.status_code}: {r.text[:500]}")
+    mode = "multi" if voice_map else "single"
+    if mode == "single" and not single_voice_id:
+        # ge tydligt fel om varken JSON-map eller single-voice finns
+        print("ERROR: Hittar varken ELEVENLABS_VOICE_IDS (JSON) eller ELEVENLABS_VOICE_ID.")
         sys.exit(1)
 
-    audio_bytes = r.content
-    write_bytes(audio_path, audio_bytes)
+    # ---- läs manifest/script ----
+    title, description, language, manifest_sections = parse_from_manifest(manifest_path)
+    if manifest_sections:
+        sections = manifest_sections
+    else:
+        if not script_path.exists():
+            print(f"ERROR: Hittar inte manus: {script_path}"); sys.exit(1)
+        sections = parse_script(script_path, default_persona)
 
+    if not sections:
+        print("ERROR: Inga sektioner att rendera."); sys.exit(1)
+
+    # ---- render ----
+    ensure_dir(audio_path)
+    if mode == "single":
+        # rendera allt i ett svep
+        joined = "\n".join(s["text"] for s in sections)
+        print(f"Render (single voice) – tecken={len(joined)}")
+        audio_bytes = tts_elevenlabs(joined, single_voice_id, api_key, model_id, out_fmt)
+        pathlib.Path(audio_path).write_bytes(audio_bytes)
+        sections_summary = [{"persona": "single", "chars": len(joined)}]
+    else:
+        # multi-voice: sektion för sektion
+        print(f"Render (multi voice) – sektioner={len(sections)}")
+        tmp_files = []
+        with tempfile.TemporaryDirectory() as td:
+            for i, s in enumerate(sections):
+                persona = s["persona"] or default_persona
+                voice_id = voice_map.get(persona) or voice_map.get(default_persona)
+                if not voice_id:
+                    print(f"ERROR: Hittar ingen voice_id för persona '{persona}' och ingen default i ELEVENLABS_VOICE_IDS.")
+                    sys.exit(1)
+                txt = s["text"]
+                print(f"TTS {i+1}/{len(sections)} – persona={persona}, tecken={len(txt)}")
+                seg_bytes = tts_elevenlabs(txt, voice_id, api_key, model_id, out_fmt)
+                p = pathlib.Path(td) / f"seg_{i:03d}.mp3"
+                p.write_bytes(seg_bytes)
+                tmp_files.append(p)
+
+            # concat + 300ms paus mellan
+            combined = AudioSegment.silent(duration=0)
+            pause = AudioSegment.silent(duration=300)
+            for i, p in enumerate(tmp_files):
+                combined += AudioSegment.from_file(p, format="mp3")
+                if i < len(tmp_files) - 1:
+                    combined += pause
+            combined.export(audio_path, format="mp3", bitrate="128k")
+        sections_summary = [{"persona": s["persona"] or default_persona, "chars": len(s["text"])} for s in sections]
+
+    # ---- manifest + rapport ----
     render_manifest = {
         "engine": "elevenlabs",
         "model_id": model_id,
-        "voice_id": voice_id,
-        "lang": lang,
+        "mode": mode,
         "date": date,
         "league": league,
-        "sample_rate": sample_rate,
-        "audio_format": audio_format,
-        "bytes": len(audio_bytes),
-        "source_script": str(script_path),
-        "title": title_override or md.get("title") or f"{league.upper()} daily – {date} ({lang})"
+        "lang": lang,
+        "audio_format": "mp3",
+        "sample_rate": rate,
+        "title": title or f"{league.upper()} daily – {date} ({lang})",
+        "description": description,
+        "sections": sections_summary,
     }
     write_json(render_manifest_path, render_manifest)
-
-    # Spara kort rapport
-    report = {
+    write_json(report_path, {
         "status": "ok",
         "audio_path": str(audio_path),
         "render_manifest": str(render_manifest_path),
         "title": render_manifest["title"]
-    }
-    write_json(report_path, report)
-
-    # Valfri blob-upload
-    if azure_sas:
-        blob_dest_audio = f"{audio_path.as_posix()}"
-        blob_dest_manifest = f"{render_manifest_path.as_posix()}"
-        uploaded_audio = upload_to_blob_optional(azure_sas, audio_path, blob_dest_audio)
-        uploaded_manifest = upload_to_blob_optional(azure_sas, render_manifest_path, blob_dest_manifest)
-        if uploaded_audio:
-            print(f"Blob upload OK: {uploaded_audio}")
-        if uploaded_manifest:
-            print(f"Blob upload OK: {uploaded_manifest}")
-
+    })
     print("Klart: episode.mp3 skapad.")
 
 if __name__ == "__main__":
