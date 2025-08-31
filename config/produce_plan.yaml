@@ -16,7 +16,16 @@ tasks:
   - section_code: "S.STATS.TOP_AFRICAN_PLAYERS"
     league: "premier_league"
     lang: "en"
-    source: "guardian"
+
+    # Primär källa – bara för att produce_auto ska kunna bygga en första 'news' URL:
+    source: "guardian_football"
+
+    # Övriga källor att merga in (runnern hämtar dem automatiskt):
+    extra_sources:
+      - "bbc_football"
+      - "independent_football"
+      - "sky_sports_premier_league"
+
     config:
       top_african_players:
         top_n: 3
