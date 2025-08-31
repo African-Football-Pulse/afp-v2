@@ -1,6 +1,6 @@
 # src/sections/s_top_african_players/renderers/gpt.py
 from typing import Dict, List, Tuple
-import os
+import os, json
 
 def _dedupe(seq):
     seen, out = set(), []
@@ -23,10 +23,55 @@ def _collect_links(players: List[Dict[str, any]], items: List[Dict[str, any]]) -
     for p in (players or []):
         for iid in p.get("item_ids", []):
             link = id_to_link.get(iid)
-            if link: links.append(link)
+            if link:
+                links.append(link)
     return _dedupe(links)
 
-def _build_prompt(players: List[Dict[str, any]]) -> List[Dict[str, any]]:
+def _persona_from_ctx(ctx: Dict[str, any]) -> Dict[str, any]:
+    """Hämta persona (AK default)."""
+    persona = (ctx or {}).get("persona") or {}
+    if persona:
+        return persona
+    # Fallback: minimal AK om inget laddats uppströms
+    return {
+        "key": "AK",
+        "name": "Ama K (Amarachi Kwarteng)",
+        "role": "Sports journalist & podcast host",
+        "voice": "Clear, rhythmic British English with West African undertone",
+        "tone": {"primary": "Factual, professional, driven", "secondary": "Witty, teasing"},
+        "style": "Football terminology + journalism + pop culture",
+        "catchphrases": [
+            "JJ, I knew you’d say that. You're so predictable.",
+            "This isn’t 1998 – we have data now."
+        ],
+        "traits": ["Cohesive","Outspoken","Analytical","Humorous","Relatable"]
+    }
+
+def _build_system_prompt(persona: Dict[str, any], use_catchphrases: bool) -> str:
+    name = persona.get("name","Ama K")
+    role = persona.get("role","Sports journalist")
+    voice = persona.get("voice","British English")
+    tone = persona.get("tone",{})
+    primary = tone.get("primary","Factual, professional")
+    secondary = tone.get("secondary","Witty")
+    style = persona.get("style","Football journalism")
+    catch = persona.get("catchphrases", []) if use_catchphrases else []
+
+    lines = [
+        f"You are {name}, {role}.",
+        "Write in concise, crisp English suitable for a football podcast script.",
+        f"Voice: {voice}. Tone: {primary}; second layer: {secondary}. Style: {style}.",
+        "Only use facts I provide. No speculation, no invented details.",
+        "Output format: a title on the first line, then exactly N bullets.",
+        "Each bullet: '- Name (Club): one sharp sentence drawn from the headline.'",
+        "No scores, no links, no emojis.",
+        "Avoid over-stylizing. Keep it newsroom-clean and tight.",
+    ]
+    if catch:
+        lines.append(f"Optional persona flavor (sparingly): {', '.join(catch)}")
+    return "\n".join(lines)
+
+def _build_messages(players: List[Dict[str, any]], persona: Dict[str, any], use_catchphrases: bool) -> List[Dict[str, any]]:
     facts = []
     for p in players:
         facts.append({
@@ -36,20 +81,14 @@ def _build_prompt(players: List[Dict[str, any]]) -> List[Dict[str, any]]:
             "mentions": p.get("freq"),
             "sources": p.get("num_sources"),
         })
-    system = (
-        "You are a sports journalist. Write concise, fact-based copy.\n"
-        "Use only the facts provided (no speculation).\n"
-        "Output a title on the first line, then exactly N bullets—one sentence per player—"
-        "formatted as: '- Name (Club): tight takeaway from the headline.'\n"
-        "No scores, no links, no emojis."
-    )
+    system = _build_system_prompt(persona, use_catchphrases)
     title = "Top African names this week"
     user = {
         "role": "user",
         "content": [
             {"type": "input_text", "text":
-                f"TITLE={title}\nN={len(players)}\nFACTS={facts}\n"
-                "Write only the title and N bullets."
+                f"TITLE={title}\nN={len(players)}\nFACTS={json.dumps(facts, ensure_ascii=False)}\n"
+                "Write ONLY the title and N bullets in English."
             }
         ],
     }
@@ -59,20 +98,25 @@ def render_gpt(players: List[Dict[str, any]],
                lang: str = "en",
                target_sec: int = 50,
                ctx: Dict[str, any] | None = None) -> Tuple[str, List[str]]:
+    """Returns (text, links). Falls back to rule-based if GPT fails."""
     items = (ctx or {}).get("items") or []
     links = _collect_links(players, items)
     if not players:
         return ("No clear African standouts in today’s headlines.", links)
+
+    persona = _persona_from_ctx(ctx or {})
+    use_catchphrases = bool((ctx or {}).get("config", {}).get("top_african_players", {}).get("nlg", {}).get("catchphrases", False))
 
     try:
         from openai import OpenAI  # pip install openai>=1.0
         model = (ctx or {}).get("config", {}).get("top_african_players", {}) \
                     .get("nlg", {}).get("model", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
         client = OpenAI()
-        messages = _build_prompt(players)
+        messages = _build_messages(players, persona, use_catchphrases)
         resp = client.responses.create(model=model, input=messages)
         text = resp.output_text.strip()
-        # ensure max N bullets
+
+        # Ensure max N bullets
         N = len(players)
         lines = [ln for ln in text.splitlines() if ln.strip()]
         if lines:
