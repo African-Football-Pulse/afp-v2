@@ -1,8 +1,11 @@
+# src/render/tts_elevenlabs.py
 import os, json, pathlib, datetime, sys, tempfile
 import requests
 from pydub import AudioSegment  # kräver ffmpeg i workflow
 
-# ---------- helpers ----------
+# =========================
+# Helpers
+# =========================
 def ensure_dir(p: pathlib.Path):
     p.parent.mkdir(parents=True, exist_ok=True)
 
@@ -16,17 +19,40 @@ def write_json(p: pathlib.Path, data: dict):
 def clean_persona(name: str) -> str:
     return (name or "").strip().lower().replace(" ", "")
 
+def log(msg: str):
+    print(msg, flush=True)
+
+# =========================
+# ElevenLabs TTS
+# =========================
 def tts_elevenlabs(text: str, voice_id: str, api_key: str, model_id: str, out_fmt: str) -> bytes:
+    """
+    out_fmt exempel: 'mp3_22050'
+    """
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-    headers = {"xi-api-key": api_key, "Accept": "audio/mpeg", "Content-Type": "application/json"}
-    payload = {"text": text, "model_id": model_id, "output_format": out_fmt}
+    headers = {
+        "xi-api-key": api_key,
+        "Accept": "audio/mpeg" if out_fmt.startswith("mp3") else "audio/wav",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "text": text,
+        "model_id": model_id,
+        "output_format": out_fmt,
+    }
     r = requests.post(url, headers=headers, json=payload, timeout=180)
     if r.status_code != 200:
         raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:400]}")
     return r.content
 
-# ---------- parsing ----------
+# =========================
+# Input parsing
+# =========================
 def parse_from_manifest(manifest_path: pathlib.Path):
+    """
+    Returnerar (title, description, language, sections)
+    sections = [{persona, text}, ...]
+    """
     md = {}
     if manifest_path.exists():
         try:
@@ -34,18 +60,24 @@ def parse_from_manifest(manifest_path: pathlib.Path):
         except Exception:
             md = {}
     title = md.get("title")
+    description = md.get("description")
+    language = md.get("language")
+
     sections = []
     if isinstance(md.get("sections"), list):
         for s in md["sections"]:
             txt = (s.get("text") or "").strip()
             if not txt:
                 continue
-            sections.append({"persona": clean_persona(s.get("persona")), "text": txt})
-    description = md.get("description")
-    language = md.get("language")
+            persona = clean_persona(s.get("persona"))
+            sections.append({"persona": persona, "text": txt})
+
     return title, description, language, sections
 
 def parse_script(script_path: pathlib.Path, default_persona: str):
+    """
+    Stöd för manus med talar-taggar (AK:/JJK:) eller ren text (allt går till default_persona).
+    """
     text = read_text(script_path)
     if not text:
         return []
@@ -62,8 +94,41 @@ def parse_script(script_path: pathlib.Path, default_persona: str):
             secs.append({"persona": clean_persona(default_persona), "text": line})
     return secs
 
-# ---------- main ----------
+# =========================
+# Voice map loading
+# =========================
+def load_voice_map() -> dict:
+    """
+    1) ELEVENLABS_VOICE_IDS (JSON-secret: {"ak":"ID", "jjk":"ID", ...})
+    2) config/voice_ids.json (repo fallback)
+    """
+    # 1) Env-secret
+    vm_env = os.getenv("ELEVENLABS_VOICE_IDS", "")
+    if vm_env:
+        try:
+            vm = json.loads(vm_env)
+            if isinstance(vm, dict) and vm:
+                return {clean_persona(k): v for k, v in vm.items() if v}
+        except Exception:
+            pass
+
+    # 2) Repo-fallback
+    cfg_path = pathlib.Path("config/voice_ids.json")
+    if cfg_path.exists():
+        try:
+            vm = json.loads(cfg_path.read_text(encoding="utf-8"))
+            if isinstance(vm, dict) and vm:
+                return {clean_persona(k): v for k, v in vm.items() if v}
+        except Exception:
+            pass
+
+    return {}
+
+# =========================
+# Main
+# =========================
 def main():
+    # Inputs / defaults
     date = os.getenv("DATE") or datetime.date.today().isoformat()
     league = os.getenv("LEAGUE", "epl")
     lang = os.getenv("LANG", "en")
@@ -72,12 +137,14 @@ def main():
     audio_format = os.getenv("AUDIO_FORMAT", "mp3")
     rate = int(os.getenv("RATE", "22050"))
     model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
-    out_fmt = f"{audio_format}_{rate}"  # mp3_22050
+    out_fmt = f"{audio_format}_{rate}"  # ex: mp3_22050
 
     api_key = os.getenv("ELEVENLABS_API_KEY", "")
     if not api_key:
-        print("ERROR: ELEVENLABS_API_KEY saknas"); sys.exit(1)
+        log("ERROR: ELEVENLABS_API_KEY saknas")
+        sys.exit(1)
 
+    # Paths
     base_in = pathlib.Path(f"assembler/episodes/{date}/{league}/daily/{lang}")
     base_out = pathlib.Path(f"audio/episodes/{date}/{league}/daily/{lang}")
     script_path = base_in / "episode_script.txt"
@@ -86,65 +153,59 @@ def main():
     render_manifest_path = base_out / "render_manifest.json"
     report_path = base_out / "report.json"
 
-    # ---- voice config: multi först, annars single ----
-    voice_map = {}
-    multi_voice_secret = os.getenv("ELEVENLABS_VOICE_IDS", "")
-    if multi_voice_secret:
-        try:
-            vm = json.loads(multi_voice_secret)
-            if isinstance(vm, dict) and vm:
-                voice_map = {clean_persona(k): v for k, v in vm.items() if v}
-        except Exception:
-            voice_map = {}
-
+    # Röster
+    voice_map = load_voice_map()
     single_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "")
 
     mode = "multi" if voice_map else "single"
     if mode == "single" and not single_voice_id:
-        # ge tydligt fel om varken JSON-map eller single-voice finns
-        print("ERROR: Hittar varken ELEVENLABS_VOICE_IDS (JSON) eller ELEVENLABS_VOICE_ID.")
+        log("ERROR: Hittar varken ELEVENLABS_VOICE_IDS (JSON), config/voice_ids.json eller ELEVENLABS_VOICE_ID.")
         sys.exit(1)
 
-    # ---- läs manifest/script ----
+    # Läs manifest/script
     title, description, language, manifest_sections = parse_from_manifest(manifest_path)
     if manifest_sections:
         sections = manifest_sections
+        log(f"Manifest-sektioner: {len(sections)}")
     else:
         if not script_path.exists():
-            print(f"ERROR: Hittar inte manus: {script_path}"); sys.exit(1)
+            log(f"ERROR: Hittar inte manus: {script_path}")
+            sys.exit(1)
         sections = parse_script(script_path, default_persona)
+        log(f"Script-sektioner: {len(sections)}")
 
     if not sections:
-        print("ERROR: Inga sektioner att rendera."); sys.exit(1)
+        log("ERROR: Inga sektioner att rendera.")
+        sys.exit(1)
 
-    # ---- render ----
+    # Render
     ensure_dir(audio_path)
     if mode == "single":
-        # rendera allt i ett svep
+        # Allt i ett svep
         joined = "\n".join(s["text"] for s in sections)
-        print(f"Render (single voice) – tecken={len(joined)}")
+        log(f"Render (single voice) – tecken={len(joined)}")
         audio_bytes = tts_elevenlabs(joined, single_voice_id, api_key, model_id, out_fmt)
         pathlib.Path(audio_path).write_bytes(audio_bytes)
         sections_summary = [{"persona": "single", "chars": len(joined)}]
     else:
-        # multi-voice: sektion för sektion
-        print(f"Render (multi voice) – sektioner={len(sections)}")
+        # Multi-voice: sektion för sektion
+        log(f"Render (multi voice) – sektioner={len(sections)}; röster={list(voice_map.keys())}")
         tmp_files = []
         with tempfile.TemporaryDirectory() as td:
             for i, s in enumerate(sections):
                 persona = s["persona"] or default_persona
                 voice_id = voice_map.get(persona) or voice_map.get(default_persona)
                 if not voice_id:
-                    print(f"ERROR: Hittar ingen voice_id för persona '{persona}' och ingen default i ELEVENLABS_VOICE_IDS.")
+                    log(f"ERROR: Hittar ingen voice_id för persona '{persona}' och ingen default i ELEVENLABS_VOICE_IDS / config.")
                     sys.exit(1)
                 txt = s["text"]
-                print(f"TTS {i+1}/{len(sections)} – persona={persona}, tecken={len(txt)}")
+                log(f"TTS {i+1}/{len(sections)} – persona={persona}, tecken={len(txt)}")
                 seg_bytes = tts_elevenlabs(txt, voice_id, api_key, model_id, out_fmt)
                 p = pathlib.Path(td) / f"seg_{i:03d}.mp3"
                 p.write_bytes(seg_bytes)
                 tmp_files.append(p)
 
-            # concat + 300ms paus mellan
+            # Concat + 300 ms paus
             combined = AudioSegment.silent(duration=0)
             pause = AudioSegment.silent(duration=300)
             for i, p in enumerate(tmp_files):
@@ -152,9 +213,13 @@ def main():
                 if i < len(tmp_files) - 1:
                     combined += pause
             combined.export(audio_path, format="mp3", bitrate="128k")
-        sections_summary = [{"persona": s["persona"] or default_persona, "chars": len(s["text"])} for s in sections]
 
-    # ---- manifest + rapport ----
+        sections_summary = [
+            {"persona": s["persona"] or default_persona, "chars": len(s["text"])}
+            for s in sections
+        ]
+
+    # Manifest + rapport
     render_manifest = {
         "engine": "elevenlabs",
         "model_id": model_id,
@@ -175,7 +240,7 @@ def main():
         "render_manifest": str(render_manifest_path),
         "title": render_manifest["title"]
     })
-    print("Klart: episode.mp3 skapad.")
+    log("Klart: episode.mp3 skapad.")
 
 if __name__ == "__main__":
     main()
