@@ -54,7 +54,15 @@ def _fetch_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def _payload(text: str, target_len: int, sources: List[str]) -> Dict[str, Any]:
+def _load_personas(personas_path: str | None) -> Dict[str, Any]:
+    if not personas_path: return {}
+    try:
+        with open(personas_path, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+def _payload(text: str, target_len: int, sources: List[str], persona_name: str) -> Dict[str, Any]:
     words = max(1, len(text.split()))
     sec = int(round(words / 2.5))
     if abs(sec - target_len) <= 5: sec = target_len
@@ -64,7 +72,7 @@ def _payload(text: str, target_len: int, sources: List[str]) -> Dict[str, Any]:
         "text": text.strip(),
         "length_s": sec,
         "sources": sorted({s for s in (sources or []) if s}),
-        "meta": {"persona": "JJ"},
+        "meta": {"persona": persona_name},
     }
 
 def build(ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -72,17 +80,19 @@ def build(ctx: Dict[str, Any]) -> Dict[str, Any]:
     lang = "en"
     top_n = int(ctx.get("config", {}).get("top_african_players", {}).get("top_n", 3))
     target_len = int(ctx.get("target_length_s", 50))
+    persona = ctx.get("persona") or {}
+    persona_name = persona.get("name") or persona.get("key") or "AK"
 
     stats = load_stats(ctx)
     if stats:
         top = pick_top_from_stats(stats, top_n=top_n, ctx=ctx)
         if top:
             text, sources = render_stats(top, lang=lang, target_sec=target_len)
-            return _payload(text, target_len, sources)
+            return _payload(text, target_len, sources, persona_name)
 
     items = ctx.get("items") or []
     if not items:
-        return _payload("No news items available.", target_len, [])
+        return _payload("No news items available.", target_len, [], persona_name)
 
     top = pick_top_from_news(items, top_n=top_n, ctx=ctx)
 
@@ -94,7 +104,7 @@ def build(ctx: Dict[str, Any]) -> Dict[str, Any]:
     else:
         text, sources = render_news(top, lang=lang, target_sec=target_len, ctx=ctx)
 
-    return _payload(text, target_len, sources)
+    return _payload(text, target_len, sources, persona_name)
 
 def build_section(section_code: str, news_path: str, date: str, league: str,
                   outdir: str, layout: str=None, path_scope: str=None,
@@ -107,9 +117,20 @@ def build_section(section_code: str, news_path: str, date: str, league: str,
         raw = _fetch_json(p)
         return raw["items"] if isinstance(raw, dict) and "items" in raw else (raw or [])
 
-    # ALWAYS English, even if plan/CLI passes something else
+    # ALWAYS English
     lang = "en"
 
+    # Personas: ladda + välj AK som default (kan override via persona_key)
+    personas = _load_personas(personas_path)
+    persona_key = kwargs.get("persona_key") or os.getenv("AFP_PERSONA_KEY", "AK")
+    persona = personas.get(persona_key) if isinstance(personas, dict) else None
+    if persona:
+        persona = dict(persona)
+        persona["key"] = persona_key
+    else:
+        persona = {"key": "AK", "name": "Ama K (Amarachi Kwarteng)"}
+
+    # Hämta nyhetsfiler (multi-källa)
     news_paths: list[str] = []
     news_multi = kwargs.get("news_multi")
     extras = kwargs.get("extra_sources") or kwargs.get("sources")
@@ -151,6 +172,7 @@ def build_section(section_code: str, news_path: str, date: str, league: str,
         "league": league,
         "lang": lang,
         "items": items,
+        "persona": persona,  # -> används av GPT-renderern
         "config": {
             "top_african_players": {
                 "top_n": 3,
@@ -159,15 +181,16 @@ def build_section(section_code: str, news_path: str, date: str, league: str,
                     "whitelist_path": "config/player_lexicon_africa.txt",
                     "boost": 0.3
                 },
-                # GPT is default unless explicitly disabled
                 "nlg": {
                     "provider": os.getenv("AFP_NLG", "gpt"),
-                    "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+                    "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+                    "catchphrases": False  # håll poddens topplista saklig
                 }
             }
         },
     }
     payload = build(ctx)
+    # Sätt meta.persona till AK
     return {
         "section_code": section_code,
         "date": date,
