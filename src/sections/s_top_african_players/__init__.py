@@ -170,25 +170,28 @@ def build_section(section_code: str, news_path: str, date: str, league: str,
 
     ctx = {
         "league": league,
-        "lang": lang,
+        "lang": "en",
         "items": items,
-        "persona": persona,  # -> används av GPT-renderern
+        "persona": persona,
         "config": {
             "top_african_players": {
                 "top_n": 3,
                 "africa": {
                     "whitelist_only": True,
-                    "whitelist_path": "config/player_lexicon_africa.txt",
+                    "lexicon_path": "config/players_africa.json",   # <-- VIKTIG RAD
+                    "whitelist_path": "config/player_lexicon_africa.txt",  # valfri legacy
                     "boost": 0.3
                 },
                 "nlg": {
                     "provider": os.getenv("AFP_NLG", "gpt"),
                     "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-                    "catchphrases": False  # håll poddens topplista saklig
+                    "catchphrases": False
                 }
             }
         },
     }
+
+                      
     payload = build(ctx)
     # Sätt meta.persona till AK
     return {
