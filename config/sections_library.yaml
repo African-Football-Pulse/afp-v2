@@ -3,7 +3,10 @@ aliases:
   S2: S.NEWS.CLUB_HIGHLIGHT
   S3: S.OPINION.EXPERT_COMMENT
   S4: S.NEWS.TOP3
-  S5: S.OPINION.DUO_EXPERTS  
+  S5: S.OPINION.DUO_EXPERTS
+  S.NEWS.TOPN: S.NEWS.TOP3     # <-- lägg till denna för bakåtkompatibilitet
+  TOPN: S.NEWS.TOP3            # <-- valfritt kortalias om ni använt ”TOPN” någonstans
+  TOP3: S.NEWS.TOP3            # <-- valfritt
 
 sections:
   S.NEWS.TOP3:
