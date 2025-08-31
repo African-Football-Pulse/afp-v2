@@ -3,16 +3,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+# 1) Installera Python-paket
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source and config
+# 2) Kopiera in källkod och config in i imagen
 COPY src/ src/
 COPY config/ config/
-COPY job_entrypoint.py .
 
+# (behåll din entrypoint om du använder den)
 ENV PYTHONPATH=/app
-
-# Default entrypoint
-ENTRYPOINT ["python", "job_entrypoint.py"]
+ENTRYPOINT ["python", "-m"]  # gör det enkelt att köra moduler
