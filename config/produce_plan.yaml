@@ -1,24 +1,80 @@
-# Vilka defaultvärden som gäller om inte tasken sätter egna:
+# config/produce_plan.yaml
+version: 1
+
+# Var "runner" och modul för sektioner slås upp
+sections_library: "config/sections_library.yaml"
+
+# Standardvärden som kan ärvas av tasks
 defaults:
-  date: ""                 # tomt => "idag" (Europe/Stockholm)
+  # Datum som mappas till <date> i blob-sökväg. "{{today}}" brukar hanteras i produce_auto.py.
+  date: "{{today}}"
+
+  # Liga/kanal (styr även väg i blob). Använd det ni redan använder i Collect.
   league: "premier_league"
-  outdir: "/app/blob_out/produce"
+
+  # Språk för rendering (sektionen växlar text lätt efter lang)
+  lang: "en"
+
+  # Skriv även "latest.json" för senaste körningen
   write_latest: true
-  layout: "alias-first"
-  path_scope: "single"
+
+  # (Valfritt) personasfil om ert producer förväntar sig den
   personas_path: "config/personas.json"
-  model: "gpt-4o-mini"
 
-# Lista av sektioner att producera (ordning = körordning)
+  # Primär nyhetskälla för S1 i MVP (håll en källa tills multi-source merge är på plats)
+  source: "guardian"
+
+  # Bas för var nyheter ligger i blob (produce_auto bygger full URL: curated/news/<source>/<league>/<date>/items.json)
+  news_base: "curated/news"
+
+  # Var output ska hamna relativt er standard (används av ert producer/assembler om tillämpligt)
+  out_base: "produce/out"
+
+# Körordning: lägg fler tasks nedan när ni vill bygga fler sektioner
 tasks:
-  - section_code: "S.NEWS.TOP3"
-    source: "guardian_football"
+  # --- S1: Top African Players (nyhets-fallback, stats om injicerat i ctx['stats']) ---
+  - section_code: "S.STATS.TOP_AFRICAN_PLAYERS"
 
-  - section_code: "S.NEWS.TOP3"
-    source: "bbc_football"
+    # Överskuggar defaults vid behov:
+    league: "premier_league"
+    lang: "en"
+    source: "guardian"
 
-  # exempel: överstyr datum eller liga per task
+    # (Valfritt) Direkt-override av news-URL om du vill peka på en viss fil:
+    # news: "https://<account>.blob.core.windows.net/<container>/curated/news/guardian/premier_league/2025-08-31/items.json?<SAS>"
+
+    # (Valfritt) Extra konfig som injiceras i ctx['config']['top_african_players']
+    config:
+      top_african_players:
+        top_n: 3
+        news_window_hours: 48
+        recency:
+          half_life_hours: 24
+        # Tunas efter hand:
+        # source_weights:
+        #   guardian: 1.0
+        #   bbc: 1.0
+        #   sky: 0.9
+        # event_keywords:
+        #   hat-trick: 1.0
+        #   brace: 0.8
+        #   goal: 0.6
+        #   assist: 0.4
+        # top6_clubs:
+        #   - Arsenal
+        #   - Manchester City
+        #   - Liverpool
+        #   - Manchester United
+        #   - Chelsea
+        #   - Tottenham
+
+  # Exempel på hur du kan lägga in fler (lämna kommenterade tills ni vill aktivera)
   # - section_code: "S.NEWS.TOP3"
-  #   source: "sky_sports_premier_league"
-  #   date: "2025-08-31"
   #   league: "premier_league"
+  #   lang: "en"
+  #   source: "guardian"
+
+  # - section_code: "S.NEWS.CLUB_HIGHLIGHT"
+  #   league: "premier_league"
+  #   lang: "en"
+  #   source: "guardian"
