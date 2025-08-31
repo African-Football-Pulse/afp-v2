@@ -19,9 +19,10 @@ sections:
     model: gpt-4o-mini
 
   S.STATS.TOP_AFRICAN_PLAYERS:
-    type: stats
-    module: s_top_african_players
-    runner: build_section
+    module: "s_top_african_players"   # src/sections/s_top_african_players/__init__.py
+    runner: "build_section"
+    type: "generic"
+    layout: "alias-first"
 
   S.OPINION.EXPERT_COMMENT:
     type: opinion
