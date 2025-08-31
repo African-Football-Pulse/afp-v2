@@ -1,19 +1,46 @@
-# sections/s_top_african_players/renderers/news.py
-from typing import Any, Dict, List, Tuple
+# src/sections/s_top_african_players/renderers/news.py
+from typing import Dict, List, Tuple
 
-def render_news(players: List[Dict[str, Any]], lang: str="en", target_sec: int=50, ctx: Dict[str, Any]=None) -> Tuple[str, List[str]]:
-    if not players:
-        return ("No clear African standouts from the news this week." if lang.startswith("en")
-                else "Inga tydliga afrikanska toppnamn från nyheterna denna vecka."), []
-    lines = ["Top African names in the headlines:" if lang.startswith("en") else "Afrikanska toppnamn i rubrikerna:"]
-    sources: List[str] = []
+def _dedupe(seq):
+    seen = set(); out = []
+    for x in seq:
+        if x and x not in seen:
+            seen.add(x); out.append(x)
+    return out
+
+def _first_sentence(text: str) -> str:
+    if not text: return ""
+    t = text.strip()
+    for stop in [". ", " – ", " — ", " | "]:
+        if stop in t:
+            return t.split(stop, 1)[0].rstrip(".") + "."
+    return (t[:140].rstrip(" .") + ".") if len(t) > 140 else (t.rstrip(".") + ".")
+
+def _line_en(p: Dict[str, any]) -> str:
+    name = p.get("name") or "—"
+    club = p.get("club")
+    title = p.get("sample_title") or ""
+    lead = _first_sentence(title)
+    return f"{name} ({club}): {lead}" if club else f"{name}: {lead}"
+
+def render_news(players: List[Dict[str, any]],
+                lang: str = "en",
+                target_sec: int = 50,
+                ctx: Dict[str, any] | None = None) -> Tuple[str, List[str]]:
+    ctx = ctx or {}
+    items = ctx.get("items") or []
+    id_to_link = {it.get("id"): (it.get("link") or it.get("url")) for it in items}
+
+    links: List[str] = []
     for p in players:
-        club = f" ({p.get('club')})" if p.get("club") else ""
-        snippet = p.get("sample_title") or ("headline-driven mention" if lang.startswith("en") else "rubrikdriven notis")
-        if lang.startswith("en"):
-            lines.append(f"- {p['name']}{club} — {p.get('num_sources',1)} source(s), score {p.get('score')}: {snippet}")
-        else:
-            lines.append(f"- {p['name']}{club} — {p.get('num_sources',1)} källa(or), score {p.get('score')}: {snippet}")
-        sources.extend(p.get("item_ids", []))
-    lines.append("More next time." if lang.startswith("en") else "Mer nästa gång.")
-    return "\n".join(lines), sources
+        for iid in p.get("item_ids", []):
+            link = id_to_link.get(iid)
+            if link: links.append(link)
+    links = _dedupe(links)
+
+    if not players:
+        return ("No clear African standouts in today’s headlines.", links)
+
+    lines = [_line_en(p) for p in players]
+    text = "Top African names this week:\n" + "\n".join(f"- {ln}" for ln in lines)
+    return (text, links)
