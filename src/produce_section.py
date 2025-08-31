@@ -89,6 +89,17 @@ def main():
     ap.add_argument("--model", default=None)            # override model
     args = ap.parse_args()
 
+    # --- Guard: normalisera TOPN/TOP3 till kanoniskt namn
+    sc_norm = args.section_code.strip().upper()
+    mapping = {
+        "S.NEWS.TOPN": "S.NEWS.TOP3",
+        "TOPN": "S.NEWS.TOP3",
+        "TOP3": "S.NEWS.TOP3"
+    }
+    if sc_norm in mapping:
+        print(f"[produce_section] Normaliserar section-code {args.section_code} → {mapping[sc_norm]}")
+        args.section_code = mapping[sc_norm]
+
     library = load_library(Path(args.library))
     cfg = resolve_section(library, args.section_code)
 
@@ -99,8 +110,8 @@ def main():
         raise SystemExit(f"Runner '{runner_name}' saknas i modul '{module_name}'")
     runner = getattr(mod, runner_name)
     
-    # --- merge defaults from library + CLI overrides (kan innehålla fler nycklar än runnern accepterar)
-    speaker_val = args.speaker or cfg.get("default_speaker")  # kan vara None
+    # --- merge defaults from library + CLI overrides
+    speaker_val = args.speaker or cfg.get("default_speaker")
     raw_opts = {
         "section_code": args.section_code,
         "news_path": args.news,
@@ -109,16 +120,15 @@ def main():
         "league": args.league,
         "topic": args.topic,
         "layout": args.layout or cfg.get("layout", "alias-first"),
-        "path_scope": args.path_scope or cfg.get("path_scope"),  # kan vara None för sektioner som inte använder den
+        "path_scope": args.path_scope or cfg.get("path_scope"),
         "write_latest": args.write_latest or bool(cfg.get("write_latest", False)),
         "dry_run": args.dry_run,
         "outdir": args.outdir,
         "model": args.model or cfg.get("model") or os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         "type": cfg.get("type", "generic"),
-        "speaker": speaker_val,  # kan vara None
+        "speaker": speaker_val,
     }
 
-    # --- filtrera bort nycklar som runnern inte har i sin signatur eller där värdet är None
     sig = inspect.signature(runner)
     accepted = set(sig.parameters.keys())
     opts = {k: v for k, v in raw_opts.items() if (k in accepted and v is not None)}
