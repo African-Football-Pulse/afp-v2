@@ -1,4 +1,4 @@
-import os, json, uuid, sys, pathlib
+import os, json, uuid, sys, pathlib, re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import requests
@@ -45,6 +45,84 @@ def load_feeds_config():
         raise RuntimeError("config/feeds.yaml saknar 'sources'.")
     return cfg
 
+# ---------------------------------------------------------
+# Enrichment: spelarnamn (enkel NER/regex + valfri lexikon)
+# ---------------------------------------------------------
+
+# (Valfri) enkel lexikon med afrikanska spelare.
+# Om filen saknas använder vi bara regex-kandidater.
+LEX_PATH = "config/player_lexicon_africa.txt"
+
+def _load_lexicon(path: str) -> set:
+    names = set()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                s = line.strip()
+                if s and not s.startswith("#"):
+                    names.add(s)
+    except FileNotFoundError:
+        pass
+    return names
+
+LEXICON = _load_lexicon(LEX_PATH)
+
+# Vanliga ord som INTE är namn (för att minska falska träffar)
+STOPWORDS = {
+    "The","A","An","And","Or","But","If","Of","In","On","At","To","For","With","From","By","As",
+    "Man","City","United","FC","CF","SC","AC","BC","Cup","League","Premier","La","Liga","Serie","Bundesliga",
+    "Goal","Goals","Assist","Assists","Wins","Win","Draw","Loss","Match","Derby","Coach","Boss",
+    "Liverpool","Arsenal","Chelsea","Tottenham","Spurs","Manchester","Newcastle","Everton","Aston","Villa",
+    "Real","Barcelona","Bayern","Dortmund","PSG","Marseille","Roma","Inter","Milan",
+    "Africa","African","Nigeria","Ghana","Senegal","Egypt","Morocco","Algeria","Tunisia","Ivory","Coast",
+}
+
+# Regex: matcha sekvenser av 2–3 kapitaliserade ord (ex: "Mohamed Salah", "Thomas Partey")
+NAME_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b")
+
+def _extract_candidates(text: str) -> list[str]:
+    if not text:
+        return []
+    cands = []
+    for m in NAME_RE.finditer(text):
+        name = m.group(1).strip()
+        # filtrera uppenbara icke-namn
+        parts = name.split()
+        if any(p in STOPWORDS for p in parts):
+            continue
+        # droppa ensamma vanliga ord
+        if len(parts) == 1:
+            continue
+        cands.append(name)
+    return cands
+
+def infer_players_from_text(title: str, summary: str) -> list[str]:
+    # 1) regex-kandidater från titel + summary
+    cands = _extract_candidates(title) + _extract_candidates(summary)
+    if not cands:
+        return []
+    # 2) om lexikon finns: prioritera träffar som finns i lexikon
+    lex_hits = [c for c in cands if c in LEXICON]
+    if lex_hits:
+        # rensa dubbletter, behåll ordning
+        seen = set()
+        out = []
+        for n in lex_hits:
+            if n not in seen:
+                seen.add(n)
+                out.append(n)
+        return out
+    # 3) annars: unika regex-namn (best effort)
+    seen = set()
+    out = []
+    for n in cands:
+        if n not in seen:
+            seen.add(n)
+            out.append(n)
+    return out
+
+# ---------------------------------------------------------
+
 def parse_items(feed, source_name):
     items = []
     for e in feed.entries:
@@ -58,14 +136,24 @@ def parse_items(feed, source_name):
                 published_iso = dt.isoformat()
         except Exception:
             published_iso = None
+
+        title = (getattr(e, "title", "") or "").strip()
+        summary = (getattr(e, "summary", "") or "")[:1000]
+
+        # ENRICH: extrahera spelare
+        players = infer_players_from_text(title, summary)
+
         items.append({
             "id": getattr(e, "id", None) or str(uuid.uuid4()),
-            "title": (getattr(e, "title", "") or "").strip(),
+            "title": title,
             "link": getattr(e, "link", None),
-            "summary": (getattr(e, "summary", "") or "")[:1000],
+            "summary": summary,
             "published": getattr(e, "published", None) or getattr(e, "updated", None),
-            "published_iso": published_iso,
+            "published_iso": published_iso,             # ISO för recency
+            "published_at": published_iso,              # alias som S1 vill ha
             "source": source_name,
+            "entities": {"players": players},           # <— viktiga enrichment-fältet
+            # "club": None  # kan enrichas senare
         })
     return items
 
@@ -118,6 +206,11 @@ def collect_one(source, timeout_s, container_client, league, day, prefix=""):
         "count": len(items),
         "generated_at": now_iso(),
         "raw_index": f"{raw_prefix}/rss.json",
+        "enrichment": {
+            "players": "regex+optional_lexicon",
+            "lexicon_used": bool(LEXICON),
+            "lexicon_path": LEX_PATH if LEXICON else None
+        }
     }
     upload_json(container_client, f"{curated_prefix}/input_manifest.json", manifest)
 
