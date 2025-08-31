@@ -1,7 +1,10 @@
-name: Build and Deploy Produce Job
-
+name: Build & Deploy Produce Job
 on:
   workflow_dispatch:
+
+env:
+  IMAGE_NAME: afp-runner          # same image used by collect/produce; entrypoint picks JOB_TYPE
+  IMAGE_TAG: ${{ github.sha }}    # immutable tag per commit
 
 jobs:
   build-and-deploy:
@@ -10,23 +13,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure login
+      # Login to Azure using your existing SP JSON secret
+      - name: Azure login (SP JSON)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build and push image
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          acrName: ${{ secrets.ACR_NAME }}
-          containerAppName: afp-produce
-          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          imageToBuild: ${{ secrets.ACR_NAME }}.azurecr.io/afp-produce:${{ github.sha }}
-          dockerfilePath: ./Dockerfile
+      # Ensure the Container Apps CLI extension is available (idempotent)
+      - name: Ensure containerapp extension
+        run: az extension add --name containerapp --upgrade -y
 
-      - name: Update Azure Container Apps Job
+      # Login to your Azure Container Registry
+      - name: ACR login
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      # Build & Push to ACR
+      - name: Build & Push image
+        env:
+          IMAGE: ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # Update the Container Apps JOB to use the freshly pushed image
+      - name: Update Container Apps Job image (produce)
         run: |
           az containerapp job update \
             --name afp-produce \
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/afp-produce:${{ github.sha }}
+            --image ${{ env.IMAGE }}
