@@ -23,7 +23,7 @@ TOP6_DEFAULT = {
 _BAD_TOKENS = {
     "Palace","Forest","Villa","United","City","Rangers","Celtic","Hotspur","Park","Bridge","Arena","St","James",
     "Football","Weekly","Podcast","Guardian","Independent","BBC","Sky","Telegraph","Times","Athletic",
-    "League","Premier","Champions","Europa","Conference","Cup","FA","UEFA","FIFA",
+    "League","Premier","Champions","Europe","Conference","Cup","FA","UEFA","FIFA",
     "Arsenal","Chelsea","Liverpool","Newcastle","Everton","Tottenham","Spurs","Manchester",
     "West","Ham"  # blockera "West Ham" via tokens
 }
