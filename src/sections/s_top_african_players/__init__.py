@@ -11,12 +11,18 @@ from .renderers.news import render_news
 
 # --- Enkel regex-baserad enrichment för gamla items (utan entities/published_at) ---
 NAME_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b")
+
 STOPWORDS = {
+    # artiklar/prepositioner
     "The","A","An","And","Or","But","If","Of","In","On","At","To","For","With","From","By","As",
-    "Man","City","United","FC","CF","SC","AC","Cup","League","Premier","La","Liga","Serie","Bundesliga",
-    "Goal","Goals","Assist","Assists","Wins","Win","Draw","Loss","Match","Derby","Coach","Boss",
-    "Liverpool","Arsenal","Chelsea","Tottenham","Spurs","Manchester","Newcastle","Everton","Aston","Villa",
+    # klubbar/termer
+    "Man","City","United","FC","CF","SC","AC","AFC","BC","Cup","League","Premier","La","Liga","Serie","Bundesliga",
+    "Goal","Goals","Assist","Assists","Wins","Win","Draw","Loss","Match","Derby","Coach","Boss","Transfer","Rumours","Rumors",
+    # PL-klubbar/arenor/ämnesord
+    "Liverpool","Arsenal","Chelsea","Tottenham","Spurs","Manchester","Newcastle","Everton","Aston","Villa","Forest","Palace",
     "Real","Barcelona","Bayern","Dortmund","PSG","Marseille","Roma","Inter","Milan",
+    "Old","Firm","Etihad","Emirates","Anfield","St","James","Park","Bridge","Weekly","Football","Guardian","Independent","Sky","Podcast",
+    # geografi/länder (minska falskpositiv)
     "Africa","African","Nigeria","Ghana","Senegal","Egypt","Morocco","Algeria","Tunisia","Ivory","Coast",
 }
 def _extract_candidates(text: str) -> List[str]:
