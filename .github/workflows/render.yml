@@ -1,0 +1,55 @@
+name: render
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'YYYY-MM-DD'
+        required: false
+      league:
+        description: 'league (e.g., epl)'
+        required: false
+        default: 'epl'
+      lang:
+        description: 'lang (e.g., en)'
+        required: false
+        default: 'en'
+      voice_id:
+        description: 'ElevenLabs voice id (AK/JJK)'
+        required: false
+      title_override:
+        description: 'Optional title override'
+        required: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Render audio (ElevenLabs)
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ inputs.voice_id || secrets.ELEVENLABS_VOICE_ID }}
+          DATE: ${{ inputs.date }}
+          LEAGUE: ${{ inputs.league }}
+          LANG: ${{ inputs.lang }}
+          TITLE_OVERRIDE: ${{ inputs.title_override }}
+          AUDIO_FORMAT: mp3
+          RATE: '22050'
+          AZURE_SAS_URL: ${{ secrets.AZURE_SAS_URL }}
+        run: |
+          python -m src.render.tts_elevenlabs
+
+      - name: Upload artifact (audio folder)
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-${{ inputs.date || 'today' }}-${{ inputs.league }}-${{ inputs.lang }}
+          path: audio/episodes/**
