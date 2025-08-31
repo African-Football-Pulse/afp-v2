@@ -209,4 +209,95 @@ def render_players_from_stats(players: List[PlayerStat], lang: str = "en", targe
 
     sources: List[str] = []
     for p in players:
-        sources.extend([p.source_ref] if p.source_ref else []]()
+        sources.extend([p.source_ref] if p.source_ref else [])
+        lines.append(_line_for_player_stats(p, lang))
+
+    lines.append(_closer(lang))
+    return "\n".join(lines), sources
+
+def _line_for_player_stats(p: PlayerStat, lang: str) -> str:
+    club = f" ({p.club})" if p.club else ""
+    g = f"{p.goals}G" if p.goals else "0G"
+    a = f"{p.assists}A" if p.assists else "0A"
+    xg = f"xG {p.xg:.2f}" if isinstance(p.xg, float) else "xG —"
+    xa = f"xA {p.xa:.2f}" if isinstance(p.xa, float) else "xA —"
+    min_s = f"{p.minutes}’" if p.minutes is not None else "—"
+    if lang.startswith("en"):
+        return f"- {p.name}{club}: {g}, {a}, {xg}, {xa}, {min_s}"
+    else:
+        return f"- {p.name}{club}: {g}, {a}, {xg}, {xa}, {min_s}"
+
+def _render_no_data(lang: str) -> str:
+    return "No reliable stats this week — switching to news highlights." if lang.startswith("en") \
+        else "Inga pålitliga statistikdata denna vecka — vi växlar till nyhetsspaningar."
+
+def _closer(lang: str) -> str:
+    return "More next time." if lang.startswith("en") else "Mer nästa gång."
+
+# ----------------------------
+# Fallback från nyheter
+# ----------------------------
+
+def load_normalized_items(ctx: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Förväntar en lista av normaliserade nyhetsposter (ni har dem i Collect/Produce).
+    Sektionen läser INTE från blob; mata hellre in i ctx["items"] i produce-steget.
+    Faller tillbaka på en liten demo-lista om inget finns.
+    """
+    if isinstance(ctx.get("items"), list):
+        return ctx["items"]
+
+    if _get(ctx, "config.demo.allow_demo", True):
+        # Minimal demo-data
+        return [
+            {"id":"demo:guardian:1","title":"Salah decisive as Liverpool win","entities":{"players":["Mohamed Salah"]},"club":"Liverpool"},
+            {"id":"demo:bbc:2","title":"Partey anchors Arsenal midfield","entities":{"players":["Thomas Partey"]},"club":"Arsenal"},
+            {"id":"demo:sky:3","title":"Onana key saves keep United in it","entities":{"players":["Andre Onana"]},"club":"Man United"}
+        ]
+    return []
+
+def infer_players_from_news(items: List[Dict[str, Any]], top_n: int = 3) -> List[Dict[str, Any]]:
+    """
+    Naiv frekvensbaserad heuristik: räkna nämnda spelare och välj top_n.
+    """
+    from collections import defaultdict
+    counts = defaultdict(lambda: {"count":0, "club":None, "item_ids":[]})
+
+    for it in items:
+        plist = _get(it, "entities.players", []) or []
+        for p in plist:
+            entry = counts[p]
+            entry["count"] += 1
+            entry["club"] = entry["club"] or it.get("club")
+            entry["item_ids"].append(it.get("id"))
+
+    # om tomt → håll åtminstone en fallback
+    if not counts:
+        return []
+
+    ranked = sorted(counts.items(), key=lambda kv: kv[1]["count"], reverse=True)[:top_n]
+    out = []
+    for name, meta in ranked:
+        out.append({"name": name, "club": meta["club"], "item_ids": meta["item_ids"]})
+    return out
+
+def render_players_from_news(players: List[Dict[str, Any]], lang: str = "en", target_sec: int = 50) -> Tuple[str, List[str]]:
+    if not players:
+        text = "No clear African standouts from the news this week." if lang.startswith("en") \
+            else "Inga tydliga afrikanska toppnamn från nyheterna denna vecka."
+        return text, []
+
+    lines: List[str] = []
+    if lang.startswith("en"):
+        lines.append("Top African names in the headlines:")
+    else:
+        lines.append("Afrikanska toppnamn i rubrikerna:")
+
+    sources: List[str] = []
+    for p in players:
+        club = f" ({p.get('club')})" if p.get("club") else ""
+        lines.append(f"- {p['name']}{club}")
+        sources.extend(p.get("item_ids", []))
+
+    lines.append(_closer(lang))
+    return "\n".join(lines), sources
