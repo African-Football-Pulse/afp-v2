@@ -1,21 +1,6 @@
 name: publish
 on:
-  workflow_dispatch:
-    inputs:
-      date:
-        description: 'YYYY-MM-DD'
-        required: false
-      league:
-        description: 'league (e.g., epl)'
-        required: false
-        default: 'epl'
-      lang:
-        description: 'lang (e.g., en)'
-        required: false
-        default: 'en'
-      title_override:
-        description: 'Optional title override'
-        required: false
+  workflow_dispatch: {}
 
 jobs:
   publish:
@@ -29,15 +14,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install deps
-        run: pip install requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Publish to Buzzsprout
+      - name: Publish to Buzzsprout (simple)
         env:
           BUZZSPROUT_API_TOKEN: ${{ secrets.BUZZSPROUT_API_TOKEN }}
           BUZZSPROUT_PODCAST_ID: ${{ secrets.BUZZSPROUT_PODCAST_ID }}
-          DATE: ${{ inputs.date }}
-          LEAGUE: ${{ inputs.league }}
-          LANG: ${{ inputs.lang }}
-          TITLE_OVERRIDE: ${{ inputs.title_override }}
         run: |
-          python -m src.publisher.buzzsprout
+          python -m src.publisher.buzzsprout_simple
