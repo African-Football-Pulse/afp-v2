@@ -42,7 +42,8 @@ jobs:
       - name: Render audio (ElevenLabs)
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          ELEVENLABS_VOICE_ID: ${{ inputs.voice_id || secrets.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_VOICE_IDS: ${{ secrets.ELEVENLABS_VOICE_IDS || vars.ELEVENLABS_VOICE_IDS }}
+
           DATE: ${{ inputs.date }}
           LEAGUE: ${{ inputs.league }}
           LANG: ${{ inputs.lang }}
