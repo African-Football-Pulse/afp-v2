@@ -40,6 +40,6 @@ jobs:
       - name: Update Container Apps Job image (produce)
         run: |
           az containerapp job update \
-            --name afp-produce \
+            --name afp-produce-job \
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
             --image ${{ env.IMAGE }}
