@@ -93,16 +93,73 @@ def build(ctx: Dict[str, Any]) -> Dict[str, Any]:
 def build_section(section_code: str, news_path: str, date: str, league: str,
                   outdir: str, layout: str=None, path_scope: str=None,
                   personas_path: str=None, model: str=None, speaker: str=None,
-                  write_latest: bool=True, **_):
-    raw = _fetch_json(news_path)
-    raw_items = raw["items"] if isinstance(raw, dict) and "items" in raw else raw
+                  write_latest: bool=True, **kwargs):
+    """
+    Stöd för multi-källa:
+      - extra_sources: ["bbc_football", "independent_football", ...]
+      - sources: [...]            # alias för ovan
+      - news_multi: ["<full path/url>", ...]  # lista av items.json
+    Faller tillbaka till enkel 'news_path' om inget av ovan finns.
+    """
+    import re
 
+    def _swap_source(p: str, new_src: str) -> str:
+        # Byt ut '/news/<src>/' i sökvägen mot ny källa (funkar för både http- och filväg)
+        return re.sub(r'(/news/)([^/]+)(/)', r'\1' + new_src + r'\3', p, count=1)
+
+    def _load_items_from(p: str) -> list:
+        raw = _fetch_json(p)
+        return raw["items"] if isinstance(raw, dict) and "items" in raw else (raw or [])
+
+    # 1) Bygg lista av nyhetsfiler att läsa
+    news_paths: list[str] = []
+    news_multi = kwargs.get("news_multi")
+    extras = kwargs.get("extra_sources") or kwargs.get("sources")
+
+    if isinstance(news_multi, list) and news_multi:
+        news_paths = [p for p in news_multi if isinstance(p, str)]
+        if news_path:  # inkludera primären om den inte redan finns
+            if all(news_path != p for p in news_paths):
+                news_paths.insert(0, news_path)
+    elif isinstance(extras, list) and extras:
+        news_paths = [news_path] if news_path else []
+        for src in extras:
+            news_paths.append(_swap_source(news_path, src))
+    else:
+        news_paths = [news_path] if news_path else []
+
+    # 2) Läs, slå ihop och deduplikera (id -> link -> title)
+    seen_id, seen_link, seen_title = set(), set(), set()
+    raw_items: list[dict] = []
+    for p in news_paths:
+        try:
+            arr = _load_items_from(p)
+        except Exception:
+            # tyst fortsättning – enstaka källa kan vara tom/otillgänglig
+            continue
+        for r in arr:
+            rid = r.get("id")
+            link = r.get("link")
+            title = r.get("title")
+            if rid and rid in seen_id: 
+                continue
+            if link and link in seen_link:
+                continue
+            if (not rid and not link) and title and title in seen_title:
+                continue
+            if rid: seen_id.add(rid)
+            if link: seen_link.add(link)
+            if title: seen_title.add(title)
+            raw_items.append(r)
+
+    # 3) Coerce + inline enrichment (fyll players/published_at om saknas)
     items = []
     for r in raw_items:
-        c = coerce_item(r)        # tolerant mapping (title/summary/source/published_at/players)
-        c = _inline_enrich_players(c)  # fyll entities + published_at om saknas
+        c = coerce_item(r)
+        c = _inline_enrich_players(c)
         items.append(c)
 
+    # 4) Kör sektionen
     ctx = {
         "league": league,
         "lang": "en",
