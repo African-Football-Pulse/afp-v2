@@ -1,4 +1,6 @@
-# src/sections/s_top_african_players/logic/select.py
+mkdir -p src/sections/s_top_african_players/logic
+
+cat > src/sections/s_top_african_players/logic/select.py <<'PY'
 from typing import Any, Dict, List
 import os
 
@@ -18,7 +20,7 @@ _BAD_TOKENS = {
     "Football","Weekly","Podcast","Guardian","Independent","BBC","Sky","Telegraph","Times","Athletic",
     "League","Premier","Champions","Europa","Conference","Cup","FA","UEFA","FIFA",
     "Arsenal","Chelsea","Liverpool","Newcastle","Everton","Tottenham","Spurs","Manchester",
-    "West","Ham"  # blockera "West Ham" via tokens
+    "West","Ham"
 }
 _BAD_ENDINGS = {"FC","CF","SC","AC"}
 _BAD_PHRASES = {"St James", "Old Firm", "West Ham", "Football Weekly"}
@@ -36,7 +38,6 @@ def _looks_like_person(name: str) -> bool:
         return False
     if any(p in _BAD_TOKENS for p in parts):
         return False
-    # enkel kapitaliseringskontroll (tillåt bindestreck)
     for p in parts:
         core = p.replace("-", "")
         if not core or not core[0].isupper() or not core[1:].islower():
@@ -44,7 +45,6 @@ def _looks_like_person(name: str) -> bool:
     return True
 
 # ---- Afrika-whitelist ------------------------------------------------------
-
 _DEFAULT_AFRICA_WHITELIST = {
     "Mohamed Salah","Sadio Mané","Riyad Mahrez","Achraf Hakimi","Kalidou Koulibaly","Thomas Partey",
     "Bukayo Saka","Victor Osimhen","Mohammed Kudus","Nicolas Jackson","Yoane Wissa","Taiwo Awoniyi",
@@ -79,7 +79,6 @@ def pick_top_from_stats(stats: List[Dict[str, Any]], top_n: int, ctx: Dict[str, 
 def pick_top_from_news(items: List[Dict[str, Any]], top_n: int, ctx: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Tvingar whitelist-läge: bara namn som finns i Afrika-whitelist räknas.
-    (Detta bypassar ev. felaktig config tills allt är uppsatt.)
     """
     from collections import defaultdict
     if not items:
@@ -108,13 +107,10 @@ def pick_top_from_news(items: List[Dict[str, Any]], top_n: int, ctx: Dict[str, A
 
         for raw_name in plist:
             name = raw_name.strip()
-            # 1) person-heuristik
             if not _looks_like_person(name):
                 continue
-            # 2) AFRICA WHITELIST (obligatorisk)
             if name not in whitelist:
                 continue
-
             mention_score = base_mention + (whitelist_boost if name in whitelist else 0.0)
             a = agg[name]
             a["score"] += mention_score
@@ -135,3 +131,4 @@ def pick_top_from_news(items: List[Dict[str, Any]], top_n: int, ctx: Dict[str, A
       {"name": n, "club": m.get("club"), "score": round(m["score"],3), "freq": m["freq"], "item_ids": m["item_ids"], "num_sources": len(m["sources"]), "sample_title": m["sample_title"]}
       for n,m in ranked
     ]
+PY
