@@ -23,12 +23,10 @@ def _collect_links(players: List[Dict[str, any]], items: List[Dict[str, any]]) -
     for p in (players or []):
         for iid in p.get("item_ids", []):
             link = id_to_link.get(iid)
-            if link:
-                links.append(link)
+            if link: links.append(link)
     return _dedupe(links)
 
-def _build_prompt(players: List[Dict[str, any]], lang: str) -> List[Dict[str, any]]:
-    # Gör en kompakt, faktaburen sammanställning som input till modellen
+def _build_prompt(players: List[Dict[str, any]]) -> List[Dict[str, any]]:
     facts = []
     for p in players:
         facts.append({
@@ -38,81 +36,52 @@ def _build_prompt(players: List[Dict[str, any]], lang: str) -> List[Dict[str, an
             "mentions": p.get("freq"),
             "sources": p.get("num_sources"),
         })
-    system_sv = (
-        "Du är en sportjournalist. Skriv kort, precist och nyktert. "
-        "Utgå enbart från faktan jag ger (inga egna antaganden). "
-        "Output: en rubrik + exakt N punktlistor med 1 mening per spelare: "
-        "‘Namn (Klubb): kort kärnpoäng från rubriken.’ "
-        "Ingen poäng, inga källreferenser i texten, inga emojis."
+    system = (
+        "You are a sports journalist. Write concise, fact-based copy.\n"
+        "Use only the facts provided (no speculation).\n"
+        "Output a title on the first line, then exactly N bullets—one sentence per player—"
+        "formatted as: '- Name (Club): tight takeaway from the headline.'\n"
+        "No scores, no links, no emojis."
     )
-    system_en = (
-        "You are a sports journalist. Write concise, factual one-sentence bullets per player. "
-        "Use only the provided facts (no speculation). Output a title + exactly N bullets: "
-        "‘Name (Club): tight takeaway from the headline.’ No scores, no links, no emojis."
-    )
-    title_sv = "Veckans afrikanska toppnamn"
-    title_en = "Top African names this week"
-    sys = system_sv if lang == "sv" else system_en
-    title = title_sv if lang == "sv" else title_en
-    # Vi ber modellen returnera bara brödtext (rubrik + N punkter)
+    title = "Top African names this week"
     user = {
         "role": "user",
         "content": [
             {"type": "input_text", "text":
-                f"LANG={lang}\nTITLE={title}\nN={len(players)}\nFACTS={facts}\n"
-                "Skriv rubriken på första raden. Sedan N punkter med formatet:"
-                "\n- Namn (Klubb): <en mening>."
+                f"TITLE={title}\nN={len(players)}\nFACTS={facts}\n"
+                "Write only the title and N bullets."
             }
         ],
     }
-    return [
-        {"role": "system", "content": sys},
-        user,
-    ]
+    return [{"role": "system", "content": system}, user]
 
 def render_gpt(players: List[Dict[str, any]],
-               lang: str = "sv",
+               lang: str = "en",
                target_sec: int = 50,
                ctx: Dict[str, any] | None = None) -> Tuple[str, List[str]]:
-    """
-    Returnerar (text, links). Faller tillbaka till regelbaserad renderer om GPT saknas/felar.
-    Kräver: OPENAI_API_KEY i env och openai>=1.0.
-    """
     items = (ctx or {}).get("items") or []
     links = _collect_links(players, items)
-
-    # Tomt underlag -> tom text
     if not players:
-        return (
-            "Inga tydliga afrikanska toppnamn i dagens rubriker." if lang == "sv"
-            else "No clear African standouts in today’s headlines."
-        , links)
+        return ("No clear African standouts in today’s headlines.", links)
 
-    # Försök GPT
     try:
-        from openai import OpenAI  # pip install openai
+        from openai import OpenAI  # pip install openai>=1.0
         model = (ctx or {}).get("config", {}).get("top_african_players", {}) \
                     .get("nlg", {}).get("model", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
         client = OpenAI()
-        messages = _build_prompt(players, lang)
-        resp = client.responses.create(
-            model=model,
-            input=messages,
-        )
+        messages = _build_prompt(players)
+        resp = client.responses.create(model=model, input=messages)
         text = resp.output_text.strip()
-        # Liten sanering: säkerställ max N punkter
-        # (om modellen råkar skriva fler)
+        # ensure max N bullets
         N = len(players)
         lines = [ln for ln in text.splitlines() if ln.strip()]
         if lines:
             title = lines[0].strip()
             bullets = [ln for ln in lines[1:] if ln.lstrip().startswith(("-", "–", "—"))]
-            if len(bullets) > N:
-                bullets = bullets[:N]
+            if len(bullets) > N: bullets = bullets[:N]
             cleaned = [title] + [b if b.startswith("-") else f"- {b.lstrip('—– ')}" for b in bullets]
             text = "\n".join(cleaned).strip()
         return (text, links)
     except Exception:
-        # Fallback: regelbaserad text
         from .news import render_news
-        return render_news(players, lang=lang, target_sec=target_sec, ctx=ctx)
+        return render_news(players, lang="en", target_sec=target_sec, ctx=ctx)
