@@ -1,16 +1,25 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    # valfri default – kan skrivas över i Job:
+    JOB_TYPE=collect \
+    SECRETS_FILE=/app/secrets/secret.json
+
 WORKDIR /app
 
-# 1) Installera Python-paket
+# Installera Python-paket
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 2) Kopiera in källkod och config in i imagen
+# Källkod och config
 COPY src/ src/
 COPY config/ config/
 
-# (behåll din entrypoint om du använder den)
-ENV PYTHONPATH=/app
-ENTRYPOINT ["python", "-m"]  # gör det enkelt att köra moduler
+# Entrypoint-skript som startar rätt modul och laddar hemligheter
+COPY job_entrypoint.py /app/job_entrypoint.py
+
+# Kör alltid via entrypoint-skriptet (ingen portal-override behövs)
+ENTRYPOINT ["python","-u","/app/job_entrypoint.py"]
