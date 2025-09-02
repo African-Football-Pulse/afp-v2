@@ -6,12 +6,12 @@ defaults:
 
 tasks:
   - section_code: S.STATS.TOP_AFRICAN_PLAYERS
-    source: bbc
+    source: bbc_football
   - section_code: S.NEWS.TOP3
-    source: guardian
+    source: guardian_football
   - section_code: S.NEWS.CLUB_HIGHLIGHT
-    source: skysports
+    source: sky_sports_premier_league
   - section_code: S.OPINION.EXPERT_COMMENT
-    source: bbc
+    source: independent_football
   - section_code: S.OPINION.DUO_EXPERTS
-    source: guardian
+    source: guardian_football
