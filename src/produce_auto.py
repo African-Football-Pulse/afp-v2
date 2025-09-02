@@ -26,10 +26,6 @@ def blob_write_json(container: str, path: str, obj):
     put_text(container, path, payload, content_type="application/json; charset=utf-8")
 
 def items_to_text(items: list) -> str:
-    """
-    Superenkel text för sektionerna: en rad per item.
-    Justera formatet vid behov — CLI:et får en .txt med innehåll att jobba mot.
-    """
     lines = []
     for i in items:
         title = (i.get("title") or "").strip()
@@ -43,10 +39,6 @@ def items_to_text(items: list) -> str:
     return "\n".join(f"- {ln}" for ln in lines)
 
 def run_produce_section(section_code: str, news_path: str, date: str, league: str, personas_path: str) -> dict:
-    """
-    Kör CLI:t 'src.produce_section' som modul och parse:a JSON från stdout.
-    Vi kör med --dry-run så att ev. lokalskrivning i runners inte spelar roll.
-    """
     cmd = [
         "python","-m","src.produce_section",
         "--section-code", section_code,
@@ -62,30 +54,26 @@ def run_produce_section(section_code: str, news_path: str, date: str, league: st
         print(f"[ERROR] produce_section failed (rc={res.returncode}): {res.stderr or res.stdout}")
         raise RuntimeError("produce_section failed")
 
-    # produce_section skriver: {"ok": true, "manifest": {...}}
-    try:
-        out = json.loads(res.stdout)
-        if not out.get("ok"):
-            raise ValueError("ok=false in produce_section output")
-        return out["manifest"]
-    except Exception as e:
-        print(f"[ERROR] Could not parse produce_section output: {e}\nSTDOUT:\n{res.stdout}")
-        raise
+    out = json.loads(res.stdout)
+    if not out.get("ok"):
+        raise RuntimeError("ok=false in produce_section output")
+    return out["manifest"]
 
 def main():
-    # Blob-krav (din helper läser konto/nyckel/SAS via env)
+    # Blob-krav (din helper läser KEY/SAS via env)
     require_env("AZURE_STORAGE_ACCOUNT")
-    container = require_env("AZURE_CONTAINER")  # du har denna i GitHub Secrets
-    # Om du använder SAS: require_env("BLOB_CONTAINER_SAS_URL")  <-- valideras i din helper
+    container = require_env("AZURE_CONTAINER")
 
-    prefix = os.getenv("BLOB_PREFIX", "")  # t.ex. "collector/"
+    # Prefix för läs/skriv (håll dem separata)
+    READ_PREFIX  = os.getenv("READ_PREFIX",  "collector/")  # var Collect lägger news
+    WRITE_PREFIX = os.getenv("WRITE_PREFIX", "producer/")   # var Produce ska skriva
 
     # Läs plan
     with open("config/produce_plan.yaml", "r", encoding="utf-8") as f:
         plan = yaml.safe_load(f) or {}
 
-    defaults = (plan.get("defaults") or {})
-    tasks = (plan.get("tasks") or [])
+    defaults = plan.get("defaults") or {}
+    tasks = plan.get("tasks") or []
 
     default_league = defaults.get("league", "premier_league")
     default_date = defaults.get("date") or today_str()
@@ -102,8 +90,8 @@ def main():
         league = t.get("league") or default_league
         date = expand_date(t.get("date"))
 
-        in_path  = f"{prefix}curated/news/{source}/{league}/{date}/items.json"
-        out_path = f"{prefix}curated/produce/{section}/{league}/{date}/manifest.json"
+        in_path  = f"{READ_PREFIX}curated/news/{source}/{league}/{date}/items.json"
+        out_path = f"{WRITE_PREFIX}sections/{date}/{section}/manifest.json"
 
         print(f"[Produce] Section={section}  League={league}  Date={date}  Source={source}")
         print(f"[Produce] Reading:  {container}/{in_path}")
@@ -118,7 +106,7 @@ def main():
             print(f"[WARN] No items for {section} {league} {date}")
             continue
 
-        # Skriv temporär nyhetsfil till /tmp och kör CLI:t
+        # skapa temporär nyhetsfil till CLI:t
         news_txt = items_to_text(items)
         tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="afp_news_"))
         news_path = str((tmp_dir / "news.txt").resolve())
