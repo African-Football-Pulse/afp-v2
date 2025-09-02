@@ -2,89 +2,64 @@ name: Build + Deploy Collect (ACA)
 
 on:
   workflow_dispatch:
-    inputs:
-      resource_group:
-        description: "Azure Resource Group (t.ex. afp-rg)"
-        required: true
-        type: string
-      job_name:
-        description: "ACA Job name"
-        required: true
-        default: "afp-collect-job"
-        type: string
-      acr_name:
-        description: "ACR name (utan .azurecr.io), t.ex. afpacr"
-        required: true
-        type: string
-      image_name:
-        description: "Image name"
-        required: true
-        default: "afp-runner"
-        type: string
-      blob_prefix:
-        description: "BLOB_PREFIX (t.ex. collector/)"
-        required: true
-        default: "collector/"
-        type: string
 
 env:
-  SECRET_NAME: blob-container-sas-url  # giltigt hemlighetsnamn i ACA (gemener, inga _)
+  # ---- Hårdkodade standardvärden (ändra här vid behov) ----
+  AZURE_RESOURCE_GROUP: afp-rg
+  ACA_JOB_NAME: afp-collect-job
+  ACR_NAME: afpacr
+  IMAGE_NAME: afp-runner
+  IMAGE_TAG: gh-4
+  # hemligheter i ACA: referenser till KeyVault/Secrets i miljön
+  SECRET_BLOB_SAS_NAME: blob-container-sas-url
+  # env till din app
+  BLOB_PREFIX: collector/
+  JOB_TYPE: collect
 
 jobs:
-  build-deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      id-token: write        # krävs för federerad inloggning
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Azure login (OIDC)
+      - name: Azure login (federated)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Enable Container Apps CLI
+      - name: Build image ref
         run: |
-          az extension add --name containerapp --upgrade -y || true
-          az config set extension.use_dynamic_install=yes_without_prompt
+          echo "IMAGE_REF=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+          echo "IMAGE_REF=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
 
-      - name: ACR login (AAD)
-        run: az acr login --name "${{ inputs.acr_name }}"
+      - name: Login to ACR
+        run: az acr login -n ${{ env.ACR_NAME }}
 
-      - name: Compute image ref (uses run number)
+      - name: Docker build & push
         run: |
-          echo "IMAGE_TAG=gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-          echo "IMAGE_REF=${{ inputs.acr_name }}.azurecr.io/${{ inputs.image_name }}:gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-
-      - name: Build & push image
-        run: |
-          docker build -t "$IMAGE_REF" .
+          docker build -t "$IMAGE_REF" -f Dockerfile .
           docker push "$IMAGE_REF"
 
-      - name: Set SAS secret on job
-        run: |
-          az containerapp job secret set \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
-
-      - name: Update job (image, env incl. secretref)
+      - name: Update ACA Job (image + env)
         run: |
           az containerapp job update \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
+            --name "${{ env.ACA_JOB_NAME }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --image "$IMAGE_REF" \
             --set-env-vars \
-              JOB_TYPE=collect \
-              BLOB_PREFIX="${{ inputs.blob_prefix }}" \
-              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_NAME }}
+              JOB_TYPE="${{ env.JOB_TYPE }}" \
+              BLOB_PREFIX="${{ env.BLOB_PREFIX }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }}
 
       - name: Start job run
         run: |
           az containerapp job start \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}"
+            --name "${{ env.ACA_JOB_NAME }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
