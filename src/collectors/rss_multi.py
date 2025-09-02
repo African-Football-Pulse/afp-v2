@@ -15,22 +15,10 @@ def now_iso():
 def today_str():
     return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
 
-USE_LOCAL = os.getenv("USE_LOCAL", "0") == "1"
-LOCAL_ROOT = "/app/local_out"
-
-def _ensure_parent(fp: pathlib.Path):
-    fp.parent.mkdir(parents=True, exist_ok=True)
-
-def _upload_json_local(path: str, obj):
-    fp = pathlib.Path(LOCAL_ROOT) / path
-    _ensure_parent(fp)
-    fp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-    return str(fp)
-
 def upload_json(container_client, path: str, obj):
+    if container_client is None:
+        raise RuntimeError("BLOB_CONTAINER_SAS_URL must be set – Collector requires Azure Blob access.")
     data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
-    if USE_LOCAL:
-        return _upload_json_local(path, obj)
     container_client.upload_blob(name=path, data=data, overwrite=True)
     return path
 
@@ -93,7 +81,6 @@ def parse_items(feed, source_name):
             "published_at": published_iso,
             "source": source_name,
             "entities": {"players": players},
-            # "club": None
         })
     return items
 
@@ -151,18 +138,25 @@ def main():
     timeout_s = int(cfg.get("timeout_s", 15))
     sources = cfg["sources"]
 
-    container_client = None if USE_LOCAL else get_container_client()
+    container_client = get_container_client()
+    if container_client is None:
+        print("[FATAL] BLOB_CONTAINER_SAS_URL is missing. Collector requires Azure Blob access.")
+        sys.exit(1)
+
     prefix = os.getenv("BLOB_PREFIX", "")
     day = today_str()
 
-    print(f"[collector] League={league} | Sources={len(sources)} | Day={day} | Timeout={timeout_s}s | Mode={'LOCAL' if USE_LOCAL else 'SAS'}")
+    print(f"[collector] League={league} | Sources={len(sources)} | Day={day} | Timeout={timeout_s}s | Mode=SAS")
     for src in sources:
         try:
             collect_one(src, timeout_s, container_client, league, day, prefix)
         except Exception as e:
             raw_prefix = f"{prefix}raw/news/{src.get('name','unknown')}/{day}"
             upload_json(container_client, f"{raw_prefix}/error.json", {
-                "source": src.get("name","unknown"), "kind": "unexpected_error", "error": str(e), "ts": now_iso()
+                "source": src.get("name","unknown"),
+                "kind": "unexpected_error",
+                "error": str(e),
+                "ts": now_iso()
             })
             print(f"[{src.get('name','unknown')}] UNEXPECTED ERROR: {e}")
     print("[collector] DONE")
