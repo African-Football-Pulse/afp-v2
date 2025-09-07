@@ -1,17 +1,18 @@
 defaults:
   date: "{{today}}"
-  league: premier_league
-  personas_path: config/personas.json
-  write_latest: true
 
 tasks:
   - section_code: S.STATS.TOP_AFRICAN_PLAYERS
-    source: bbc_football
-  - section_code: S.NEWS.TOP3
-    source: guardian_football
-  - section_code: S.NEWS.CLUB_HIGHLIGHT
-    source: sky_sports_premier_league
-  - section_code: S.OPINION.EXPERT_COMMENT
-    source: independent_football
-  - section_code: S.OPINION.DUO_EXPERTS
-    source: guardian_football
+    args:
+      - --news
+      - curated/news/bbc_football/premier_league/{{today}}/items.json
+      - --news
+      - curated/news/guardian_football/premier_league/{{today}}/items.json
+      - --news
+      - curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+      - --news
+      - curated/news/independent_football/premier_league/{{today}}/items.json
+
+# Disabled tasks (saknar runner just nu):
+# - section_code: S.NEWS.TOP3
+# - section_code: S.NEWS.CLUB_HIGHLIGHT
