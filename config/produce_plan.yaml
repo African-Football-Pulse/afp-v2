@@ -4,7 +4,19 @@ defaults:
   write_latest: true
 
 tasks:
+  # 1) Stats-sektionen (behåll den – den skriver när data finns)
   - section_code: S.STATS.TOP_AFRICAN_PLAYERS
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+
+  # 2) Opinion-sektion (ska ge manifest direkt)
+  - section_code: S.OPINION.EXPERT_COMMENT
     args:
       - --league
       - premier_league
