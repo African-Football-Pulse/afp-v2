@@ -127,13 +127,13 @@ def main() -> int:
             continue
 
         # Bygg kommandot till produce_section
+
         cmd = [
             sys.executable, "-m", "src.produce_section",
-            "--section", section_code,
+            "--section-code", section_code,
             "--date", date_str,
-            "--path-scope", "blob",   # skriv direkt till Blob
+            "--path-scope", "blob",
         ]
-
         # Extra args från planen (redan '{{today}}' ersatt om de fanns)
         extra_args = t.get("args", [])
         if isinstance(extra_args, list) and extra_args:
