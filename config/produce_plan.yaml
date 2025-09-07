@@ -1,21 +1,15 @@
 defaults:
-  date: '{{today}}'
+  date: "{{today}}"
   league: premier_league
-  personas_path: config/personas.json
   write_latest: true
+
 tasks:
-- section_code: S.STATS.TOP_AFRICAN_PLAYERS
-  args:
-  - --league
-  - premier_league
-  - --outdir
-  - sections
-  - --write-latest
-  - --news
-  - curated/news/bbc_football/premier_league/{{today}}/items.json
-  - --news
-  - curated/news/guardian_football/premier_league/{{today}}/items.json
-  - --news
-  - curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
-  - --news
-  - curated/news/independent_football/premier_league/{{today}}/items.json
+  - section_code: S.STATS.TOP_AFRICAN_PLAYERS
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
