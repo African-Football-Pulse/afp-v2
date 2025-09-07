@@ -5,20 +5,25 @@ import sys
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
-from azure.storage.blob import BlobServiceClient
-
-import yaml
 from datetime import datetime
 
+import yaml
+
+# För Blob-nedladdning av --news-filer (om paketet finns i imagen)
 try:
-    from zoneinfo import ZoneInfo  # Python 3.9+
+    from azure.storage.blob import BlobServiceClient  # type: ignore
 except Exception:
-    ZoneInfo = None  # Fallback om zoneinfo saknas
+    BlobServiceClient = None  # fortsätt utan auto-hämtning
 
 
 # -----------------------------
 # Hjälpfunktioner
 # -----------------------------
+
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except Exception:
+    ZoneInfo = None  # Fallback om zoneinfo saknas
 
 TZ_STOCKHOLM = ZoneInfo("Europe/Stockholm") if ZoneInfo else None
 
@@ -81,6 +86,62 @@ def load_plan(path: str) -> Dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
+def _materialize_news_args(
+    args_list: list[str],
+    read_prefix: str,
+    container: str,
+    conn_str: str,
+) -> list[str]:
+    """
+    För varje '--news <relpath>':
+      - Om filen <relpath> saknas lokalt:
+          hämta 'read_prefix + relpath' från Blob och spara lokalt på <relpath>.
+      - Returnerar oförändrad args_list (vägarna pekar nu på lokala filer som existerar).
+    Kräver: azure-storage-blob och giltig AZURE_STORAGE_CONNECTION_STRING + AZURE_CONTAINER.
+    """
+    if not args_list:
+        return args_list
+
+    if BlobServiceClient is None:
+        # Paket saknas – hoppa över autohämtning
+        return args_list
+
+    if not container or not conn_str:
+        # Saknar anslutningsdata – låt runner signalera ev. filfel
+        return args_list
+
+    try:
+        svc = BlobServiceClient.from_connection_string(conn_str)
+    except Exception as e:
+        print(f"[produce_auto] WARN: Kunde inte initiera BlobServiceClient: {e}")
+        return args_list
+
+    def download_to_local(blob_path: str, local_path: str) -> None:
+        try:
+            bc = svc.get_blob_client(container=container, blob=blob_path)
+            data = bc.download_blob().readall()
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, "wb") as f:
+                f.write(data)
+            print(f"[produce_auto] Fetched news to local: {local_path} <- {blob_path}")
+        except Exception as e:
+            print(f"[produce_auto] WARN: Could not fetch {blob_path}: {e}")
+
+    i = 0
+    while i < len(args_list):
+        if args_list[i] == "--news" and i + 1 < len(args_list):
+            relpath = str(args_list[i + 1])
+            if not os.path.exists(relpath):
+                # Bygg blob-sökvägen: READ_PREFIX + relpath (READ_PREFIX bör vara t.ex. 'collector/')
+                blob_path = f"{read_prefix}{relpath}"
+                download_to_local(blob_path, relpath)
+            i += 2
+        else:
+            i += 1
+
+    return args_list
+
+
 # -----------------------------
 # Huvudflöde
 # -----------------------------
@@ -117,6 +178,11 @@ def main() -> int:
     child_env.setdefault("WRITE_PREFIX", "producer/")
     child_env.setdefault("READ_PREFIX", "collector/")
 
+    # Blob-anslutning för ev. autohämtning
+    conn_str = child_env.get("AZURE_STORAGE_CONNECTION_STRING", "")
+    container = child_env.get("AZURE_CONTAINER", "")
+    read_prefix = child_env.get("READ_PREFIX", "collector/")
+
     # 7) Kör alla tasks
     for t in tasks:
         if not isinstance(t, dict):
@@ -127,17 +193,22 @@ def main() -> int:
             print("[produce_auto] VARNING: task utan 'section_code' – hoppar över.")
             continue
 
-        # Bygg kommandot till produce_section
+        # Extra args från planen (redan '{{today}}' ersatt om de fanns)
+        extra_args = t.get("args", [])
+        if not isinstance(extra_args, list):
+            extra_args = []
 
+        # Autohämta alla --news-filer till lokalt fs om de saknas
+        extra_args = _materialize_news_args(extra_args, read_prefix, container, conn_str)
+
+        # Bygg kommandot till produce_section
         cmd = [
             sys.executable, "-m", "src.produce_section",
             "--section-code", section_code,
             "--date", date_str,
-            "--path-scope", "blob",
+            "--path-scope", "blob",  # skriv direkt till Blob
         ]
-        # Extra args från planen (redan '{{today}}' ersatt om de fanns)
-        extra_args = t.get("args", [])
-        if isinstance(extra_args, list) and extra_args:
+        if extra_args:
             cmd.extend([str(a) for a in extra_args])
 
         if dry_run:
