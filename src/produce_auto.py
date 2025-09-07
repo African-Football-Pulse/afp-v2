@@ -5,6 +5,7 @@ import sys
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
+from azure.storage.blob import BlobServiceClient
 
 import yaml
 from datetime import datetime
