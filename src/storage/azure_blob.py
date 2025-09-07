@@ -5,35 +5,62 @@ from datetime import datetime
 def _client():
     """
     Creates a BlobServiceClient using the best available credential, in order:
-    1) Account Key via AZURE_STORAGE_KEY
-    2) SAS via AZURE_BLOB_SAS (should start with '?')
-    3) Managed Identity / Workload Identity via DefaultAzureCredential
-       (requires RBAC: Storage Blob Data Contributor on the storage account)
+    0) Connection String via AZURE_STORAGE_CONNECTION_STRING (supports SAS)
+    1) Full container SAS URL via BLOB_CONTAINER_SAS_URL (https://{account}.blob.core.windows.net/{container}?sv=...&sig=...)
+    2) Account SAS token via AZURE_BLOB_SAS (query part, with/without leading '?')
+    3) Account Key via AZURE_STORAGE_KEY
+    4) Managed/Workload Identity via DefaultAzureCredential
     """
+    from urllib.parse import urlparse, parse_qs
     from azure.storage.blob import BlobServiceClient
+
+    # 0) Connection string wins if present (covers SAS cleanly)
+    conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if conn_str:
+        return BlobServiceClient.from_connection_string(conn_str)
+
+    # Common envs
     account = os.getenv("AZURE_STORAGE_ACCOUNT")
-    if not account:
-        raise RuntimeError("AZURE_STORAGE_ACCOUNT missing")
-
-    url = f"https://{account}.blob.core.windows.net"
     key = os.getenv("AZURE_STORAGE_KEY")
-    sas = os.getenv("AZURE_BLOB_SAS")
+    sas_token = os.getenv("AZURE_BLOB_SAS")
+    container_sas_url = os.getenv("BLOB_CONTAINER_SAS_URL")  # full URL
 
-    # 1) Account Key
+    # 1) Full container SAS URL (parse out account + query)
+    if container_sas_url:
+        u = urlparse(container_sas_url)
+        # infer account if not set (subdomain before '.blob.core.windows.net')
+        if not account and u.netloc.endswith(".blob.core.windows.net"):
+            account = u.netloc.split(".blob.core.windows.net")[0]
+        if not account:
+            raise RuntimeError("AZURE_STORAGE_ACCOUNT missing and could not be inferred from BLOB_CONTAINER_SAS_URL")
+
+        # Build account URL + attach query (SAS)
+        account_url = f"https://{account}.blob.core.windows.net"
+        if u.query:
+            return BlobServiceClient(account_url=account_url + "?" + u.query)
+        # (unlikely) no query in URL → fallthrough to other methods
+
+    # 2) Account SAS token via AZURE_BLOB_SAS
+    if sas_token:
+        sas_str = sas_token if sas_token.startswith("?") else f"?{sas_token}"
+        if not account:
+            raise RuntimeError("AZURE_STORAGE_ACCOUNT missing (required with AZURE_BLOB_SAS)")
+        account_url = f"https://{account}.blob.core.windows.net"
+        return BlobServiceClient(account_url=account_url + sas_str)
+
+    # 3) Account Key
     if key:
-        return BlobServiceClient(account_url=url, credential=key)
+        if not account:
+            raise RuntimeError("AZURE_STORAGE_ACCOUNT missing (required with AZURE_STORAGE_KEY)")
+        account_url = f"https://{account}.blob.core.windows.net"
+        return BlobServiceClient(account_url=account_url, credential=key)
 
-    # 2) SAS token
-    if sas:
-        # Allow both raw token ("?sv=...") and just the query part ("sv=...")
-        sas_str = sas if sas.startswith("?") else f"?{sas}"
-        return BlobServiceClient(account_url=url + sas_str)
-
-    # 3) Managed Identity / Workload Identity
-    # Requires 'azure-identity' installed and RBAC on the storage account
+    # 4) Managed Identity / Workload Identity
     from azure.identity import DefaultAzureCredential
-    return BlobServiceClient(account_url=url, credential=DefaultAzureCredential())
-
+    if not account:
+        raise RuntimeError("AZURE_STORAGE_ACCOUNT missing (no SAS/connection string/key provided)")
+    account_url = f"https://{account}.blob.core.windows.net"
+    return BlobServiceClient(account_url=account_url, credential=DefaultAzureCredential())
 def put_bytes(container: str, blob_path: str, data: bytes, content_type: str = "application/octet-stream"):
     svc = _client()
     container_client = svc.get_container_client(container)
