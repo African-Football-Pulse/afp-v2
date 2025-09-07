@@ -1,130 +1,156 @@
-# src/produce_auto.py
-import os, sys, json, yaml, subprocess, tempfile, pathlib
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from __future__ import annotations
 
-from src.storage.azure_blob import get_text, put_text  # din helper
+import os
+import sys
+import subprocess
+from pathlib import Path
+from typing import Any, Dict
 
-TZ = ZoneInfo("Europe/Stockholm")
+import yaml
+from datetime import datetime
 
-def today_str() -> str:
-    return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except Exception:
+    ZoneInfo = None  # Fallback om zoneinfo saknas
 
-def require_env(name: str) -> str:
-    v = os.getenv(name)
-    if not v:
-        print(f"[FATAL] Missing env: {name}", flush=True)
-        sys.exit(1)
-    return v
 
-def blob_read_json(container: str, path: str):
-    txt = get_text(container, path)  # kastar på 404/perm
-    return json.loads(txt)
+# -----------------------------
+# Hjälpfunktioner
+# -----------------------------
 
-def blob_write_json(container: str, path: str, obj):
-    payload = json.dumps(obj, ensure_ascii=False, indent=2)
-    put_text(container, path, payload, content_type="application/json; charset=utf-8")
+TZ_STOCKHOLM = ZoneInfo("Europe/Stockholm") if ZoneInfo else None
 
-def items_to_text(items: list) -> str:
-    lines = []
-    for i in items:
-        title = (i.get("title") or "").strip()
-        summary = (i.get("summary") or "").strip()
-        link = i.get("link") or ""
-        parts = [p for p in [title, summary, link] if p]
-        if parts:
-            lines.append(" — ".join(parts))
-    if not lines:
-        lines.append("No news items available.")
-    return "\n".join(f"- {ln}" for ln in lines)
 
-def run_produce_section(section_code: str, news_path: str, date: str, league: str, personas_path: str) -> dict:
-    cmd = [
-        "python","-m","src.produce_section",
-        "--section-code", section_code,
-        "--news", news_path,
-        "--date", date,
-        "--league", league,
-        "--personas-path", personas_path,
-        "--dry-run"
-    ]
-    print(f"[Produce] Exec: {' '.join(cmd)}")
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    if res.returncode != 0:
-        print(f"[ERROR] produce_section failed (rc={res.returncode}): {res.stderr or res.stdout}")
-        raise RuntimeError("produce_section failed")
+def _now_stockholm() -> datetime:
+    """Ge nuvarande tid i Europe/Stockholm (eller naiv now som fallback)."""
+    if TZ_STOCKHOLM:
+        return datetime.now(TZ_STOCKHOLM)
+    return datetime.now()
 
-    out = json.loads(res.stdout)
-    if not out.get("ok"):
-        raise RuntimeError("ok=false in produce_section output")
-    return out["manifest"]
 
-def main():
-    # Blob-krav (din helper läser KEY/SAS via env)
-    require_env("AZURE_STORAGE_ACCOUNT")
-    container = require_env("AZURE_CONTAINER")
+def _to_bool(val: str | None) -> bool:
+    """Tolkar vanliga sanningsvärden i env-variabler."""
+    if val is None:
+        return False
+    return val.strip().lower() in ("1", "true", "t", "yes", "y", "on")
 
-    # Prefix för läs/skriv (håll dem separata)
-    READ_PREFIX  = os.getenv("READ_PREFIX",  "collector/")  # var Collect lägger news
-    WRITE_PREFIX = os.getenv("WRITE_PREFIX", "producer/")   # var Produce ska skriva
 
-    # Läs plan
-    with open("config/produce_plan.yaml", "r", encoding="utf-8") as f:
-        plan = yaml.safe_load(f) or {}
+def resolve_date(plan_defaults: Dict[str, Any]) -> str:
+    """
+    Prioritet för datum:
+    1) ENV var 'DATE'
+    2) plan.defaults.date (tillåter '{{today}}')
+    3) dagens datum i Europe/Stockholm
+    """
+    env_date = os.getenv("DATE")
+    if env_date and env_date.strip():
+        return env_date.strip()
 
-    defaults = plan.get("defaults") or {}
-    tasks = plan.get("tasks") or []
+    plan_date = None
+    if isinstance(plan_defaults, dict):
+        plan_date = plan_defaults.get("date")
 
-    default_league = defaults.get("league", "premier_league")
-    default_date = defaults.get("date") or today_str()
-    personas_path = defaults.get("personas_path", "config/personas.json")
+    if isinstance(plan_date, str) and plan_date.strip():
+        if plan_date.strip() == "{{today}}":
+            return _now_stockholm().strftime("%Y-%m-%d")
+        # anta redan ett giltigt datumformat (YYYY-MM-DD)
+        return plan_date.strip()
 
-    def expand_date(d):
-        if isinstance(d, str) and "{{today}}" in d:
-            return today_str()
-        return d or default_date
+    # fallback: dagens datum
+    return _now_stockholm().strftime("%Y-%m-%d")
 
+
+def replace_today(obj: Any, date_str: str) -> Any:
+    """
+    Ersätter strängen '{{today}}' med 'date_str' i hela objektet (rekursivt).
+    Hanterar dict, listor och strängar.
+    """
+    if isinstance(obj, str):
+        return obj.replace("{{today}}", date_str)
+    if isinstance(obj, list):
+        return [replace_today(x, date_str) for x in obj]
+    if isinstance(obj, dict):
+        return {k: replace_today(v, date_str) for k, v in obj.items()}
+    return obj
+
+
+def load_plan(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+# -----------------------------
+# Huvudflöde
+# -----------------------------
+
+def main() -> int:
+    # 1) Läs in plan
+    plan_path = os.getenv("PRODUCE_PLAN", "config/produce_plan.yaml")
+    if not Path(plan_path).exists():
+        print(f"[produce_auto] ERROR: plan saknas: {plan_path}", file=sys.stderr)
+        return 2
+    plan = load_plan(plan_path)
+
+    # 2) Lös datum
+    defaults = plan.get("defaults", {}) if isinstance(plan, dict) else {}
+    date_str = resolve_date(defaults)
+    print(f"[produce_auto] Datum: {date_str}")
+
+    # 3) Ersätt alla '{{today}}' i hela planen
+    plan = replace_today(plan, date_str)
+
+    # 4) Läs tasks
+    tasks = plan.get("tasks", [])
+    if not isinstance(tasks, list) or not tasks:
+        print("[produce_auto] Inga tasks i planen – avslutar.")
+        return 0
+
+    # 5) Dry-run: endast om man explicit ber om det
+    dry_run = _to_bool(os.getenv("PRODUCE_DRY_RUN"))
+    if dry_run:
+        print("[produce_auto] PRODUCE_DRY_RUN=true → kör med --dry-run")
+
+    # 6) Barnprocessens miljö: säkerställ prefix-standarder
+    child_env = os.environ.copy()
+    child_env.setdefault("WRITE_PREFIX", "producer/")
+    child_env.setdefault("READ_PREFIX", "collector/")
+
+    # 7) Kör alla tasks
     for t in tasks:
-        section = t["section_code"]
-        source = t["source"]
-        league = t.get("league") or default_league
-        date = expand_date(t.get("date"))
-
-        in_path  = f"{READ_PREFIX}curated/news/{source}/{league}/{date}/items.json"
-        out_path = f"{WRITE_PREFIX}sections/{date}/{section}/manifest.json"
-
-        print(f"[Produce] Section={section}  League={league}  Date={date}  Source={source}")
-        print(f"[Produce] Reading:  {container}/{in_path}")
-
-        try:
-            items = blob_read_json(container, in_path)
-        except Exception as e:
-            print(f"[WARN] Could not read items ({in_path}): {e}")
+        if not isinstance(t, dict):
             continue
 
-        if not items:
-            print(f"[WARN] No items for {section} {league} {date}")
+        section_code = t.get("section_code")
+        if not section_code:
+            print("[produce_auto] VARNING: task utan 'section_code' – hoppar över.")
             continue
 
-        # skapa temporär nyhetsfil till CLI:t
-        news_txt = items_to_text(items)
-        tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="afp_news_"))
-        news_path = str((tmp_dir / "news.txt").resolve())
-        pathlib.Path(news_path).write_text(news_txt, encoding="utf-8")
+        # Bygg kommandot till produce_section
+        cmd = [
+            sys.executable, "-m", "src.produce_section",
+            "--section", section_code,
+            "--date", date_str,
+            "--path-scope", "blob",   # skriv direkt till Blob
+        ]
 
-        try:
-            manifest = run_produce_section(section, news_path, date, league, personas_path)
-        except Exception:
-            continue
+        # Extra args från planen (redan '{{today}}' ersatt om de fanns)
+        extra_args = t.get("args", [])
+        if isinstance(extra_args, list) and extra_args:
+            cmd.extend([str(a) for a in extra_args])
 
-        print(f"[Produce] Writing: {container}/{out_path}")
-        try:
-            blob_write_json(container, out_path, manifest)
-        except Exception as e:
-            print(f"[ERROR] Failed to write manifest: {e}")
-            continue
+        if dry_run:
+            cmd.append("--dry-run")
 
-    print("[Produce] DONE")
+        print(f"[produce_auto] Kör: {' '.join(cmd)}")
+        r = subprocess.run(cmd, env=child_env)
+        if r.returncode != 0:
+            print(f"[produce_auto] FEL: {section_code} returnerade {r.returncode}", file=sys.stderr)
+            return r.returncode
+
+    print("[produce_auto] Klart – alla tasks körda.")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
