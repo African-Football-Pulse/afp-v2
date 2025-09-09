@@ -42,3 +42,11 @@ tasks:
       - --write-latest
       - --news
       - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+
+  - section_code: S.GENERIC.INTRO_DAILY
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
