@@ -5,7 +5,7 @@ import sys
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
-from datetime import datetime
+from datetime import datetime, UTC
 
 import yaml
 
@@ -20,19 +20,9 @@ except Exception:
 # Hjälpfunktioner
 # -----------------------------
 
-try:
-    from zoneinfo import ZoneInfo  # Python 3.9+
-except Exception:
-    ZoneInfo = None  # Fallback om zoneinfo saknas
-
-TZ_STOCKHOLM = ZoneInfo("Europe/Stockholm") if ZoneInfo else None
-
-
-def _now_stockholm() -> datetime:
-    """Ge nuvarande tid i Europe/Stockholm (eller naiv now som fallback)."""
-    if TZ_STOCKHOLM:
-        return datetime.now(TZ_STOCKHOLM)
-    return datetime.now()
+def _now_utc() -> datetime:
+    """Always return current time in UTC."""
+    return datetime.now(UTC)
 
 
 def _to_bool(val: str | None) -> bool:
@@ -47,7 +37,7 @@ def resolve_date(plan_defaults: Dict[str, Any]) -> str:
     Prioritet för datum:
     1) ENV var 'DATE'
     2) plan.defaults.date (tillåter '{{today}}')
-    3) dagens datum i Europe/Stockholm
+    3) dagens datum i UTC
     """
     env_date = os.getenv("DATE")
     if env_date and env_date.strip():
@@ -59,12 +49,12 @@ def resolve_date(plan_defaults: Dict[str, Any]) -> str:
 
     if isinstance(plan_date, str) and plan_date.strip():
         if plan_date.strip() == "{{today}}":
-            return _now_stockholm().strftime("%Y-%m-%d")
+            return _now_utc().strftime("%Y-%m-%d")
         # anta redan ett giltigt datumformat (YYYY-MM-DD)
         return plan_date.strip()
 
-    # fallback: dagens datum
-    return _now_stockholm().strftime("%Y-%m-%d")
+    # fallback: dagens datum i UTC
+    return _now_utc().strftime("%Y-%m-%d")
 
 
 def replace_today(obj: Any, date_str: str) -> Any:
@@ -157,7 +147,7 @@ def main() -> int:
     # 2) Lös datum
     defaults = plan.get("defaults", {}) if isinstance(plan, dict) else {}
     date_str = resolve_date(defaults)
-    print(f"[produce_auto] Datum: {date_str}")
+    print(f"[produce_auto] Datum: {date_str} (UTC)")
 
     # 3) Ersätt alla '{{today}}' i hela planen
     plan = replace_today(plan, date_str)
@@ -167,6 +157,9 @@ def main() -> int:
     if not isinstance(tasks, list) or not tasks:
         print("[produce_auto] Inga tasks i planen – avslutar.")
         return 0
+
+    # 4b) Prioritera S7 först
+    tasks.sort(key=lambda t: 0 if t.get("section_code") == "S7" else 1)
 
     # 5) Dry-run: endast om man explicit ber om det
     dry_run = _to_bool(os.getenv("PRODUCE_DRY_RUN"))
@@ -218,7 +211,7 @@ def main() -> int:
         r = subprocess.run(cmd, env=child_env)
         if r.returncode != 0:
             print(f"[produce_auto] FEL: {section_code} returnerade {r.returncode}", file=sys.stderr)
-            return r.returncode
+            continue  # kör vidare med nästa task
 
     print("[produce_auto] Klart – alla tasks körda.")
     return 0
