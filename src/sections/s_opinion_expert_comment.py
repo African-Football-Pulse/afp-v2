@@ -43,6 +43,31 @@ Guidance:
 """
 
 def _read_text(p: Path) -> str:
+    """
+    Load input text. If JSON, extract headlines/summary fields.
+    If plain text, return as-is.
+    """
+    if p.suffix.lower() == ".json":
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            # Support both list-of-items and dict{"items": [...]} formats
+            if isinstance(data, dict) and "items" in data:
+                items = data["items"]
+            else:
+                items = data
+            if isinstance(items, list):
+                texts = []
+                for item in items[:5]:  # ta de första 5 för input
+                    if isinstance(item, dict):
+                        if "title" in item:
+                            texts.append(item["title"])
+                        elif "summary" in item:
+                            texts.append(item["summary"])
+                return "\n".join(texts)
+        except Exception as e:
+            print(f"[s_opinion_expert_comment] WARN: Failed to parse JSON {p}: {e}")
+            return ""
+    # fallback
     return p.read_text(encoding="utf-8").strip()
 
 def _load_personas(p: Path):
@@ -82,32 +107,29 @@ def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
 
 def build_section(
     *,
-    section_code: str,        # required, passed by produce_section.py
+    section_code: str,
     news_path: str,
     personas_path: str,
     date: str,
     league: str = "_",
     topic: str = "_",
-    speaker: str | None = None,      # e.g. "JJK" from library default
-    layout: str = "alias-first",     # or "date-first"
-    path_scope: str = "single",      # "single" | "speaker"
+    speaker: str | None = None,
+    layout: str = "alias-first",
+    path_scope: str = "single",
     write_latest: bool = True,
     dry_run: bool = False,
     outdir: str = "outputs/sections",
     model: str = "gpt-4o-mini",
-    type: str = "opinion",           # from library; not used yet but useful
+    type: str = "opinion",
 ) -> dict:
 
-    # Inputs
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     personas = _load_personas(Path(personas_path))
     if speaker is None:
-        # Fallback if library forgot to set default_speaker
         speaker = "JJK"
     p = personas[speaker]
     news_input = _read_text(Path(news_path))
 
-    # OpenAI
     api_key = os.getenv("AFP_OPENAI_SECRETKEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise SystemExit("Missing API key. Set AFP_OPENAI_SECRETKEY or OPENAI_API_KEY.")
@@ -135,7 +157,6 @@ def build_section(
     words = len(text.split())
     data.update({"text": text, "words": words, "duration_sec": _approx_duration(words), "speaker": speaker})
 
-    # Paths (speaker folder optional)
     persona_part = (speaker if path_scope == "speaker" else "")
     if layout == "alias-first":
         base = f"sections/{section_code}/{date}/{league}/{topic}"
@@ -148,7 +169,6 @@ def build_section(
     md_rel   = f"{base}/section.md"
     man_rel  = f"{base}/section_manifest.json"
 
-    # Payloads
     json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
     md_bytes = (f"### Opinion — {speaker} ({data['duration_sec']}s / {data['words']} words)\n\n{text}\n").encode("utf-8")
     manifest = {
@@ -184,5 +204,4 @@ def build_section(
         (outdirp / "section.md").write_text(md_bytes.decode("utf-8"), encoding="utf-8")
         (outdirp / "section_manifest.json").write_text(man_bytes.decode("utf-8"), encoding="utf-8")
 
-    # Optionally write latest pointer from the orchestrator (keeps module thin)
     return manifest
