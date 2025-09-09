@@ -1,9 +1,0 @@
-defaults:
-  date: "2025-09-07"            # matchar items.json som finns i Blob
-  league: premier_league
-  personas_path: config/personas.json
-  write_latest: true
-
-tasks:
-  - section_code: S.STATS.TOP_AFRICAN_PLAYERS
-    source: bbc_football
