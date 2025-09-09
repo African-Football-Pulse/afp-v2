@@ -1,4 +1,3 @@
-# src/sections/s_opinion_duo_experts.py
 import os, json, re, time
 from datetime import datetime, UTC
 from pathlib import Path
@@ -54,6 +53,29 @@ Guidance:
 """
 
 def _read_text(p: Path) -> str:
+    """
+    Load input text. If JSON, extract headlines/summary fields.
+    If plain text, return as-is.
+    """
+    if p.suffix.lower() == ".json":
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "items" in data:
+                items = data["items"]
+            else:
+                items = data
+            if isinstance(items, list):
+                texts = []
+                for item in items[:5]:
+                    if isinstance(item, dict):
+                        if "title" in item:
+                            texts.append(item["title"])
+                        elif "summary" in item:
+                            texts.append(item["summary"])
+                return "\n".join(texts)
+        except Exception as e:
+            print(f"[s_opinion_duo_experts] WARN: Failed to parse JSON {p}: {e}")
+            return ""
     return p.read_text(encoding="utf-8").strip()
 
 def _load_personas(p: Path):
@@ -74,7 +96,6 @@ def _words(s: str) -> int:
     return len(s.split())
 
 def _approx_duration(words: int) -> int:
-    # ~2.6 words per second
     return max(30, min(120, int(round(words / 2.6))))
 
 # ---- Azure Blob via SAS (no SDK) ----
@@ -97,23 +118,19 @@ def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
 
 def build_section(
     *,
-    section_code: str,        # e.g. "S.OPINION.DUO_EXPERTS"
+    section_code: str,
     news_path: str,
     personas_path: str,
     date: str,
     league: str = "_",
     topic: str = "_",
-    layout: str = "alias-first",     # or "date-first"
+    layout: str = "alias-first",
     write_latest: bool = True,
     dry_run: bool = False,
     outdir: str = "outputs/sections",
     model: str = "gpt-4o-mini",
     type: str = "opinion",
 ) -> dict:
-    """
-    Producer entrypoint for a two-expert dialogue (AK ↔ JJK).
-    Returns manifest dict; writes blobs via SAS if present, else locally.
-    """
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     personas = _load_personas(Path(personas_path))
@@ -154,10 +171,9 @@ def build_section(
     raw = json.loads(resp.choices[0].message.content)
     dialogue = raw.get("dialogue", [])
 
-    # Sanity & trims
     out = []
     total_words = 0
-    for turn in dialogue[:3]:  # max 3 turns
+    for turn in dialogue[:3]:
         spk = turn.get("speaker","").strip()
         txt = _clamp_words(turn.get("text","").strip(), max_w=180)
         if spk not in ("AK","JJK") or not txt:
@@ -166,13 +182,11 @@ def build_section(
         total_words += w
         out.append({"speaker": spk, "text": txt, "words": w, "duration_sec": _approx_duration(w)})
 
-    # enforce 2-turn minimum (AK->JJK)
     if len(out) < 2:
         raise SystemExit("Dialogue too short. Expected at least two turns: AK then JJK.")
 
     duration_total = sum(t["duration_sec"] for t in out)
 
-    # Paths
     if layout == "alias-first":
         base = f"sections/{section_code}/{date}/{league}/{topic}"
     else:
@@ -182,7 +196,6 @@ def build_section(
     md_rel   = f"{base}/section.md"
     man_rel  = f"{base}/section_manifest.json"
 
-    # Build payloads
     data = {
         "dialogue": [{"speaker": t["speaker"], "text": t["text"]} for t in out],
         "segments": [{"speaker": t["speaker"], "words": t["words"], "duration_sec": t["duration_sec"]} for t in out],
@@ -192,14 +205,12 @@ def build_section(
     }
     json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
 
-    # Render MD
     lines = [f"### Duo Opinion — AK ↔ JJK ({duration_total}s / {total_words} words)", ""]
     for t in out:
         lines.append(f"**{t['speaker']}:** {t['text']}")
         lines.append("")
     md_bytes = ("\n".join(lines)).encode("utf-8")
 
-    # Manifest
     manifest = {
         "section_code": section_code,
         "type": type,
@@ -218,7 +229,6 @@ def build_section(
     }
     man_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
 
-    # Write
     sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
     if sas:
         if dry_run:
