@@ -4,11 +4,31 @@ aliases:
   S3: S.OPINION.EXPERT_COMMENT
   S4: S.NEWS.TOP3
   S5: S.OPINION.DUO_EXPERTS
+  S6: S.GENERIC.INTRO_DAILY
+  S7: S.GENERIC.INTRO_POSTMATCH
   S.NEWS.TOPN: S.NEWS.TOP3     # <-- lägg till denna för bakåtkompatibilitet
   TOPN: S.NEWS.TOP3            # <-- valfritt kortalias om ni använt ”TOPN” någonstans
   TOP3: S.NEWS.TOP3            # <-- valfritt
 
 sections:
+  S.GENERIC.INTRO_DAILY:
+    type: generic
+    module: s_generic_intro_daily        # src/sections/s_generic_intro_daily/__init__.py
+    runner: build_section
+    layout: alias-first
+    path_scope: single
+    write_latest: true
+    model: gpt-4o-mini
+
+  S.GENERIC.INTRO_POSTMATCH:
+    type: generic
+    module: s_generic_intro_postmatch    # src/sections/s_generic_intro_postmatch/__init__.py
+    runner: build_section
+    layout: alias-first
+    path_scope: single
+    write_latest: true
+    model: gpt-4o-mini
+  
   S.NEWS.TOP3:
     type: news
     module: s_news_top3_generic
