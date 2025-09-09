@@ -24,3 +24,11 @@ tasks:
       - --write-latest
       - --news
       - curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+
+  - section_code: S7
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
