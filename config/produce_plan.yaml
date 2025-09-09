@@ -32,3 +32,13 @@ tasks:
       - --outdir
       - sections
       - --write-latest
+
+  - section_code: S.OPINION.DUO_EXPERTS
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
