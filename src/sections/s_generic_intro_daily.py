@@ -1,53 +1,120 @@
+# src/sections/s_generic_intro_daily.py
+import os, json, time
 from datetime import datetime, UTC
+from pathlib import Path
+import urllib.parse as up
+import requests
+
+def _make_blob_url(container_sas_url: str, blob_path: str) -> str:
+    p = up.urlparse(container_sas_url)
+    base = f"{p.scheme}://{p.netloc}{p.path.rstrip('/')}"
+    return f"{base}/{blob_path.lstrip('/')}?{p.query}"
+
+def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
+                  content_type="application/octet-stream", retries=3, backoff=0.8) -> str:
+    url = _make_blob_url(container_sas_url, blob_path)
+    headers = {
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": "2020-10-02",
+        "Content-Type": content_type,
+    }
+    for attempt in range(1, retries+1):
+        r = requests.put(url, headers=headers, data=data, timeout=60)
+        if r.status_code in (201, 202):
+            return url
+        if attempt == retries:
+            raise RuntimeError(f"Blob upload failed ({r.status_code}): {r.text[:500]}")
+        time.sleep(backoff * attempt)
 
 def build_section(
     *,
-    section_code: str,
-    date: str,
+    section_code: str,        # e.g. "S.GENERIC.INTRO_DAILY"
+    date: str,                # från produce_auto (UTC-format: YYYY-MM-DD)
     league: str = "_",
     topic: str = "_",
     layout: str = "alias-first",
-    path_scope: str = "single",
     write_latest: bool = True,
-    outdir: str = "outputs/sections",
-    model: str = "gpt-4o-mini",
-    type: str = "generic",
     dry_run: bool = False,
+    outdir: str = "outputs/sections",
+    model: str = "static",
+    type: str = "generic",
 ) -> dict:
     """
-    Generate a static Daily Intro section for the podcast.
-    Always includes the current date (UTC).
+    Producer entrypoint for Daily intro.
+    Returns manifest dict; writes blobs via SAS if present, else locally.
     """
 
-    # Datum i "Month DD, YYYY" format (UTC)
-    today_str = datetime.now(UTC).strftime("%B %d, %Y")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+
+    # Använd date-argumentet, formatera till "Month DD, YYYY"
+    try:
+        dt = datetime.strptime(date, "%Y-%m-%d")
+        date_str = dt.strftime("%B %d, %Y")
+    except ValueError:
+        date_str = date
 
     text = (
         f"Welcome to African Football Pulse! "
-        f"It’s {today_str}, and this is your daily Premier League update. "
-        "We’ll bring you the latest headlines, key talking points, "
-        "and stories that matter most to African fans."
+        f"It’s {date_str}, and this is your daily Premier League update. "
+        f"We’ll bring you the latest headlines, key talking points, "
+        f"and stories that matter most to African fans."
     )
 
-    # Bygg manifest
+    # Paths
+    if layout == "alias-first":
+        base = f"sections/{section_code}/{date}/{league}/{topic}"
+    else:
+        base = f"sections/{date}/{league}/{topic}/{section_code}"
+
+    json_rel = f"{base}/section.json"
+    md_rel   = f"{base}/section.md"
+    man_rel  = f"{base}/section_manifest.json"
+
+    # Build payloads
+    data_payload = {
+        "text": text,
+        "words_total": len(text.split()),
+        "duration_sec_est": int(round(len(text.split()) / 2.6)),  # ~2.6 wps
+    }
+    json_bytes = json.dumps(data_payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+    md_lines = [f"### Daily Intro", "", text, ""]
+    md_bytes = "\n".join(md_lines).encode("utf-8")
+
     manifest = {
-        "ok": True,
         "section_code": section_code,
         "type": type,
         "model": model,
-        "created_utc": datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
+        "created_utc": ts,
         "league": league,
         "topic": topic,
         "date": date,
-        "payload": {
-            "slug": "intro_daily",
-            "title": "Daily Intro",
-            "text": text,
-            "length_s": 15,
-            "sources": [],
-            "meta": {},
+        "blobs": {"json": json_rel, "md": md_rel},
+        "metrics": {
+            "words_total": data_payload["words_total"],
+            "duration_sec_est": data_payload["duration_sec_est"],
         },
-        "outdir": outdir,
+        "sources": {},
     }
+    man_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
+
+    # Write (Azure or local)
+    sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
+    if sas:
+        if dry_run:
+            print("=== DRY RUN ===")
+            print("Would upload JSON →", _make_blob_url(sas, json_rel))
+            print("Would upload MD   →", _make_blob_url(sas, md_rel))
+            print("Would upload MAN  →", _make_blob_url(sas, man_rel))
+        else:
+            _upload_bytes(sas, json_rel, json_bytes, "application/json")
+            _upload_bytes(sas, md_rel, md_bytes, "text/markdown")
+            _upload_bytes(sas, man_rel, man_bytes, "application/json")
+    else:
+        outdirp = Path(outdir) / base
+        outdirp.mkdir(parents=True, exist_ok=True)
+        (outdirp / "section.json").write_text(json_bytes.decode("utf-8"), encoding="utf-8")
+        (outdirp / "section.md").write_text(md_bytes.decode("utf-8"), encoding="utf-8")
+        (outdirp / "section_manifest.json").write_text(man_bytes.decode("utf-8"), encoding="utf-8")
 
     return manifest
