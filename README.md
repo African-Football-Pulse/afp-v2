@@ -1,48 +1,53 @@
-# AFP Jobs – Struktur & Samband
+# AFP – Data Pipeline Overview
 
-Det här repot innehåller definitioner för tre Azure Container Apps Jobs som kör olika delar av **African Football Pulse**-pipeline.  
-För att undvika förvirring används en konsekvent namngivning genom hela kedjan: **Azure-resurs → YAML-fil → JOB_TYPE → Python-modul**.
-
----
-
-## Översikt
-
-| Azure Job (resursnamn) | YAML-fil                          | JOB_TYPE (env) | Python-modul som körs                          |
-|-------------------------|-----------------------------------|----------------|------------------------------------------------|
-| `afp-collect-job`       | `.github/workflows/collect-job.yaml`   | `collect`      | `src.collectors.rss_multi`                     |
-| `afp-produce-job`       | `.github/workflows/produce-job.yaml`   | `produce`      | `src.sections.s_news_top3_guardian`            |
-| `afp-assemble-job`      | `.github/workflows/assemble-job.yaml`  | `assemble`     | `src.assembler.main`                           |
+Det här dokumentet beskriver i stora drag hur våra jobbflöden är uppbyggda och vad status är i dagsläget (sept 2025).  
+Syftet är att ge en snabb onboarding för nya kollegor (t.ex. Adam) som ska förstå hur Collect/Produce m.m. hänger ihop.
 
 ---
 
-## Flöde
+## Översikt av pipeline
 
-```mermaid
-flowchart LR
-    subgraph GitHub
-        A[Repo Secrets\nBLOB_CONTAINER_SAS_URL] --> B[deploy.yml\nworkflow]
-    end
+Hela systemet är uppdelat i ett antal steg:
 
-    subgraph Azure
-        B --> C1[afp-collect-job\nYAML + JOB_TYPE=collect]
-        B --> C2[afp-produce-job\nYAML + JOB_TYPE=produce]
-        B --> C3[afp-assemble-job\nYAML + JOB_TYPE=assemble]
+1. **Collect**  
+   - Hämtar nyhetsflöden (RSS etc.) och skriver normaliserade `items.json` till Blob Storage.  
+   - Körs som **Azure Container Apps Job** på schema (regelbundet).  
+   - Output: `collector/curated/news/<källa>/<liga>/<datum>/items.json`.
 
-        C1 --> D[job_entrypoint.py]
-        C2 --> D
-        C3 --> D
-    end
+2. **Produce**  
+   - Läser insamlade `items.json` från Blob.  
+   - Bygger sektioner (t.ex. `S.STATS.TOP_AFRICAN_PLAYERS`, `S.OPINION.EXPERT_COMMENT`).  
+   - Skriver `manifest.json` för varje sektion till Blob.  
+   - Körs som **Azure Container Apps Job** på schema (regelbundet).  
+   - Output: `producer/sections/<datum>/<SECTION_CODE>/manifest.json`.
 
-    D --> M1[src.collectors.rss_multi]
-    D --> M2[src.sections.s_news_top3_guardian]
-    D --> M3[src.assembler.main]
+3. **Assemble**  
+   - Tar sektionerna från Produce och sätter ihop dem till hela avsnitt.  
+   - Output: kompletta avsnittsmanifest.  
+   - **Status:** körbart lokalt, **inte** deployat i Azure ännu.
 
-    style A fill:#f6f8fa,stroke:#0366d6,stroke-width:2px
-    style B fill:#e6f7ff,stroke:#1890ff,stroke-width:2px
-    style C1 fill:#fffbe6,stroke:#faad14,stroke-width:1px
-    style C2 fill:#fffbe6,stroke:#faad14,stroke-width:1px
-    style C3 fill:#fffbe6,stroke:#faad14,stroke-width:1px
-    style D fill:#f9f0ff,stroke:#9254de,stroke-width:2px
-    style M1 fill:#f6ffed,stroke:#52c41a
-    style M2 fill:#f6ffed,stroke:#52c41a
-    style M3 fill:#f6ffed,stroke:#52c41a
+4. **Render**  
+   - Tar avsnittsmanifest och producerar ljudfiler (inkl. intro/outro, jinglar, TTS-röster).  
+   - **Status:** körbart lokalt, **inte** deployat i Azure ännu.
+
+5. **Publish**  
+   - Laddar upp färdiga ljudfiler till distributionskanaler (t.ex. Buzzsprout, Spotify).  
+   - **Status:** körbart lokalt, **inte** deployat i Azure ännu.
+
+---
+
+## Nuvarande status
+
+✅ **Collect** – i drift (Azure Job, schemalagt).  
+✅ **Produce** – i drift (Azure Job, schemalagt).  
+⚪ **Assemble** – finns lokalt, ej deploy.  
+⚪ **Render** – finns lokalt, ej deploy.  
+⚪ **Publish** – finns lokalt, ej deploy.
+
+> Med andra ord: vi har en regelbunden pipeline från nyheter (Collect) till sektioner (Produce). Nästa steg är att industrialisera Assemble/Render/Publish.
+
+---
+
+## Blob Storage-struktur
+
+- **Collector output:**  
