@@ -75,7 +75,7 @@ def main():
     ap = argparse.ArgumentParser(description="Produce a section from the library (config-driven).")
     ap.add_argument("--library", default=DEFAULT_LIBRARY)
     ap.add_argument("--section-code", required=True, help="t.ex. S.OPINION.EXPERT_COMMENT")
-    ap.add_argument("--news", required=True, help="Path till nyhetsunderlag (.txt/.md)")
+    ap.add_argument("--news", required=False, help="Path till nyhetsunderlag (.txt/.md)")  # ändrat till optional
     ap.add_argument("--date", default=datetime.now(UTC).strftime("%Y-%m-%d"))
     ap.add_argument("--league", default="_")
     ap.add_argument("--topic", default="_")
@@ -114,7 +114,7 @@ def main():
     speaker_val = args.speaker or cfg.get("default_speaker")
     raw_opts = {
         "section_code": args.section_code,
-        "news_path": args.news,
+        "news_path": args.news,  # kan nu vara None
         "personas_path": args.personas_path or cfg.get("personas_path", "config/personas.json"),
         "date": args.date,
         "league": args.league,
