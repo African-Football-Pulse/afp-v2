@@ -29,7 +29,7 @@ def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
 def build_section(
     *,
     section_code: str,        # e.g. "S.GENERIC.INTRO_POSTMATCH"
-    date: str,
+    date: str,                # från produce_auto (UTC-format: YYYY-MM-DD)
     league: str = "_",
     topic: str = "_",
     layout: str = "alias-first",
@@ -46,10 +46,17 @@ def build_section(
 
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
-    today_str = datetime.now(UTC).strftime("%B %d, %Y")
+    # Använd date-argumentet, formatera till "Month DD, YYYY"
+    try:
+        dt = datetime.strptime(date, "%Y-%m-%d")
+        date_str = dt.strftime("%B %d, %Y")
+    except ValueError:
+        # fallback om date inte är i väntat format
+        date_str = date
+
     text = (
         f"Welcome to African Football Pulse! "
-        f"It’s {today_str}, and we’re coming off a full round of Premier League action. "
+        f"It’s {date_str}, and we’re coming off a full round of Premier League action. "
         f"Stay tuned as we bring you the biggest results, standout performances, "
         f"and stories that matter most to fans across Africa."
     )
@@ -65,12 +72,12 @@ def build_section(
     man_rel  = f"{base}/section_manifest.json"
 
     # Build payloads
-    data = {
+    data_payload = {
         "text": text,
         "words_total": len(text.split()),
         "duration_sec_est": int(round(len(text.split()) / 2.6)),  # ~2.6 wps
     }
-    json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    json_bytes = json.dumps(data_payload, ensure_ascii=False, indent=2).encode("utf-8")
 
     md_lines = [f"### Postmatch Intro", "", text, ""]
     md_bytes = "\n".join(md_lines).encode("utf-8")
@@ -82,11 +89,11 @@ def build_section(
         "created_utc": ts,
         "league": league,
         "topic": topic,
-        "date": date,
+        "date": date,  # exakt datum från produce_auto (UTC)
         "blobs": {"json": json_rel, "md": md_rel},
         "metrics": {
-            "words_total": data["words_total"],
-            "duration_sec_est": data["duration_sec_est"],
+            "words_total": data_payload["words_total"],
+            "duration_sec_est": data_payload["duration_sec_est"],
         },
         "sources": {},
     }
