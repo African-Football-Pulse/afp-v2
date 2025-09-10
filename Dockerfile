@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Källkod och config
 COPY src/ src/
 COPY config/ config/
+COPY templates/ templates/
 
 # Secrets (läggs in i imagen under /app/secrets/)
 COPY secrets/ /app/secrets/
