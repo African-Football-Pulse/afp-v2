@@ -34,14 +34,27 @@ def load_yaml(p):
     with open(p, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-def read_section_text(base, date, section_code, league, topic="_"):
-    # Anpassad till hur Produce faktiskt skriver i Azure
-    path = pathlib.Path(base) / section_code / date / league / topic / "section.json"
-    if not path.exists():
-        return None, str(path)
-    with open(path, "r", encoding="utf-8") as f:
-        m = json.load(f)
-    return m.get("text", "").strip(), str(path)
+def read_section_text(base, date, section_code, league, lang="en", topic="_"):
+    """
+    Försöker läsa sektionstext från två möjliga path-varianter:
+    1. Utan språk: sections/{code}/{date}/{league}/_/section.json
+    2. Med språk:  sections/{code}/{date}/{league}/_/{lang}/section.json
+    """
+    # Variant 1: utan språk
+    path1 = pathlib.Path(base) / section_code / date / league / topic / "section.json"
+    if path1.exists():
+        with open(path1, "r", encoding="utf-8") as f:
+            m = json.load(f)
+        return m.get("text", "").strip(), str(path1)
+
+    # Variant 2: med språk
+    path2 = pathlib.Path(base) / section_code / date / league / topic / lang / "section.json"
+    if path2.exists():
+        with open(path2, "r", encoding="utf-8") as f:
+            m = json.load(f)
+        return m.get("text", "").strip(), str(path2)
+
+    return None, str(path1)
 
 def today() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
@@ -82,7 +95,7 @@ def main():
 
     for s in segs:
         if s["type"] == "section":
-            text, src_path = read_section_text(args.sections_root, args.date, s["section_code"], args.league)
+            text, src_path = read_section_text(args.sections_root, args.date, s["section_code"], args.league, args.lang)
             if text:
                 persona = s.get("persona", "AK")
                 lines.append(f"[{persona}] {text}")
@@ -108,7 +121,7 @@ def main():
                 code = sec.get("section_code")
                 if not code:
                     continue
-                text, src_path = read_section_text(args.sections_root, args.date, code, args.league)
+                text, src_path = read_section_text(args.sections_root, args.date, code, args.league, args.lang)
                 if text:
                     persona = s.get("persona", "AK")
                     lines.append(f"[{persona}] {text}")
