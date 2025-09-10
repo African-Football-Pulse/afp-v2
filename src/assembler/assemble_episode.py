@@ -1,5 +1,5 @@
 # src/assembler/assemble_episode.py
-import argparse, json, os, sys, yaml, pathlib, time
+import argparse, json, os, sys, yaml, time
 from datetime import datetime, UTC
 import urllib.parse as up
 import requests
@@ -34,31 +34,24 @@ def load_yaml(p):
     with open(p, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-def read_section_text(base, date, section_code, league, lang="en", topic="_"):
+def read_section_text(container_sas_url, date, section_code, league, lang="en", topic="_"):
     """
-    Försöker läsa sektionstext från två möjliga path-varianter:
-    1. Utan språk: sections/{code}/{date}/{league}/_/section.json
-    2. Med språk:  sections/{code}/{date}/{league}/_/{lang}/section.json
+    Läser section.json direkt från Azure Blob via SAS.
+    Försöker först utan språk, sedan med språk.
     """
-    # Variant 1: utan språk
-    path1 = pathlib.Path(base) / section_code / date / league / topic / "section.json"
-    if path1.exists():
-        log(f"[INFO] Hittade sektion utan språk: {path1}")
-        with open(path1, "r", encoding="utf-8") as f:
-            m = json.load(f)
-        return m.get("text", "").strip(), str(path1)
-
-    # Variant 2: med språk
-    path2 = pathlib.Path(base) / section_code / date / league / topic / lang / "section.json"
-    if path2.exists():
-        log(f"[INFO] Hittade sektion med språk: {path2}")
-        with open(path2, "r", encoding="utf-8") as f:
-            m = json.load(f)
-        return m.get("text", "").strip(), str(path2)
-
-    # Ingen träff
-    log(f"[WARN] Ingen sektion hittades för {section_code} (testade {path1} och {path2})")
-    return None, str(path1)
+    paths = [
+        f"sections/{section_code}/{date}/{league}/{topic}/section.json",
+        f"sections/{section_code}/{date}/{league}/{topic}/{lang}/section.json",
+    ]
+    for blob_path in paths:
+        url = _make_blob_url(container_sas_url, blob_path)
+        r = requests.get(url, timeout=30)
+        if r.status_code == 200:
+            log(f"[INFO] Hittade sektion i Blob: {blob_path}")
+            m = r.json()
+            return m.get("text", "").strip(), blob_path
+    log(f"[WARN] Ingen sektion hittades för {section_code} (testade {paths})")
+    return None, paths[0]
 
 def today() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
@@ -79,7 +72,6 @@ def main():
     ap.add_argument("--mode", default="postmatch")
     ap.add_argument("--lang", default="en")
     ap.add_argument("--template", default="templates/episodes/postmatch.yaml")
-    ap.add_argument("--sections_root", default="sections")
     ap.add_argument("--plan", default="config/produce_plan.yaml")
     args = ap.parse_args()
 
@@ -99,7 +91,7 @@ def main():
 
     for s in segs:
         if s["type"] == "section":
-            text, src_path = read_section_text(args.sections_root, args.date, s["section_code"], args.league, args.lang)
+            text, src_path = read_section_text(sas, args.date, s["section_code"], args.league, args.lang)
             if text:
                 persona = s.get("persona", "AK")
                 lines.append(f"[{persona}] {text}")
@@ -124,7 +116,7 @@ def main():
                 code = sec.get("section_code")
                 if not code:
                     continue
-                text, src_path = read_section_text(args.sections_root, args.date, code, args.league, args.lang)
+                text, src_path = read_section_text(sas, args.date, code, args.league, args.lang)
                 if text:
                     persona = s.get("persona", "AK")
                     lines.append(f"[{persona}] {text}")
