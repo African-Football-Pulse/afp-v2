@@ -43,6 +43,7 @@ def read_section_text(base, date, section_code, league, lang="en", topic="_"):
     # Variant 1: utan språk
     path1 = pathlib.Path(base) / section_code / date / league / topic / "section.json"
     if path1.exists():
+        log(f"[INFO] Hittade sektion utan språk: {path1}")
         with open(path1, "r", encoding="utf-8") as f:
             m = json.load(f)
         return m.get("text", "").strip(), str(path1)
@@ -50,10 +51,13 @@ def read_section_text(base, date, section_code, league, lang="en", topic="_"):
     # Variant 2: med språk
     path2 = pathlib.Path(base) / section_code / date / league / topic / lang / "section.json"
     if path2.exists():
+        log(f"[INFO] Hittade sektion med språk: {path2}")
         with open(path2, "r", encoding="utf-8") as f:
             m = json.load(f)
         return m.get("text", "").strip(), str(path2)
 
+    # Ingen träff
+    log(f"[WARN] Ingen sektion hittades för {section_code} (testade {path1} och {path2})")
     return None, str(path1)
 
 def today() -> str:
@@ -113,7 +117,6 @@ def main():
                     "source": src_path,
                     "missing": True
                 })
-                log(f"[WARN] Missing section source: {src_path}")
 
         elif s["type"] == "dynamic":
             plan_sections = list_plan_sections(args.plan, args.mode)
@@ -132,7 +135,13 @@ def main():
                         "source": src_path
                     })
                 else:
-                    log(f"[WARN] Dynamic section missing: {src_path}")
+                    manifest_segments.append({
+                        "type": "section",
+                        "section_code": code,
+                        "persona": s.get("persona", "AK"),
+                        "source": src_path,
+                        "missing": True
+                    })
 
         else:
             manifest_segments.append(s)
