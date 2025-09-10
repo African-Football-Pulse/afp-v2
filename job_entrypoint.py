@@ -61,7 +61,7 @@ def build_command():
     - collect -> python -m src.collectors.rss_multi
     - produce + JOB_ARGS tom -> python -m src.produce_auto
     - produce + JOB_ARGS satt -> python -m src.produce_section <JOB_ARGS...>
-    - assemble -> python -m src.assemble.assemble_episode <JOB_ARGS...>
+    - assemble -> python -m src.assembler.assemble_episode <JOB_ARGS...>
     - annars: om JOB_TYPE pekar på ett modulnamn, kör python -m <värdet>
     """
     job_type = (os.getenv("JOB_TYPE") or "").strip().lower()
@@ -88,15 +88,15 @@ def build_command():
 
     if job_type == "assemble":
         if job_args:
-            return ["python", "-m", "src.assemble.assemble_episode"] + shlex.split(job_args)
+            return ["python", "-m", "src.assembler.assemble_episode"] + shlex.split(job_args)
         else:
-            return ["python", "-m", "src.assemble.assemble_episode"]
+            return ["python", "-m", "src.assembler.assemble_episode"]
 
     # Fallback: tillåt att JOB_TYPE anger en godtycklig modulväg
     if "." in job_type:
         return ["python", "-m", job_type]
 
-    log(f"Okänt JOB_TYPE: {job_type}. Stöds: collect, produce, assemble eller en full modulväg (ex. 'src.assemble.assemble_episode').")
+    log(f"Okänt JOB_TYPE: {job_type}. Stöds: collect, produce, assemble eller en full modulväg (ex. 'src.assembler.assemble_episode').")
     raise SystemExit(2)
 
 # -------------------------------
