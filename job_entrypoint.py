@@ -62,14 +62,12 @@ def build_command():
     - produce + JOB_ARGS tom -> python -m src.produce_auto
       (automatisk körning enligt planfil)
     - produce + JOB_ARGS satt -> python -m src.produce_section <JOB_ARGS...>
+    - assemble + JOB_ARGS -> python -m src.assemble.assemble_episode <JOB_ARGS...>
     - annars: om JOB_TYPE pekar på ett modulnamn, kör python -m <värdet>
-      (behåller flexibilitet om ni redan använder andra typer)
     """
     job_type = (os.getenv("JOB_TYPE") or "").strip().lower()
     job_args = (os.getenv("JOB_ARGS") or "").strip()
 
-    # Vanliga kvalitetssäkringar för lokalläge om ni nyttjar dem
-    # (påverkar inte molnet om de inte används i koden)
     # Normalisera USE_LOCAL
     if "USE_LOCAL" in os.environ:
         v = os.environ["USE_LOCAL"].strip().lower()
@@ -85,21 +83,22 @@ def build_command():
 
     if job_type == "produce":
         if job_args:
-            # Pass-through till produce_section med dina flaggor
             return ["python", "-m", "src.produce_section"] + shlex.split(job_args)
         else:
-            # Auto-produce (ingen CLI behövs)
             return ["python", "-m", "src.produce_auto"]
 
-    # Fallback: tillåt att JOB_TYPE anger en godtycklig modulväg (t.ex. "src.assemble")
-    # så ni kan introducera fler jobb utan att röra entrypointen.
-    # Ex: JOB_TYPE=src.assemble  -> python -m src.assemble
-    #     JOB_TYPE=my.pkg.task    -> python -m my.pkg.task
+    if job_type == "assemble":
+        # Defaulta till assemble_episode
+        if job_args:
+            return ["python", "-m", "src.assemble.assemble_episode"] + shlex.split(job_args)
+        else:
+            return ["python", "-m", "src.assemble.assemble_episode"]
+
+    # Fallback: tillåt att JOB_TYPE anger en godtycklig modulväg
     if "." in job_type:
         return ["python", "-m", job_type]
 
-    # Om vi landar här är JOB_TYPE okänt. Visa hjälpsam text.
-    log(f"Okänt JOB_TYPE: {job_type}. Stöds: collect, produce eller en full modulväg (ex. 'src.assemble').")
+    log(f"Okänt JOB_TYPE: {job_type}. Stöds: collect, produce, assemble eller en full modulväg (ex. 'src.assemble.assemble_episode').")
     raise SystemExit(2)
 
 # -------------------------------
