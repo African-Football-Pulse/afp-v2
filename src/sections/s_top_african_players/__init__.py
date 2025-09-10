@@ -1,203 +1,107 @@
-# src/sections/s_top_african_players/__init__.py
-from typing import Any, Dict, List
-import json, re, os
-from urllib.request import urlopen, Request
+import os, json, time
+from datetime import datetime, UTC
+from pathlib import Path
+import urllib.parse as up
+import requests
 
-from .providers.news_items import coerce_item
-from .providers.stats import load_stats
-from .logic.select import pick_top_from_stats, pick_top_from_news
-from .renderers.stats import render_stats
-from .renderers.news import render_news
-from .renderers.gpt import render_gpt
+def _make_blob_url(container_sas_url: str, blob_path: str) -> str:
+    p = up.urlparse(container_sas_url)
+    base = f"{p.scheme}://{p.netloc}{p.path.rstrip('/')}"
+    return f"{base}/{blob_path.lstrip('/')}?{p.query}"
 
-NAME_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b")
-STOPWORDS = {
-    "The","A","An","And","Or","But","If","Of","In","On","At","To","For","With","From","By","As",
-    "Man","City","United","FC","CF","SC","AC","AFC","BC","Cup","League","Premier","La","Liga","Serie","Bundesliga",
-    "Goal","Goals","Assist","Assists","Wins","Win","Draw","Loss","Match","Derby","Coach","Boss","Transfer","Rumours","Rumors",
-    "Liverpool","Arsenal","Chelsea","Tottenham","Spurs","Manchester","Newcastle","Everton","Aston","Villa","Forest","Palace",
-    "Real","Barcelona","Bayern","Dortmund","PSG","Marseille","Roma","Inter","Milan",
-    "Old","Firm","Etihad","Emirates","Anfield","St","James","Park","Bridge","Weekly","Football","Guardian","Independent","Sky","Podcast",
-    "Africa","African","Nigeria","Ghana","Senegal","Egypt","Morocco","Algeria","Tunisia","Ivory","Coast",
-}
+def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
+                  content_type="application/octet-stream", retries=3, backoff=0.8) -> str:
+    url = _make_blob_url(container_sas_url, blob_path)
+    headers = {
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": "2020-10-02",
+        "Content-Type": content_type,
+    }
+    for attempt in range(1, retries+1):
+        r = requests.put(url, headers=headers, data=data, timeout=60)
+        if r.status_code in (201, 202):
+            return url
+        if attempt == retries:
+            raise RuntimeError(f"Blob upload failed ({r.status_code}): {r.text[:500]}")
+        time.sleep(backoff * attempt)
 
-def _extract_candidates(text: str) -> List[str]:
-    if not text: return []
-    seen, out = set(), []
-    for m in NAME_RE.finditer(text):
-        name = m.group(1).strip()
-        parts = name.split()
-        if len(parts) < 2 or any(p in STOPWORDS for p in parts): continue
-        if name not in seen:
-            seen.add(name); out.append(name)
-    return out
+def build_section(
+    *,
+    section_code: str,
+    news: str,
+    date: str,
+    league: str = "_",
+    topic: str = "_",
+    layout: str = "alias-first",
+    path_scope: str = "single",
+    write_latest: bool = True,
+    dry_run: bool = False,
+    outdir: str = "outputs/sections",
+    model: str = "static",
+    type: str = "stats",
+) -> dict:
+    """
+    Build 'Top African Players' section and write outputs to Azure Blob or local fs.
+    """
 
-def _inline_enrich_players(item: dict) -> dict:
-    title = (item.get("title") or "").strip()
-    summary = (item.get("summary") or item.get("description") or "").strip()
-    if not item.get("published_at"):
-        item["published_at"] = item.get("published_iso") or item.get("published")
-    entities = item.get("entities") or {}
-    players = entities.get("players") or []
-    if not players:
-        players = _extract_candidates(f"{title} {summary}")
-        if players:
-            entities["players"] = players
-            item["entities"] = entities
-    return item
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
-def _fetch_json(path: str):
-    if path.startswith("http"):
-        req = Request(path, headers={"User-Agent": "afp-producer/1.0"})
-        with urlopen(req) as f:
-            return json.load(f)
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def _load_personas(personas_path: str | None) -> Dict[str, Any]:
-    if not personas_path: return {}
-    try:
-        with open(personas_path, "r", encoding="utf-8") as f:
-            return json.load(f) or {}
-    except Exception:
-        return {}
-
-def _payload(text: str, target_len: int, sources: List[str], persona_name: str) -> Dict[str, Any]:
-    words = max(1, len(text.split()))
-    sec = int(round(words / 2.5))
-    if abs(sec - target_len) <= 5: sec = target_len
-    return {
+    # --- bygg själva texten (just nu placeholder "No news items available")
+    text = "No news items available."
+    payload = {
         "slug": "top_african_players",
         "title": "Top African Players this week",
-        "text": text.strip(),
-        "length_s": sec,
-        "sources": sorted({s for s in (sources or []) if s}),
-        "meta": {"persona": persona_name},
+        "text": text,
+        "length_s": 2,
+        "sources": [],
+        "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
     }
 
-def build(ctx: Dict[str, Any]) -> Dict[str, Any]:
-    # ALWAYS English output
-    lang = "en"
-    top_n = int(ctx.get("config", {}).get("top_african_players", {}).get("top_n", 3))
-    target_len = int(ctx.get("target_length_s", 50))
-    persona = ctx.get("persona") or {}
-    persona_name = persona.get("name") or persona.get("key") or "AK"
-
-    stats = load_stats(ctx)
-    if stats:
-        top = pick_top_from_stats(stats, top_n=top_n, ctx=ctx)
-        if top:
-            text, sources = render_stats(top, lang=lang, target_sec=target_len)
-            return _payload(text, target_len, sources, persona_name)
-
-    items = ctx.get("items") or []
-    if not items:
-        return _payload("No news items available.", target_len, [], persona_name)
-
-    top = pick_top_from_news(items, top_n=top_n, ctx=ctx)
-
-    # Prefer GPT if enabled; otherwise fall back to rule-based
-    nlg_provider = ctx.get("config",{}).get("top_african_players",{}).get("nlg",{}).get("provider") \
-                   or os.getenv("AFP_NLG", "").lower()
-    if nlg_provider == "gpt":
-        text, sources = render_gpt(top, lang=lang, target_sec=target_len, ctx=ctx)
+    # --- paths
+    if layout == "alias-first":
+        base = f"sections/{section_code}/{date}/{league}/{topic}"
     else:
-        text, sources = render_news(top, lang=lang, target_sec=target_len, ctx=ctx)
+        base = f"sections/{date}/{league}/{topic}/{section_code}"
 
-    return _payload(text, target_len, sources, persona_name)
+    json_rel = f"{base}/section.json"
+    md_rel   = f"{base}/section.md"
+    man_rel  = f"{base}/section_manifest.json"
 
-def build_section(section_code: str, news_path: str, date: str, league: str,
-                  outdir: str, layout: str=None, path_scope: str=None,
-                  personas_path: str=None, model: str=None, speaker: str=None,
-                  write_latest: bool=True, **kwargs):
-    import re
-    def _swap_source(p: str, new_src: str) -> str:
-        return re.sub(r'(/news/)([^/]+)(/)', r'\1' + new_src + r'\3', p, count=1)
-    def _load_items_from(p: str) -> list:
-        raw = _fetch_json(p)
-        return raw["items"] if isinstance(raw, dict) and "items" in raw else (raw or [])
+    # --- build artifacts
+    json_bytes = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    md_bytes = (f"### Top African Players\n\n{text}\n").encode("utf-8")
 
-    # ALWAYS English
-    lang = "en"
-
-    # Personas: ladda + välj AK som default (kan override via persona_key)
-    personas = _load_personas(personas_path)
-    persona_key = kwargs.get("persona_key") or os.getenv("AFP_PERSONA_KEY", "AK")
-    persona = personas.get(persona_key) if isinstance(personas, dict) else None
-    if persona:
-        persona = dict(persona)
-        persona["key"] = persona_key
-    else:
-        persona = {"key": "AK", "name": "Ama K (Amarachi Kwarteng)"}
-
-    # Hämta nyhetsfiler (multi-källa)
-    news_paths: list[str] = []
-    news_multi = kwargs.get("news_multi")
-    extras = kwargs.get("extra_sources") or kwargs.get("sources")
-    if isinstance(news_multi, list) and news_multi:
-        news_paths = [p for p in news_multi if isinstance(p, str)]
-        if news_path and all(news_path != p for p in news_paths):
-            news_paths.insert(0, news_path)
-    elif isinstance(extras, list) and extras:
-        news_paths = [news_path] if news_path else []
-        for src in extras:
-            news_paths.append(_swap_source(news_path, src))
-    else:
-        news_paths = [news_path] if news_path else []
-
-    seen_id, seen_link, seen_title = set(), set(), set()
-    raw_items: list[dict] = []
-    for p in news_paths:
-        try:
-            arr = _load_items_from(p)
-        except Exception:
-            continue
-        for r in arr:
-            rid = r.get("id"); link = r.get("link"); title = r.get("title")
-            if rid and rid in seen_id: continue
-            if link and link in seen_link: continue
-            if (not rid and not link) and title and title in seen_title: continue
-            if rid: seen_id.add(rid)
-            if link: seen_link.add(link)
-            if title: seen_title.add(title)
-            raw_items.append(r)
-
-    items = []
-    for r in raw_items:
-        c = coerce_item(r)
-        c = _inline_enrich_players(c)
-        items.append(c)
-
-    ctx = {
-        "league": league,
-        "lang": "en",
-        "items": items,
-        "persona": persona,
-        "config": {
-            "top_african_players": {
-                "top_n": 3,
-                "africa": {
-                    "whitelist_only": True,
-                    "lexicon_path": "config/players_africa.json",   # <-- VIKTIG RAD
-                    "whitelist_path": "config/player_lexicon_africa.txt",  # valfri legacy
-                    "boost": 0.3
-                },
-                "nlg": {
-                    "provider": os.getenv("AFP_NLG", "gpt"),
-                    "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-                    "catchphrases": False
-                }
-            }
-        },
-    }
-
-                      
-    payload = build(ctx)
-    # Sätt meta.persona till AK
-    return {
+    manifest = {
         "section_code": section_code,
-        "date": date,
+        "type": type,
+        "model": model,
+        "created_utc": ts,
         "league": league,
-        "payload": payload,
-        "outdir": outdir,
+        "topic": topic,
+        "date": date,
+        "blobs": {"json": json_rel, "md": md_rel},
+        "metrics": {"length_s": payload["length_s"]},
+        "sources": {"news_input_path": str(news)},
     }
+    man_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
+
+    # --- write to Azure Blob or local
+    sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
+    if sas:
+        if dry_run:
+            print("=== DRY RUN ===")
+            print("Would upload JSON →", _make_blob_url(sas, json_rel))
+            print("Would upload MD   →", _make_blob_url(sas, md_rel))
+            print("Would upload MAN  →", _make_blob_url(sas, man_rel))
+        else:
+            _upload_bytes(sas, json_rel, json_bytes, "application/json")
+            _upload_bytes(sas, md_rel, md_bytes, "text/markdown")
+            _upload_bytes(sas, man_rel, man_bytes, "application/json")
+    else:
+        outdirp = Path(outdir) / base
+        outdirp.mkdir(parents=True, exist_ok=True)
+        (outdirp / "section.json").write_text(json_bytes.decode("utf-8"), encoding="utf-8")
+        (outdirp / "section.md").write_text(md_bytes.decode("utf-8"), encoding="utf-8")
+        (outdirp / "section_manifest.json").write_text(man_bytes.decode("utf-8"), encoding="utf-8")
+
+    return manifest
