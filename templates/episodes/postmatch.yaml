@@ -1,0 +1,14 @@
+episode:
+  title: "AFP Postmatch Episode"
+  segments:
+    - type: section
+      section_code: "S.GENERIC.INTRO_POSTMATCH"
+      persona: "AK"
+
+    - type: dynamic
+      source: "produce_plan"
+      persona: "AK"
+
+    - type: section
+      section_code: "S.GENERIC.OUTRO_POSTMATCH"
+      persona: "AK"
