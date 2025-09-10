@@ -28,8 +28,8 @@ def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
 def build_section(
     *,
     section_code: str,
-    news: str,
     date: str,
+    news: str | None = None,   # gör optional
     league: str = "_",
     topic: str = "_",
     layout: str = "alias-first",
@@ -46,7 +46,7 @@ def build_section(
 
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
-    # --- bygg själva texten (just nu placeholder "No news items available")
+    # --- bygg själva texten (placeholder tills riktig logik är på plats)
     text = "No news items available."
     payload = {
         "slug": "top_african_players",
@@ -81,7 +81,7 @@ def build_section(
         "date": date,
         "blobs": {"json": json_rel, "md": md_rel},
         "metrics": {"length_s": payload["length_s"]},
-        "sources": {"news_input_path": str(news)},
+        "sources": {"news_input_path": str(news) if news else None},
     }
     man_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
 
