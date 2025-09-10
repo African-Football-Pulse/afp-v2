@@ -60,9 +60,8 @@ def build_command():
     Returnerar argv-listan som ska köras.
     - collect -> python -m src.collectors.rss_multi
     - produce + JOB_ARGS tom -> python -m src.produce_auto
-      (automatisk körning enligt planfil)
     - produce + JOB_ARGS satt -> python -m src.produce_section <JOB_ARGS...>
-    - assemble + JOB_ARGS -> python -m src.assemble.assemble_episode <JOB_ARGS...>
+    - assemble -> python -m src.assemble.assemble_episode <JOB_ARGS...>
     - annars: om JOB_TYPE pekar på ett modulnamn, kör python -m <värdet>
     """
     job_type = (os.getenv("JOB_TYPE") or "").strip().lower()
@@ -88,7 +87,6 @@ def build_command():
             return ["python", "-m", "src.produce_auto"]
 
     if job_type == "assemble":
-        # Defaulta till assemble_episode
         if job_args:
             return ["python", "-m", "src.assemble.assemble_episode"] + shlex.split(job_args)
         else:
