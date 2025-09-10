@@ -1,6 +1,6 @@
 # src/assemble/assemble_episode.py
 import argparse, json, os, sys, yaml, pathlib, time
-from datetime import datetime
+from datetime import datetime, UTC
 import urllib.parse as up
 import requests
 
@@ -42,15 +42,21 @@ def read_section_text(base, date, section_code):
         m = json.load(f)
     return m.get("payload", {}).get("text", "").strip(), str(path)
 
+def today() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%d")
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", required=True)
+    ap.add_argument("--date", required=False, help="YYYY-MM-DD (default = today UTC)")
     ap.add_argument("--league", required=True)
     ap.add_argument("--mode", default="postmatch")
     ap.add_argument("--lang", default="en")
     ap.add_argument("--template", default="config/episode_templates/postmatch.yaml")
     ap.add_argument("--sections_root", default="producer/sections")
     args = ap.parse_args()
+
+    if not args.date:
+        args.date = today()
 
     sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
     if not sas:
