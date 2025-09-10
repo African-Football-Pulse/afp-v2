@@ -22,7 +22,7 @@ docker run --rm \
 
 ### 4. Verify output in Azure Blob
 Alla producerade sektioner skrivs till:
-producer/sections/<SECTION_CODE>/<DATE>/<LEAGUE>/<TOPIC>/
+sections/<SECTION_CODE>/<DATE>/<LEAGUE>/<TOPIC>/
 med tre filer:
 - section.json
 - section.md
