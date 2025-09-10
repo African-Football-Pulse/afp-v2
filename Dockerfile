@@ -18,8 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ src/
 COPY config/ config/
 
+# Secrets (läggs in i imagen under /app/secrets/)
+COPY secrets/ /app/secrets/
+
 # Entrypoint-skript som startar rätt modul och laddar hemligheter
 COPY job_entrypoint.py /app/job_entrypoint.py
 
-# Kör alltid via entrypoint-skriptet (ingen portal-override behövs)
+# Kör alltid via entrypoint-skriptet
 ENTRYPOINT ["python","-u","/app/job_entrypoint.py"]
