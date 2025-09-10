@@ -1,6 +1,35 @@
 # src/assemble/assemble_episode.py
-import argparse, json, os, pathlib, sys, yaml
+import argparse, json, os, sys, yaml, pathlib, time
+from datetime import datetime
+import urllib.parse as up
+import requests
 
+def log(msg: str):
+    print(f"[assemble] {msg}", flush=True)
+
+# ---------- Azure helpers ----------
+def _make_blob_url(container_sas_url: str, blob_path: str) -> str:
+    p = up.urlparse(container_sas_url)
+    base = f"{p.scheme}://{p.netloc}{p.path.rstrip('/')}"
+    return f"{base}/{blob_path.lstrip('/')}?{p.query}"
+
+def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
+                  content_type="application/octet-stream", retries=3, backoff=0.8) -> str:
+    url = _make_blob_url(container_sas_url, blob_path)
+    headers = {
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": "2020-10-02",
+        "Content-Type": content_type,
+    }
+    for attempt in range(1, retries+1):
+        r = requests.put(url, headers=headers, data=data, timeout=60)
+        if r.status_code in (201, 202):
+            return url
+        if attempt == retries:
+            raise RuntimeError(f"Blob upload failed ({r.status_code}): {r.text[:500]}")
+        time.sleep(backoff * attempt)
+
+# ---------- Episode assembly ----------
 def load_yaml(p):
     with open(p, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -8,7 +37,7 @@ def load_yaml(p):
 def read_section_text(base, date, section_code):
     path = pathlib.Path(base) / date / section_code / "manifest.json"
     if not path.exists():
-        return None, str(path)  # returnera None om filen inte finns
+        return None, str(path)
     with open(path, "r", encoding="utf-8") as f:
         m = json.load(f)
     return m.get("payload", {}).get("text", "").strip(), str(path)
@@ -21,8 +50,12 @@ def main():
     ap.add_argument("--lang", default="en")
     ap.add_argument("--template", default="config/episode_templates/postmatch.yaml")
     ap.add_argument("--sections_root", default="producer/sections")
-    ap.add_argument("--out_root", default="assembler/episodes")
     args = ap.parse_args()
+
+    sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
+    if not sas:
+        log("ERROR: No BLOB_CONTAINER_SAS_URL set")
+        sys.exit(1)
 
     tpl = load_yaml(args.template)["episode"]
     segs = tpl["segments"]
@@ -39,11 +72,10 @@ def main():
                 manifest_segments.append({
                     "type": "section",
                     "section_code": s["section_code"],
-                    "persona": s.get("persona", "AK"),
+                    "persona": persona,
                     "source": src_path
                 })
             else:
-                # markera som missing
                 manifest_segments.append({
                     "type": "section",
                     "section_code": s["section_code"],
@@ -51,12 +83,9 @@ def main():
                     "source": src_path,
                     "missing": True
                 })
-                print(f"[WARN] Missing section source: {src_path}")
+                log(f"[WARN] Missing section source: {src_path}")
         else:
             manifest_segments.append(s)
-
-    out_dir = pathlib.Path(args.out_root) / args.date / args.league / args.mode / args.lang
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     episode_manifest = {
         "episode_id": f"{args.date}-{args.league}-{args.mode}-{args.lang}",
@@ -72,16 +101,15 @@ def main():
         }
     }
 
-    (out_dir / "episode_manifest.json").write_text(
-        json.dumps(episode_manifest, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
-    (out_dir / "episode_script.txt").write_text(
-        "\n\n".join(lines),
-        encoding="utf-8"
-    )
+    base = f"assembler/episodes/{args.date}/{args.league}/{args.mode}/{args.lang}/"
+    _upload_bytes(sas, base + "episode_manifest.json",
+                  json.dumps(episode_manifest, ensure_ascii=False, indent=2).encode("utf-8"),
+                  "application/json")
+    _upload_bytes(sas, base + "episode_script.txt",
+                  "\n\n".join(lines).encode("utf-8"),
+                  "text/plain; charset=utf-8")
 
-    print(f"✅ Done → {out_dir}")
+    log(f"✅ Uploaded episode → {base}")
 
 if __name__ == "__main__":
     sys.exit(main())
