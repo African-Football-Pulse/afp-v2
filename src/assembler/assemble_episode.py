@@ -1,4 +1,4 @@
-# src/assemble/assemble_episode.py
+# src/assembler/assemble_episode.py
 import argparse, json, os, sys, yaml, pathlib, time
 from datetime import datetime, UTC
 import urllib.parse as up
@@ -29,7 +29,7 @@ def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
             raise RuntimeError(f"Blob upload failed ({r.status_code}): {r.text[:500]}")
         time.sleep(backoff * attempt)
 
-# ---------- Episode assembly ----------
+# ---------- Helpers ----------
 def load_yaml(p):
     with open(p, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -45,14 +45,24 @@ def read_section_text(base, date, section_code):
 def today() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
 
+def list_plan_sections(plan_path: str, mode: str):
+    plan = load_yaml(plan_path)
+    sections = []
+    for job in plan.get("jobs", []):
+        if job.get("mode") == mode:
+            sections.extend(job.get("sections", []))
+    return sections
+
+# ---------- Main ----------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", required=False, help="YYYY-MM-DD (default = today UTC)")
     ap.add_argument("--league", required=True)
     ap.add_argument("--mode", default="postmatch")
     ap.add_argument("--lang", default="en")
-    ap.add_argument("--template", default="config/episode_templates/postmatch.yaml")
+    ap.add_argument("--template", default="templates/episodes/postmatch.yaml")
     ap.add_argument("--sections_root", default="producer/sections")
+    ap.add_argument("--plan", default="config/produce_plan.yaml")
     args = ap.parse_args()
 
     if not args.date:
@@ -90,6 +100,27 @@ def main():
                     "missing": True
                 })
                 log(f"[WARN] Missing section source: {src_path}")
+
+        elif s["type"] == "dynamic":
+            # Hämta planerade sektioner från produce_plan
+            plan_sections = list_plan_sections(args.plan, args.mode)
+            for sec in plan_sections:
+                code = sec.get("section_code")
+                if not code:
+                    continue
+                text, src_path = read_section_text(args.sections_root, args.date, code)
+                if text:
+                    persona = s.get("persona", "AK")
+                    lines.append(f"[{persona}] {text}")
+                    manifest_segments.append({
+                        "type": "section",
+                        "section_code": code,
+                        "persona": persona,
+                        "source": src_path
+                    })
+                else:
+                    log(f"[WARN] Dynamic section missing: {src_path}")
+
         else:
             manifest_segments.append(s)
 
