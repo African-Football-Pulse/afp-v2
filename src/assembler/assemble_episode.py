@@ -34,13 +34,14 @@ def load_yaml(p):
     with open(p, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-def read_section_text(base, date, section_code):
-    path = pathlib.Path(base) / date / section_code / "manifest.json"
+def read_section_text(base, date, section_code, league, topic="_"):
+    # Anpassad till hur Produce faktiskt skriver i Azure
+    path = pathlib.Path(base) / section_code / date / league / topic / "section.json"
     if not path.exists():
         return None, str(path)
     with open(path, "r", encoding="utf-8") as f:
         m = json.load(f)
-    return m.get("payload", {}).get("text", "").strip(), str(path)
+    return m.get("text", "").strip(), str(path)
 
 def today() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
@@ -61,7 +62,7 @@ def main():
     ap.add_argument("--mode", default="postmatch")
     ap.add_argument("--lang", default="en")
     ap.add_argument("--template", default="templates/episodes/postmatch.yaml")
-    ap.add_argument("--sections_root", default="producer/sections")
+    ap.add_argument("--sections_root", default="sections")
     ap.add_argument("--plan", default="config/produce_plan.yaml")
     args = ap.parse_args()
 
@@ -81,7 +82,7 @@ def main():
 
     for s in segs:
         if s["type"] == "section":
-            text, src_path = read_section_text(args.sections_root, args.date, s["section_code"])
+            text, src_path = read_section_text(args.sections_root, args.date, s["section_code"], args.league)
             if text:
                 persona = s.get("persona", "AK")
                 lines.append(f"[{persona}] {text}")
@@ -102,13 +103,12 @@ def main():
                 log(f"[WARN] Missing section source: {src_path}")
 
         elif s["type"] == "dynamic":
-            # Hämta planerade sektioner från produce_plan
             plan_sections = list_plan_sections(args.plan, args.mode)
             for sec in plan_sections:
                 code = sec.get("section_code")
                 if not code:
                     continue
-                text, src_path = read_section_text(args.sections_root, args.date, code)
+                text, src_path = read_section_text(args.sections_root, args.date, code, args.league)
                 if text:
                     persona = s.get("persona", "AK")
                     lines.append(f"[{persona}] {text}")
