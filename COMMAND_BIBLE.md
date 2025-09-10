@@ -10,6 +10,10 @@ docker run --rm \
   afp-produce
 
 ### 3. Run a single section only (exempel: Daily Intro)
+
+Kör på en rad:
+docker run --rm -e JOB_TYPE=produce -v $(pwd)/secrets/secret.json:/app/secrets/secret.json afp-produce
+
 docker run --rm \
   -e JOB_TYPE=produce \
   -v $(pwd)/secrets/secret.json:/app/secrets/secret.json \
