@@ -13,6 +13,14 @@ def _make_blob_url(container_sas_url: str, blob_path: str) -> str:
     base = f"{p.scheme}://{p.netloc}{p.path.rstrip('/')}"
     return f"{base}/{blob_path.lstrip('/')}?{p.query}"
 
+def _get_blob_json(container_sas_url: str, blob_path: str):
+    """Försöker hämta och returnera JSON från Azure Blob."""
+    url = _make_blob_url(container_sas_url, blob_path)
+    r = requests.get(url, timeout=30)
+    if r.status_code == 200:
+        return r.json(), blob_path
+    return None, blob_path
+
 def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
                   content_type="application/octet-stream", retries=3, backoff=0.8) -> str:
     url = _make_blob_url(container_sas_url, blob_path)
@@ -36,20 +44,18 @@ def load_yaml(p):
 
 def read_section_text(container_sas_url, date, section_code, league, lang="en", topic="_"):
     """
-    Läser section.json direkt från Azure Blob via SAS.
-    Försöker först utan språk, sedan med språk.
+    Försöker läsa sektionstext från Azure Blob.
+    Testar två varianter: utan språk, med språk.
     """
     paths = [
         f"sections/{section_code}/{date}/{league}/{topic}/section.json",
         f"sections/{section_code}/{date}/{league}/{topic}/{lang}/section.json",
     ]
     for blob_path in paths:
-        url = _make_blob_url(container_sas_url, blob_path)
-        r = requests.get(url, timeout=30)
-        if r.status_code == 200:
-            log(f"[INFO] Hittade sektion i Blob: {blob_path}")
-            m = r.json()
-            return m.get("text", "").strip(), blob_path
+        m, used_path = _get_blob_json(container_sas_url, blob_path)
+        if m:
+            log(f"[INFO] Hittade sektion i Blob: {used_path}")
+            return m.get("text", "").strip(), used_path
     log(f"[WARN] Ingen sektion hittades för {section_code} (testade {paths})")
     return None, paths[0]
 
@@ -112,13 +118,14 @@ def main():
 
         elif s["type"] == "dynamic":
             plan_sections = list_plan_sections(args.plan, args.mode)
+            log(f"[DEBUG] Plan sections for mode={args.mode}: {[sec.get('section_code') for sec in plan_sections]}")
             for sec in plan_sections:
                 code = sec.get("section_code")
                 if not code:
                     continue
                 text, src_path = read_section_text(sas, args.date, code, args.league, args.lang)
                 if text:
-                    persona = s.get("persona", "AK")
+                    persona = sec.get("persona", s.get("persona", "AK"))
                     lines.append(f"[{persona}] {text}")
                     manifest_segments.append({
                         "type": "section",
@@ -130,7 +137,7 @@ def main():
                     manifest_segments.append({
                         "type": "section",
                         "section_code": code,
-                        "persona": s.get("persona", "AK"),
+                        "persona": sec.get("persona", s.get("persona", "AK")),
                         "source": src_path,
                         "missing": True
                     })
