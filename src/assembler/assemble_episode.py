@@ -45,7 +45,9 @@ def load_yaml(p):
 def read_section_text(container_sas_url, date, section_code, league, lang="en", topic="_"):
     """
     Läser section.json direkt från Azure Blob via SAS.
-    Försöker först utan språk, sedan med språk.
+    Stödjer både:
+    - text: "enkel sektion"
+    - dialogue: [ {speaker:..., text:...}, ... ]
     """
     paths = [
         f"sections/{section_code}/{date}/{league}/{topic}/section.json",
@@ -55,7 +57,11 @@ def read_section_text(container_sas_url, date, section_code, league, lang="en", 
         m, used_path = _get_blob_json(container_sas_url, blob_path)
         if m:
             log(f"[INFO] Hittade sektion i Blob: {used_path}")
-            return m.get("text", "").strip(), used_path
+            if "text" in m and m["text"]:
+                return m["text"].strip(), used_path
+            elif "dialogue" in m and isinstance(m["dialogue"], list):
+                lines = [f"[{d.get('speaker','')}] {d.get('text','')}" for d in m["dialogue"] if d.get("text")]
+                return "\n".join(lines), used_path
     log(f"[WARN] Ingen sektion hittades för {section_code} (testade {paths})")
     return None, paths[0]
 
@@ -134,8 +140,8 @@ def main():
                 code = sec.get("section_code")
                 if not code:
                     continue
-                # ⚠️ Filtrera bort intro/outro eftersom de redan finns i template
-                if code in ("S.GENERIC.INTRO_POSTMATCH", "S.GENERIC.OUTRO_POSTMATCH"):
+                # ⚠️ Filtrera bort intro/outro eftersom de hanteras av template
+                if code.startswith("S.GENERIC.INTRO_") or code.startswith("S.GENERIC.OUTRO_"):
                     log(f"[DEBUG] Skippar {code} eftersom den hanteras av template")
                     continue
 
