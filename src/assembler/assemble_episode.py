@@ -44,8 +44,8 @@ def load_yaml(p):
 
 def read_section_text(container_sas_url, date, section_code, league, lang="en", topic="_"):
     """
-    Försöker läsa sektionstext från Azure Blob.
-    Testar två varianter: utan språk, med språk.
+    Läser section.json direkt från Azure Blob via SAS.
+    Försöker först utan språk, sedan med språk.
     """
     paths = [
         f"sections/{section_code}/{date}/{league}/{topic}/section.json",
@@ -63,11 +63,23 @@ def today() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
 
 def list_plan_sections(plan_path: str, mode: str):
+    """
+    Hämtar sektioner från produce_plan.
+    Stödjer både:
+    - Ny struktur: tasks: [ {section_code: ...}, ... ]
+    - Äldre struktur: jobs: [ {mode: ..., sections: [...]}, ... ]
+    """
     plan = load_yaml(plan_path)
     sections = []
-    for job in plan.get("jobs", []):
-        if job.get("mode") == mode:
-            sections.extend(job.get("sections", []))
+
+    if "tasks" in plan:
+        # Flat lista, ignorera mode (alla tasks gäller)
+        sections = plan["tasks"]
+    elif "jobs" in plan:
+        for job in plan.get("jobs", []):
+            if job.get("mode") == mode:
+                sections.extend(job.get("sections", []))
+
     return sections
 
 # ---------- Main ----------
@@ -118,7 +130,7 @@ def main():
 
         elif s["type"] == "dynamic":
             plan_sections = list_plan_sections(args.plan, args.mode)
-            log(f"[DEBUG] Plan sections for mode={args.mode}: {[sec.get('section_code') for sec in plan_sections]}")
+            log(f"[DEBUG] Plan sections loaded: {[sec.get('section_code') for sec in plan_sections]}")
             for sec in plan_sections:
                 code = sec.get("section_code")
                 if not code:
