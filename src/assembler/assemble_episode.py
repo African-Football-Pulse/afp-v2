@@ -73,7 +73,6 @@ def list_plan_sections(plan_path: str, mode: str):
     sections = []
 
     if "tasks" in plan:
-        # Flat lista, ignorera mode (alla tasks gäller)
         sections = plan["tasks"]
     elif "jobs" in plan:
         for job in plan.get("jobs", []):
@@ -135,6 +134,11 @@ def main():
                 code = sec.get("section_code")
                 if not code:
                     continue
+                # ⚠️ Filtrera bort intro/outro eftersom de redan finns i template
+                if code in ("S.GENERIC.INTRO_POSTMATCH", "S.GENERIC.OUTRO_POSTMATCH"):
+                    log(f"[DEBUG] Skippar {code} eftersom den hanteras av template")
+                    continue
+
                 text, src_path = read_section_text(sas, args.date, code, args.league, args.lang)
                 if text:
                     persona = sec.get("persona", s.get("persona", "AK"))
