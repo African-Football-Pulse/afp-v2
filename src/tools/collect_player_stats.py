@@ -42,32 +42,42 @@ def collect_player_stats(player_id: str, league_id: str, season: str):
             if etype == "goal" and ev.get("player", {}).get("id") == player_id_int:
                 goals += 1
                 appeared = True
+                print(f"[DEBUG] Goal for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
+
             if etype == "penalty_goal" and ev.get("player", {}).get("id") == player_id_int:
                 penalty_goals += 1
-                goals += 1  # räknas även som mål
+                goals += 1
                 appeared = True
+                print(f"[DEBUG] Penalty goal for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
 
             # Assists
             if ev.get("assist_player", {}).get("id") == player_id_int:
                 assists += 1
                 appeared = True
+                print(f"[DEBUG] Assist for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
 
             # Cards
             if etype == "yellow_card" and ev.get("player", {}).get("id") == player_id_int:
                 yellow_cards += 1
                 appeared = True
+                print(f"[DEBUG] Yellow card for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
+
             if etype == "red_card" and ev.get("player", {}).get("id") == player_id_int:
                 red_cards += 1
                 appeared = True
+                print(f"[DEBUG] Red card for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
 
             # Substitutions
             if etype == "substitution":
                 if ev.get("player_in", {}).get("id") == player_id_int:
                     subs_in += 1
                     appeared = True
+                    print(f"[DEBUG] Substitution IN for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
+
                 if ev.get("player_out", {}).get("id") == player_id_int:
                     subs_out += 1
                     appeared = True
+                    print(f"[DEBUG] Substitution OUT for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
 
         if appeared:
             apps += 1
