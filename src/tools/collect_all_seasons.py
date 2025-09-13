@@ -26,7 +26,9 @@ def run_from_config(config_path: str):
         cfg = yaml.safe_load(f)
 
     leagues = cfg.get("leagues", [])
-    container = azure_blob.get_container_client(BLOB_CONTAINER_SAS_URL)
+    service_client = azure_blob.get_blob_service_client(BLOB_CONTAINER_SAS_URL)
+    container = service_client.get_container_client("afp")
+
 
     for league in leagues:
         if not league.get("enabled", False):
