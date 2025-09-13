@@ -1,5 +1,6 @@
 import os
 import json
+import argparse
 import requests
 from bs4 import BeautifulSoup
 from src.storage import azure_blob
@@ -7,35 +8,34 @@ from src.storage import azure_blob
 SOCCERDATA_AUTH_KEY = os.getenv("SOCCERDATA_AUTH_KEY")
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
+
 def fetch_soccerdata_player(player_id: int):
-    """Hämta spelardata från SoccerData API"""
     url = "https://api.soccerdataapi.com/player/"
     params = {"player_id": player_id, "auth_token": SOCCERDATA_AUTH_KEY}
     resp = requests.get(url, params=params, headers={"Content-Type": "application/json"})
     resp.raise_for_status()
     return resp.json()
 
+
 def fetch_wikipedia_profile(wiki_url: str):
-    """Hämta infobox + text från Wikipedia"""
     title = wiki_url.split("/wiki/")[-1]
-    api_url = f"https://en.wikipedia.org/w/api.php"
+    api_url = "https://en.wikipedia.org/w/api.php"
     params = {
         "action": "parse",
         "page": title,
         "format": "json",
         "prop": "text|sections"
     }
-    resp = requests.get(api_url)
+    resp = requests.get(api_url, params=params)
     resp.raise_for_status()
     data = resp.json()
 
-    # extrahera HTML
     html = data["parse"]["text"]["*"]
     soup = BeautifulSoup(html, "html.parser")
 
-    # Infobox
-    infobox = soup.find("table", {"class": "infobox"})
+    # Infobox extraction
     personal = {}
+    infobox = soup.find("table", {"class": "infobox"})
     if infobox:
         for row in infobox.find_all("tr"):
             header = row.find("th")
@@ -54,56 +54,81 @@ def fetch_wikipedia_profile(wiki_url: str):
                 elif "Current team" in key:
                     personal["current_team"] = val
 
-    # Career statistics table
-    career_stats = []
-    for table in soup.find_all("table", {"class": "wikitable"}):
-        if "Apps" in table.text and "Goals" in table.text:
-            for row in table.find_all("tr")[1:]:
-                cols = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
-                if len(cols) >= 3 and cols[0].isdigit() or "-" in cols[0]:
-                    career_stats.append(cols)
+    return {"personal": personal}
 
-    return {"personal": personal, "career_statistics_raw": career_stats}
 
-def build_profile(player_id: int, name: str, wiki_url: str):
-    """Bygg en spelarprofil med SoccerData + Wikipedia"""
-    soccerdata = fetch_soccerdata_player(player_id)
-    wiki = fetch_wikipedia_profile(wiki_url)
+def load_masterfile():
+    """Load players_africa_master.json from Azure"""
+    path = "players_africa_master.json"
+    return azure_blob.get_json(CONTAINER, path)
+
+
+def build_profile(player_meta: dict):
+    pid = player_meta["id"]
+    name = player_meta["name"]
+    wiki_url = player_meta["sources"].get("wikipedia")
+
+    soccerdata = None
+    if isinstance(pid, int):  # Only fetch from SoccerData if we have a numeric ID
+        try:
+            soccerdata = fetch_soccerdata_player(pid)
+        except Exception as e:
+            print(f"[WARN] SoccerData fetch failed for {name}: {e}")
+
+    wiki = {}
+    if wiki_url:
+        try:
+            wiki = fetch_wikipedia_profile(wiki_url)
+        except Exception as e:
+            print(f"[WARN] Wikipedia fetch failed for {name}: {e}")
 
     profile = {
-        "id": player_id,
+        "id": pid,
         "name": name,
-        "sources": {
-            "wikipedia": wiki_url,
-            "soccerdata": f"players/africa/{player_id}.json"
-        },
+        "sources": player_meta.get("sources", {}),
         "profile": {
-            "summary": soccerdata.get("name", name) + " is a professional footballer.",
+            "summary": f"{name} is a professional footballer.",
             "personal": wiki.get("personal", {}),
-            "club_career": None,  # TODO: hämta textavsnitt
-            "international_career": None,  # TODO
-            "style_of_play": None,  # TODO
-            "career_statistics": {
-                "by_club": wiki.get("career_statistics_raw", [])
-            },
+            "club_career": None,
+            "international_career": None,
+            "style_of_play": None,
+            "career_statistics": {},
             "honours": [],
             "trivia": []
         }
     }
+
     return profile
 
+
 def main():
-    # Testa med Wissam Ben Yedder
-    player_id = 56780
-    name = "Wissam Ben Yedder"
-    wiki_url = "https://en.wikipedia.org/wiki/Wissam_Ben_Yedder"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--player-id", required=True, help="Player ID (SoccerData ID or AFRxxx)")
+    args = parser.parse_args()
+    player_id = args.player_id
 
-    profile = build_profile(player_id, name, wiki_url)
+    print(f"[collect_player_profiles] Looking up {player_id} in masterfile...")
 
-    # Spara till Azure
+    master = load_masterfile()
+    players = master.get("players", [])
+
+    # Find player in masterfile
+    player_meta = None
+    for p in players:
+        if str(p["id"]) == str(player_id):
+            player_meta = p
+            break
+
+    if not player_meta:
+        raise ValueError(f"Player {player_id} not found in masterfile!")
+
+    profile = build_profile(player_meta)
+
+    # Save to Azure
     path = f"players/profiles/{player_id}.json"
     azure_blob.upload_json(CONTAINER, path, profile)
-    print(f"[collect_player_profiles] Uploaded profile for {name} → {path}")
+    print(f"[collect_player_profiles] Uploaded profile for {profile['name']} → {path}")
+
 
 if __name__ == "__main__":
     main()
