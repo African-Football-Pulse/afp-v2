@@ -21,14 +21,21 @@ def collect_teams(league_id: int, season: str):
     else:
         raise ValueError(f"Unexpected manifest format: {type(match_manifest)}")
 
-    # Extrahera unika team_id
+    # Extrahera unika team_id med stöd för flera format
     team_ids = set()
     for m in matches:
+        # Nyare format: m["teams"]["home"]["id"], m["teams"]["away"]["id"]
         if "teams" in m:
             if "home" in m["teams"] and "id" in m["teams"]["home"]:
                 team_ids.add(m["teams"]["home"]["id"])
             if "away" in m["teams"] and "id" in m["teams"]["away"]:
                 team_ids.add(m["teams"]["away"]["id"])
+
+        # Äldre/alternativt format: m["home"]["id"], m["away"]["id"]
+        if "home" in m and isinstance(m["home"], dict) and "id" in m["home"]:
+            team_ids.add(m["home"]["id"])
+        if "away" in m and isinstance(m["away"], dict) and "id" in m["away"]:
+            team_ids.add(m["away"]["id"])
 
     print(f"[collect_teams] Found {len(team_ids)} unique teams for league {league_id}, season {season}")
 
