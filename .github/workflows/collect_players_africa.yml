@@ -1,0 +1,44 @@
+name: Collect African Players
+
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: "League ID (e.g. 228 for Premier League)"
+        required: true
+        default: "228"
+      season:
+        description: "Season (e.g. 2024-2025)"
+        required: true
+        default: "2024-2025"
+
+jobs:
+  collect-african-players:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_players_africa
+        env:
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+          AZURE_STORAGE_CONTAINER: afp
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          python - <<EOF
+          import json
+          from src.tools.collect_players_africa import collect_players_africa
+          with open("players_africa.json", "r", encoding="utf-8") as f:
+              whitelist = json.load(f)
+          collect_players_africa(int("${{ github.event.inputs.league_id }}"), "${{ github.event.inputs.season }}", whitelist)
+          EOF
