@@ -3,33 +3,118 @@ leagues:
     id: 228
     name: "Premier League"
     country: "ENG"
+    is_cup: false
     season: "2024-2025"
-    enabled: true
+    enabled: false
 
-  - key: la_liga
-    id: 538
-    name: "La Liga"
-    country: "ESP"
+  - key: championship
+    id: 229
+    name: "Championship"
+    country: "ENG"
+    is_cup: false
     season: "2024-2025"
-    enabled: true
+    enabled: false
 
-  - key: bundesliga
-    id: 314
-    name: "Bundesliga"
-    country: "GER"
+  - key: fa_cup
+    id: 230
+    name: "FA Cup"
+    country: "ENG"
+    is_cup: true
     season: "2024-2025"
-    enabled: true
+    enabled: false
+
+  - key: champions_league
+    id: 310
+    name: "UEFA Champions League"
+    country: "EUR"
+    is_cup: true
+    season: "2024-2025"
+    enabled: false
+
+  - key: europa_league
+    id: 326
+    name: "Europa League"
+    country: "EUR"
+    is_cup: true
+    season: "2024-2025"
+    enabled: false
+
+  - key: europa_conference_league
+    id: 198
+    name: "Europa Conference League"
+    country: "EUR"
+    is_cup: true
+    season: "2024-2025"
+    enabled: false
 
   - key: ligue_1
-    id: 301
+    id: 235
     name: "Ligue 1"
     country: "FRA"
+    is_cup: false
     season: "2024-2025"
-    enabled: true
+    enabled: false
+
+  - key: bundesliga
+    id: 241
+    name: "Bundesliga"
+    country: "GER"
+    is_cup: false
+    season: "2024-2025"
+    enabled: false
 
   - key: serie_a
-    id: 227
+    id: 253
     name: "Serie A"
     country: "ITA"
+    is_cup: false
     season: "2024-2025"
-    enabled: true
+    enabled: false
+
+  - key: eredivisie
+    id: 268
+    name: "Eredivisie"
+    country: "NED"
+    is_cup: false
+    season: "2024-2025"
+    enabled: false
+
+  - key: primeira_liga
+    id: 280
+    name: "Primeira Liga"
+    country: "POR"
+    is_cup: false
+    season: "2024-2025"
+    enabled: false
+
+  - key: premiership
+    id: 289
+    name: "Premiership"
+    country: "SCO"
+    is_cup: false
+    season: "2024-2025"
+    enabled: false
+
+  - key: la_liga
+    id: 297
+    name: "La Liga"
+    country: "ESP"
+    is_cup: false
+    season: "2024-2025"
+    enabled: false
+
+  - key: mls
+    id: 168
+    name: "MLS"
+    country: "USA"
+    is_cup: false
+    season: "2024"
+    enabled: false
+
+  - key: csl
+    id: 181
+    name: "CSL"
+    country: "CHN"
+    is_cup: false
+    season: "2024"
+    enabled: false
