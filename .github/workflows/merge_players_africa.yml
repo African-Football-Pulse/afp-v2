@@ -1,7 +1,7 @@
 name: Merge African Players
 
 on:
-  workflow_dispatch:   # körs manuellt
+  workflow_dispatch:
 
 jobs:
   merge-african-players:
@@ -15,19 +15,21 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: Run merge_players_africa
+        env:
+          AZURE_STORAGE_CONTAINER: afp
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
           python - <<EOF
           from src.tools.merge_players_africa import merge_players_africa
           merge_players_africa(
               whitelist_path="players_africa.json",
               ids_path="player_ID.txt",
-              output_path="players_africa_master.json"
+              season="2024-2025"
           )
           EOF
-
-      - name: Upload merged file as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: players_africa_master
-          path: players_africa_master.json
