@@ -4,7 +4,7 @@ from pathlib import Path
 from src.collectors.collect_stats import collect_stats
 
 
-def run_from_config(config_path: str):
+def run_from_config(config_path: str, season: str):
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
@@ -14,7 +14,6 @@ def run_from_config(config_path: str):
             continue
 
         league_id = league["id"]
-        season = league["season"]
         name = league["name"]
 
         print(f"[collect_stats_fullseason] Fetching full season for {name} (id={league_id}, season={season})")
@@ -29,7 +28,13 @@ if __name__ == "__main__":
         default="config/leagues.yaml",
         help="Path to YAML config with leagues",
     )
+    parser.add_argument(
+        "--season",
+        type=str,
+        required=True,
+        help="Season string, e.g. 2024-2025",
+    )
     args = parser.parse_args()
 
     config_path = Path(args.config)
-    run_from_config(config_path)
+    run_from_config(config_path, args.season)
