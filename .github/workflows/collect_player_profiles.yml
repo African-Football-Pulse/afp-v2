@@ -26,7 +26,7 @@ jobs:
           pip install requests beautifulsoup4 azure-storage-blob
 
       - name: Run collect_player_profiles
-        working-directory: ./afp-v2
+        working-directory: .
         env:
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
           AZURE_STORAGE_CONTAINER: afp
