@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       PLAYER_ID:
-        description: "Player ID (SoccerData ID or AFRxxx)"
-        required: true
-        default: "56780"
+        description: "Player ID (SoccerData ID or AFRxxx, lämna tom för att köra alla)"
+        required: false
+        default: ""
+      ALL:
+        description: "Sätt till true för att köra alla spelare"
+        required: false
+        default: "false"
 
 jobs:
   collect_player_profile:
@@ -34,4 +38,8 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
-          python -m src.tools.collect_player_profiles --player-id "${{ github.event.inputs.PLAYER_ID }}"
+          if [ "${{ github.event.inputs.ALL }}" == "true" ]; then
+            python -m src.tools.collect_player_profiles --all
+          else
+            python -m src.tools.collect_player_profiles --player-id "${{ github.event.inputs.PLAYER_ID }}"
+          fi
