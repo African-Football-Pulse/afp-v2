@@ -1,0 +1,33 @@
+name: Merge African Players
+
+on:
+  workflow_dispatch:   # körs manuellt
+
+jobs:
+  merge-african-players:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run merge_players_africa
+        run: |
+          python - <<EOF
+          from src.tools.merge_players_africa import merge_players_africa
+          merge_players_africa(
+              whitelist_path="players_africa.json",
+              ids_path="player_ID.txt",
+              output_path="players_africa_master.json"
+          )
+          EOF
+
+      - name: Upload merged file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: players_africa_master
+          path: players_africa_master.json
