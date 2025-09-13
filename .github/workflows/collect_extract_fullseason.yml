@@ -37,8 +37,8 @@ jobs:
           if [ "$WITH_API" = "true" ]; then
             python -m src.collectors.collect_extract_fullseason \
               --config config/leagues.yaml \
-              --with_api \
-              --season "$SEASON"
+              --season "$SEASON" \
+              --with_api
           else
             python -m src.collectors.collect_extract_fullseason \
               --config config/leagues.yaml \
