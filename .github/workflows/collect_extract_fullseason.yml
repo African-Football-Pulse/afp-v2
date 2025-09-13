@@ -1,14 +1,18 @@
-name: Extract Full Season
+name: Collect Extract Fullseason
 
 on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season string, e.g. 2024-2025"
+        description: "Season string (e.g. 2024-2025)"
         required: true
         default: "2024-2025"
+      league_id:
+        description: "Numeric league_id (e.g. 228 for Premier League)"
+        required: true
+        default: "228"
       with_api:
-        description: "Fetch details via API (true/false)"
+        description: "Fetch details via API"
         required: false
         default: "false"
 
@@ -17,30 +21,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - run: pip install requests pyyaml azure-storage-blob
-
+      - run: pip install -r requirements.txt
       - name: Run collect_extract_fullseason
         env:
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
         run: |
           SEASON="${{ github.event.inputs.season }}"
+          LEAGUE_ID="${{ github.event.inputs.league_id }}"
           WITH_API="${{ github.event.inputs.with_api }}"
 
-          echo "Running extract for season=$SEASON, with_api=$WITH_API"
+          echo "Running extract for season=$SEASON league_id=$LEAGUE_ID with_api=$WITH_API"
 
           if [ "$WITH_API" = "true" ]; then
-            python -m src.collectors.collect_extract_fullseason \
-              --config config/leagues.yaml \
-              --season "$SEASON" \
-              --with_api
+            python -m src.collectors.collect_extract_fullseason --league_id "$LEAGUE_ID" --season "$SEASON" --with_api
           else
-            python -m src.collectors.collect_extract_fullseason \
-              --config config/leagues.yaml \
-              --season "$SEASON"
+            python -m src.collectors.collect_extract_fullseason --league_id "$LEAGUE_ID" --season "$SEASON"
           fi
