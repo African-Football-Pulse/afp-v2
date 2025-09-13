@@ -1,5 +1,4 @@
 import os
-import json
 import argparse
 from src.storage import azure_blob
 
@@ -8,7 +7,7 @@ CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 def load_manifest(season: str, league_id: str):
     path = f"stats/{season}/{league_id}/manifest.json"
-    print(f"[collect_player_stats] Loading matches from {path} ...")
+    print(f"[collect_player_stats] Loading manifest from {path} ...")
     return azure_blob.get_json(CONTAINER, path)
 
 
@@ -29,58 +28,58 @@ def collect_player_stats(player_id: str, league_id: str, season: str):
     subs_in = 0
     subs_out = 0
 
-    player_id_int = int(player_id)
+    player_id_str = str(player_id)
 
-    for match in manifest:
-        events = match.get("events", [])
-        appeared = False
+    for stage in manifest[0].get("stage", []):
+        for match in stage.get("matches", []):
+            events = match.get("events", [])
+            appeared = False
 
-        for ev in events:
-            etype = ev.get("event_type")
+            for ev in events:
+                etype = ev.get("event_type")
 
-            # Goals
-            if etype == "goal" and ev.get("player", {}).get("id") == player_id_int:
-                goals += 1
-                appeared = True
-                print(f"[DEBUG] Goal for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
-
-            if etype == "penalty_goal" and ev.get("player", {}).get("id") == player_id_int:
-                penalty_goals += 1
-                goals += 1
-                appeared = True
-                print(f"[DEBUG] Penalty goal for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
-
-            # Assists
-            if ev.get("assist_player", {}).get("id") == player_id_int:
-                assists += 1
-                appeared = True
-                print(f"[DEBUG] Assist for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
-
-            # Cards
-            if etype == "yellow_card" and ev.get("player", {}).get("id") == player_id_int:
-                yellow_cards += 1
-                appeared = True
-                print(f"[DEBUG] Yellow card for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
-
-            if etype == "red_card" and ev.get("player", {}).get("id") == player_id_int:
-                red_cards += 1
-                appeared = True
-                print(f"[DEBUG] Red card for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
-
-            # Substitutions
-            if etype == "substitution":
-                if ev.get("player_in", {}).get("id") == player_id_int:
-                    subs_in += 1
+                # Goals
+                if etype == "goal" and str(ev.get("player", {}).get("id")) == player_id_str:
+                    goals += 1
                     appeared = True
-                    print(f"[DEBUG] Substitution IN for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
+                    print(f"[DEBUG] Goal for {player_id} in match {match.get('id')}")
 
-                if ev.get("player_out", {}).get("id") == player_id_int:
-                    subs_out += 1
+                if etype == "penalty_goal" and str(ev.get("player", {}).get("id")) == player_id_str:
+                    penalty_goals += 1
+                    goals += 1
                     appeared = True
-                    print(f"[DEBUG] Substitution OUT for {player_id} in match {match.get('id')} at minute {ev.get('event_minute')}")
+                    print(f"[DEBUG] Penalty goal for {player_id} in match {match.get('id')}")
 
-        if appeared:
-            apps += 1
+                # Assists
+                if str(ev.get("assist_player", {}).get("id")) == player_id_str:
+                    assists += 1
+                    appeared = True
+                    print(f"[DEBUG] Assist for {player_id} in match {match.get('id')}")
+
+                # Cards
+                if etype == "yellow_card" and str(ev.get("player", {}).get("id")) == player_id_str:
+                    yellow_cards += 1
+                    appeared = True
+                    print(f"[DEBUG] Yellow card for {player_id} in match {match.get('id')}")
+
+                if etype == "red_card" and str(ev.get("player", {}).get("id")) == player_id_str:
+                    red_cards += 1
+                    appeared = True
+                    print(f"[DEBUG] Red card for {player_id} in match {match.get('id')}")
+
+                # Substitutions
+                if etype == "substitution":
+                    if str(ev.get("player_in", {}).get("id")) == player_id_str:
+                        subs_in += 1
+                        appeared = True
+                        print(f"[DEBUG] Substitution IN for {player_id} in match {match.get('id')}")
+                    if str(ev.get("player_out", {}).get("id")) == player_id_str:
+                        subs_out += 1
+                        appeared = True
+                        print(f"[DEBUG] Substitution OUT for {player_id} in match {match.get('id')}")
+
+            if appeared:
+                apps += 1
 
     stats = {
         "player_id": player_id,
