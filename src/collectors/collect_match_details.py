@@ -36,7 +36,8 @@ def fetch_match_details(match_id: int, token: str):
 
 def run(league_id: int, manifest_blob_path: str):
     token = os.environ["SOCCERDATA_AUTH_KEY"]
-    container = os.environ.get("AZURE_STORAGE_CONTAINER", "producer")
+    # 🔹 Defaulta nu till 'afp' istället för 'producer'
+    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
     # Hämta manifest från Blob
     manifest_text = azure_blob.get_text(container, manifest_blob_path)
