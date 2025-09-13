@@ -33,4 +33,5 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
-          python src/tools/collect_player_profiles.py --player-id "${{ github.event.inputs.PLAYER_ID }}"
+          python -m src.tools.collect_player_profiles --player-id "${{ github.event.inputs.PLAYER_ID }}"
+
