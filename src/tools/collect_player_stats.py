@@ -19,7 +19,14 @@ def load_match(season: str, league_id: str, match_id: str):
 
 def collect_player_stats(player_id: str, league_id: str, season: str):
     manifest = load_manifest(season, league_id)
-    matches = manifest.get("matches", [])
+
+    # manifest kan vara dict (med "matches") eller lista (direkt matchobjekt)
+    if isinstance(manifest, dict):
+        matches = manifest.get("matches", [])
+    elif isinstance(manifest, list):
+        matches = manifest
+    else:
+        matches = []
 
     apps = 0
     goals = 0
@@ -30,13 +37,12 @@ def collect_player_stats(player_id: str, league_id: str, season: str):
 
         events = match_data.get("events", [])
         for ev in events:
-            # appearance
+            # Appearance
             if ev.get("player", {}).get("id") == int(player_id):
-                if ev.get("event_type") in ["goal", "yellow_card", "red_card", "substitution", "appearance"]:
-                    apps += 1
-            # goals
-            if ev.get("event_type") == "goal" and ev.get("player", {}).get("id") == int(player_id):
-                goals += 1
+                apps += 1
+                # Goal
+                if ev.get("event_type") == "goal":
+                    goals += 1
 
     stats = {
         "player_id": player_id,
