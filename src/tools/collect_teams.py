@@ -59,5 +59,5 @@ def collect_teams(league_id: int):
 
 
 if __name__ == "__main__":
-    # Exempel: Premier League (ändra league_id vid behov)
-    collect_teams(league_id=228)
+    # Exempel: Premier League (kan ändras i workflow)
+    collect_teams(228)
