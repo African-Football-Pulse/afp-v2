@@ -17,7 +17,7 @@ def run_from_config(config_path: str, season: str):
         name = league["name"]
 
         print(f"[collect_stats_fullseason] Fetching full season for {name} (id={league_id}, season={season})")
-        collect_stats(league_id, season=season)
+        collect_stats(league_id, season=season, mode="fullseason")   # 👈 viktig ändring
 
 
 if __name__ == "__main__":
