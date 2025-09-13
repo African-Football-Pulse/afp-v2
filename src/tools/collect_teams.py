@@ -5,34 +5,27 @@ from src.storage import azure_blob
 
 BASE_URL = "https://api.soccerdataapi.com/team/"
 
-def collect_teams(league_id: int, season: str):
+def collect_teams_from_matches(league_id: int, season: str):
     token = os.environ["SOCCERDATA_AUTH_KEY"]
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Läs match-manifest
-    manifest_path = f"stats/{season}/{league_id}/manifest.json"
-    print(f"[collect_teams] Loading matches from {manifest_path} ...")
-    match_manifest = azure_blob.get_json(container, manifest_path)
+    # Lista alla matchfiler
+    prefix = f"stats/{season}/{league_id}/"
+    blobs = azure_blob.list_prefix(container, prefix)
+    match_files = [b for b in blobs if b.endswith(".json") and "manifest" not in b]
 
-    if isinstance(match_manifest, dict) and "matches" in match_manifest:
-        matches = match_manifest["matches"]
-    elif isinstance(match_manifest, list):
-        matches = match_manifest
-    else:
-        raise ValueError(f"Unexpected manifest format: {type(match_manifest)}")
+    print(f"[collect_teams] Found {len(match_files)} match files in {prefix}")
 
-    # Extrahera unika team_id
     team_ids = set()
-    for m in matches:
-        teams = m.get("teams", {})
-        home = teams.get("home", {})
-        away = teams.get("away", {})
-        if "id" in home:
-            team_ids.add(home["id"])
-        if "id" in away:
-            team_ids.add(away["id"])
+    for blob_path in match_files:
+        match = azure_blob.get_json(container, blob_path)
+        if "teams" in match:
+            home = match["teams"].get("home", {})
+            away = match["teams"].get("away", {})
+            if "id" in home: team_ids.add(home["id"])
+            if "id" in away: team_ids.add(away["id"])
 
-    print(f"[collect_teams] Found {len(team_ids)} unique teams for league {league_id}, season {season}")
+    print(f"[collect_teams] Extracted {len(team_ids)} unique teams for league {league_id}, season {season}")
 
     # Hämta & spara varje team
     for tid in sorted(team_ids):
@@ -52,4 +45,4 @@ def collect_teams(league_id: int, season: str):
 
 if __name__ == "__main__":
     # Exempel: Premier League 2024-2025
-    collect_teams(228, "2024-2025")
+    collect_teams_from_matches(228, "2024-2025")
