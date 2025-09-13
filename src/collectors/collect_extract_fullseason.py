@@ -16,7 +16,7 @@ def run_from_config(config_path: str, season: str, with_api: bool = False):
         league_id = league["id"]
         name = league["name"]
 
-        # Manifestets path följer collect_stats-strukturen
+        # Fullseason ska alltid peka på säsong, inte datum
         manifest_path = f"stats/{season}/{league_id}/manifest.json"
 
         print(f"[collect_extract_fullseason] Extracting matches for {name} (id={league_id}, season={season})")
