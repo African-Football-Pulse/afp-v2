@@ -59,7 +59,7 @@ def fetch_wikipedia_profile(wiki_url: str):
 
 def load_masterfile():
     """Load players_africa_master.json from Azure"""
-    path = "players_africa_master.json"
+    path = "players/africa/players_africa_master.json"
     return azure_blob.get_json(CONTAINER, path)
 
 
