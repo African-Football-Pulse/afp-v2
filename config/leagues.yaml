@@ -11,25 +11,25 @@ leagues:
     name: "La Liga"
     country: "ESP"
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: bundesliga
     id: 314
     name: "Bundesliga"
     country: "GER"
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: ligue_1
     id: 301
     name: "Ligue 1"
     country: "FRA"
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: serie_a
     id: 227
     name: "Serie A"
     country: "ITA"
     season: "2024-2025"
-    enabled: false
+    enabled: true
