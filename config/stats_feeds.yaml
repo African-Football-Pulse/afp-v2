@@ -1,0 +1,5 @@
+leagues:
+  - name: premier_league
+    code: "ENG-Premier League"
+    season: "2024-2025"
+    enabled: true
