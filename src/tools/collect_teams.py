@@ -31,13 +31,20 @@ def collect_teams(league_id: int):
     for season in active_seasons:
         print(f"[collect_teams] Processing league {league_id}, season {season} ...")
 
-        # Läs match-manifest
+        # Läs match-manifest (kan vara list eller dict)
         manifest_path = f"stats/{season}/{league_id}/manifest.json"
         match_manifest = azure_blob.get_json(container, manifest_path)
 
+        if isinstance(match_manifest, dict) and "matches" in match_manifest:
+            matches = match_manifest["matches"]
+        elif isinstance(match_manifest, list):
+            matches = match_manifest
+        else:
+            raise ValueError(f"Unexpected manifest format: {type(match_manifest)}")
+
         # Extrahera unika team_id
         team_ids = set()
-        for m in match_manifest.get("matches", []):
+        for m in matches:
             if "home_team" in m and "id" in m["home_team"]:
                 team_ids.add(m["home_team"]["id"])
             if "away_team" in m and "id" in m["away_team"]:
