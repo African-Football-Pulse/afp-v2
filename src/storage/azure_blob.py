@@ -93,3 +93,9 @@ def list_prefix(container: str, prefix: str):
 
 def utc_now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+def upload_json(container: str, blob_path: str, obj, content_type: str = "application/json; charset=utf-8"):
+    """Upload a Python object as JSON to Azure Blob Storage."""
+    import json
+    data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
+    return put_bytes(container, blob_path, data, content_type)
