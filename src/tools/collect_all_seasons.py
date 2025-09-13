@@ -36,13 +36,12 @@ def run_from_config(config_path: str):
         results = data.get("results", [])
 
         if results:
-            print(f"[collect_all_seasons] Raw results for {name}: {results}")
             seasons = []
             for s in results:
-                year = s.get("year") or s.get("season") or s.get("season_year")
-                sid = s.get("id")
-                active = s.get("is_active", False)
-                seasons.append(f"{year} (id={sid}, active={active})")
+                season_data = s.get("season", {})
+                year = season_data.get("year")
+                active = season_data.get("is_active", False)
+                seasons.append(f"{year} (active={active})")
 
             print(f"[collect_all_seasons] Seasons for {name} ({country}): {', '.join(seasons)}")
         else:
