@@ -1,71 +1,48 @@
-# src/collectors/collect_match_details.py
+name: Collect Match Details
 
-import os
-import json
-import argparse
-import requests
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: "Numeric league_id (e.g. 228 for Premier League)"
+        required: true
+        default: "228"
+      manifest:
+        description: "Blob path to manifest.json (from collect_stats)"
+        required: true
+        default: "stats/2025-09-13/228/manifest.json"
 
-from src.storage import azure_blob
+jobs:
+  collect-match-details:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-TZ = ZoneInfo("Europe/Stockholm")
-BASE_URL = "https://api.soccerdataapi.com/match/"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pyyaml azure-storage-blob
 
-def today_str():
-    return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
+      - name: Run collect_match_details
+        env:
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+        run: |
+          LEAGUE_ID="${{ github.event.inputs.league_id }}"
+          MANIFEST="${{ github.event.inputs.manifest }}"
 
+          # fallback om inputs saknas (t.ex. vid re-run)
+          if [ -z "$LEAGUE_ID" ]; then LEAGUE_ID=228; fi
+          if [ -z "$MANIFEST" ]; then MANIFEST="stats/2025-09-13/228/manifest.json"; fi
 
-def upload_json(container: str, path: str, obj):
-    data = json.dumps(obj, ensure_ascii=False, indent=2)
-    azure_blob.put_text(container, path, data, content_type="application/json")
-    print(f"[collect_match_details] Uploaded to Azure: {container}/{path}")
+          echo "Running with league_id=$LEAGUE_ID, manifest=$MANIFEST"
 
-
-def fetch_match_details(match_id: int, token: str):
-    params = {"id": match_id, "auth_token": token}
-    try:
-        resp = requests.get(BASE_URL, headers={"Content-Type": "application/json"}, params=params, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        print(f"[collect_match_details] ERROR fetching match {match_id}: {e}")
-        return None
-
-
-def run(league_id: int, manifest_blob_path: str):
-    token = os.environ["SOCCERDATA_AUTH_KEY"]
-    container = os.environ.get("AZURE_STORAGE_CONTAINER", "producer")
-
-    # Hämta manifest från Blob
-    manifest_text = azure_blob.get_text(container, manifest_blob_path)
-    manifest = json.loads(manifest_text)
-
-    matches = []
-    if isinstance(manifest, list) and len(manifest) > 0 and "matches" in manifest[0]:
-        matches = manifest[0]["matches"]
-
-    print(f"[collect_match_details] Found {len(matches)} matches in manifest.")
-
-    date_str = today_str()
-    for m in matches:
-        match_id = m.get("id")
-        if not match_id:
-            continue
-
-        details = fetch_match_details(match_id, token)
-        if not details:
-            continue
-
-        blob_path = f"stats/{date_str}/{league_id}/{match_id}.json"
-        upload_json(container, blob_path, details)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--league_id", type=int, required=True, help="Numeric league_id from SoccerData API")
-    parser.add_argument("--manifest", type=str, required=True, help="Blob path to manifest.json (from collect_stats)")
-    args = parser.parse_args()
-
-    run(args.league_id, args.manifest)
+          python -m src.collectors.collect_match_details \
+            --league_id "$LEAGUE_ID" \
+            --manifest "$MANIFEST"
