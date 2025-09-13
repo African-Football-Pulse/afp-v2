@@ -1,0 +1,30 @@
+name: Collect Stats Full Season
+
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: "Numeric league_id (see meta/leagues.json)"
+        required: true
+      season:
+        description: "Season string, e.g. 2024-2025"
+        required: true
+
+jobs:
+  collect-fullseason:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests pyyaml azure-storage-blob
+
+      - name: Run collect_stats_fullseason
+        env:
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+        run: |
+          python -m src.collectors.collect_stats_fullseason \
+            --league_id "${{ github.event.inputs.league_id }}" \
+            --season "${{ github.event.inputs.season }}"
