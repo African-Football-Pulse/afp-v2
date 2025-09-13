@@ -1,5 +1,18 @@
+# config/stats_feeds.yaml
+# Liknar RSS-feeds men för SoccerData/FBref
+
 leagues:
   - name: premier_league
     code: "ENG-Premier League"
     season: "2024-2025"
     enabled: true
+
+  - name: la_liga
+    code: "ESP-La Liga"
+    season: "2024-2025"
+    enabled: false
+
+  - name: bundesliga
+    code: "GER-Bundesliga"
+    season: "2024-2025"
+    enabled: false
