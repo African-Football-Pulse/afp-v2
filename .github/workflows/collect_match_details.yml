@@ -1,9 +1,6 @@
 name: Collect Match Details
 
 on:
-  push:
-    branches:
-      - feature/stats
   workflow_dispatch:
     inputs:
       league_id:
