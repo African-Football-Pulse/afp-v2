@@ -9,7 +9,7 @@ def collect_teams(league_id: int, season: str):
     token = os.environ["SOCCERDATA_AUTH_KEY"]
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Läs match-manifest (kan vara lista eller dict med "matches")
+    # Läs match-manifest
     manifest_path = f"stats/{season}/{league_id}/manifest.json"
     print(f"[collect_teams] Loading matches from {manifest_path} ...")
     match_manifest = azure_blob.get_json(container, manifest_path)
@@ -21,21 +21,16 @@ def collect_teams(league_id: int, season: str):
     else:
         raise ValueError(f"Unexpected manifest format: {type(match_manifest)}")
 
-    # Extrahera unika team_id med stöd för flera format
+    # Extrahera unika team_id
     team_ids = set()
     for m in matches:
-        # Nyare format: m["teams"]["home"]["id"], m["teams"]["away"]["id"]
-        if "teams" in m:
-            if "home" in m["teams"] and "id" in m["teams"]["home"]:
-                team_ids.add(m["teams"]["home"]["id"])
-            if "away" in m["teams"] and "id" in m["teams"]["away"]:
-                team_ids.add(m["teams"]["away"]["id"])
-
-        # Äldre/alternativt format: m["home"]["id"], m["away"]["id"]
-        if "home" in m and isinstance(m["home"], dict) and "id" in m["home"]:
-            team_ids.add(m["home"]["id"])
-        if "away" in m and isinstance(m["away"], dict) and "id" in m["away"]:
-            team_ids.add(m["away"]["id"])
+        teams = m.get("teams", {})
+        home = teams.get("home", {})
+        away = teams.get("away", {})
+        if "id" in home:
+            team_ids.add(home["id"])
+        if "id" in away:
+            team_ids.add(away["id"])
 
     print(f"[collect_teams] Found {len(team_ids)} unique teams for league {league_id}, season {season}")
 
