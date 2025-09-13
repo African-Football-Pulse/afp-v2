@@ -20,6 +20,7 @@ jobs:
 
       - name: Run merge_players_africa
         env:
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
           AZURE_STORAGE_CONTAINER: afp
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
