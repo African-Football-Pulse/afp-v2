@@ -1,14 +1,11 @@
-# src/collectors/collect_stats.py
-
 import os
-import json
 import argparse
 import requests
 import yaml
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from src.common.blob_io import get_container_client
+from src.storage import azure_blob
 
 TZ = ZoneInfo("Europe/Stockholm")
 BASE_URL = "https://api.soccerdataapi.com/matches/"
@@ -16,14 +13,6 @@ BASE_URL = "https://api.soccerdataapi.com/matches/"
 
 def today_str():
     return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
-
-
-def upload_json(container_client, path: str, obj):
-    if container_client is None:
-        raise RuntimeError("BLOB_CONTAINER_SAS_URL must be set – Collector requires Azure Blob access.")
-    data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
-    container_client.upload_blob(name=path, data=data, overwrite=True)
-    print(f"[collect_stats] Uploaded to Azure: {path}")
 
 
 def collect_stats(league_id: int, season: str = None, date: str = None, smoke: bool = False, mode: str = "weekly"):
@@ -51,7 +40,7 @@ def collect_stats(league_id: int, season: str = None, date: str = None, smoke: b
     if smoke and isinstance(data, list) and len(data) > 0 and "matches" in data[0]:
         data[0]["matches"] = data[0]["matches"][:5]
 
-    container_client = get_container_client()
+    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
     # Sätt path beroende på mode
     if mode == "fullseason":
@@ -62,7 +51,7 @@ def collect_stats(league_id: int, season: str = None, date: str = None, smoke: b
         date_str = date or today_str()
         blob_path = f"stats/{date_str}/{league_id}/manifest.json"
 
-    upload_json(container_client, blob_path, data)
+    azure_blob.upload_json(container, blob_path, data)
     return True
 
 
