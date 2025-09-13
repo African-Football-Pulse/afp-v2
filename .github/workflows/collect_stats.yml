@@ -32,7 +32,9 @@ jobs:
         env:
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+
         run: |
-          python src/collectors/collect_stats.py \
+          python -m src.collectors.collect_stats \
             --config config/stats_feeds.yaml \
             $([[ "${{ github.event.inputs.smoke }}" == "true" ]] && echo "--smoke")
+
