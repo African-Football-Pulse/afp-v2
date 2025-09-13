@@ -42,7 +42,10 @@ def collect_teams_from_matches(league_id: int, season: str):
         except Exception as e:
             print(f"[collect_teams] ⚠️ Failed to fetch/save team {tid}: {e}")
 
+# Wrapper för bakåtkompatibilitet
+def collect_teams(league_id: int, season: str):
+    return collect_teams_from_matches(league_id, season)
 
 if __name__ == "__main__":
     # Exempel: Premier League 2024-2025
-    collect_teams_from_matches(228, "2024-2025")
+    collect_teams(228, "2024-2025")
