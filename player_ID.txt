@@ -1,0 +1,127 @@
+https://en.wikipedia.org/wiki/Mohamed_Salah
+                  "id": 61819,
+                  "name": "Mohamed Salah"
+
+https://en.wikipedia.org/wiki/Jean_Onana
+                  "id": 61799,
+                  "name": "A. Onana"
+
+https://en.wikipedia.org/wiki/Nour_Imane_Addi
+
+                  "id": 42645,
+                  "name": "R. Aït-Nouri"
+
+                  "id": 62134,
+                  "name": "O. Aina"
+
+                  "id": 39261,
+                  "name": "C. Bassey"
+
+https://en.wikipedia.org/wiki/Noussair_Mazraoui
+                  "id": 65431,
+                  "name": "N. Mazraoui"
+
+https://en.wikipedia.org/wiki/Aaron_Wan-Bissaka
+                  "id": 61786,
+                  "name": "A. Wan-Bissaka"
+
+                  "id": 61835,
+                  "name": "A. Iwobi"
+
+                  "id": 61850,
+                  "name": "A. Diallo"
+
+https://en.wikipedia.org/wiki/Carlos_Baleba
+                  "id": 64335,
+                  "name": "C. Baleba"
+
+
+                  "id": 61811,
+                  "name": "I. Gueye"
+
+https://en.wikipedia.org/wiki/Bryan_Mbeumo
+                  "id": 62104,
+                  "name": "B. Mbeumo"
+
+
+                  "id": 62096,
+                  "name": "Y. Wissa"
+
+
+https://en.wikipedia.org/wiki/Iliman_Ndiaye
+
+                  "id": 62057,
+                  "name": "I. Ndiaye"
+
+https://en.wikipedia.org/wiki/Habib_Diarra
+
+                  "id": 64346,
+                  "name": "H. Diarra"
+
+https://en.wikipedia.org/wiki/Victor_Osimhen
+
+                  "id": 42515,
+                  "name": "T. Partey"
+
+                  "id": 42518,
+                  "name": "B. Saka"
+
+                  "id": 34266,
+                  "name": "N. Jackson"
+
+                  "id": 39292,
+                  "name": "M. Kudus"
+
+https://en.wikipedia.org/wiki/Riyad_Mahrez
+
+https://en.wikipedia.org/wiki/Sadio_Mané
+
+https://en.wikipedia.org/wiki/Achraf_Hakimi
+                  "id": 64246,
+                  "name": "A. Hakimi"
+
+https://sportnewsafrica.com/en/fiche/ngolo-kante/
+
+https://sportnewsafrica.com/en/fiche/renato-sanches/
+
+https://sportnewsafrica.com/en/fiche/paul-labile-pogba/
+
+https://sportnewsafrica.com/en/fiche/michy-batshuayi/
+                  "id": 26840,
+                  "name": "M. Batshuayi"
+
+https://sportnewsafrica.com/en/fiche/blaise-matuidi/
+
+https://sportnewsafrica.com/en/fiche/corentin-tolisso/
+                  "id": 64469,
+                  "name": "C. Tolisso"
+
+https://sportnewsafrica.com/en/fiche/eduardo-camavinga/
+                  "id": 82230,
+                  "name": "E. Camavinga"
+
+https://sportnewsafrica.com/en/fiche/steve-mandanda/
+                  "id": 26488,
+                  "name": "S. Mandanda"
+
+https://sportnewsafrica.com/en/fiche/romelu-lukaku/
+                  "id": 39369,
+                  "name": "R. Lukaku"
+
+https://sportnewsafrica.com/en/fiche/ousmane-dembele/
+
+https://sportnewsafrica.com/en/fiche/samuel-umtiti/
+
+https://sportnewsafrica.com/en/fiche/wissam-ben-yedder/
+https://en.wikipedia.org/wiki/Wissam_Ben_Yedder
+
+https://sportnewsafrica.com/en/fiche/karim-benzema/
+
+https://sportnewsafrica.com/en/fiche/kylian-mbappe/
+                  "id": 64299,
+                  "name": "E. Mbappé"
+
+https://sportnewsafrica.com/en/fiche/moise-kean/
+                  "id": 69080,
+                  "name": "M. Kean"
+
