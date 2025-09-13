@@ -52,9 +52,6 @@ def run(league_id: int, manifest_path: str):
     print(f"[collect_match_details] Found {len(matches)} matches in manifest.")
 
     date_str = today_str()
-    out_dir = f"outputs/stats/{date_str}/{league_id}"
-    os.makedirs(out_dir, exist_ok=True)
-
     container_client = get_container_client()
 
     for m in matches:
@@ -65,11 +62,6 @@ def run(league_id: int, manifest_path: str):
         details = fetch_match_details(match_id, token)
         if not details:
             continue
-
-        out_file = os.path.join(out_dir, f"{match_id}.json")
-        with open(out_file, "w", encoding="utf-8") as f:
-            json.dump(details, f, ensure_ascii=False, indent=2)
-        print(f"[collect_match_details] Saved locally: {out_file}")
 
         blob_path = f"stats/{date_str}/{league_id}/{match_id}.json"
         upload_json(container_client, blob_path, details)
