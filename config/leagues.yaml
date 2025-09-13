@@ -5,7 +5,7 @@ leagues:
     country: "ENG"
     is_cup: false
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: championship
     id: 229
@@ -53,7 +53,7 @@ leagues:
     country: "FRA"
     is_cup: false
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: bundesliga
     id: 241
@@ -61,7 +61,7 @@ leagues:
     country: "GER"
     is_cup: false
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: serie_a
     id: 253
@@ -69,7 +69,7 @@ leagues:
     country: "ITA"
     is_cup: false
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: eredivisie
     id: 268
@@ -101,7 +101,7 @@ leagues:
     country: "ESP"
     is_cup: false
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: mls
     id: 168
