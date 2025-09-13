@@ -19,8 +19,15 @@ def collect_player_stats(player_id: str, league_id: str, season: str):
         print("[collect_player_stats] Unexpected manifest format")
         return
 
+    # counters
     apps = 0
     goals = 0
+    penalty_goals = 0
+    assists = 0
+    yellow_cards = 0
+    red_cards = 0
+    subs_in = 0
+    subs_out = 0
 
     player_id_int = int(player_id)
 
@@ -29,12 +36,38 @@ def collect_player_stats(player_id: str, league_id: str, season: str):
         appeared = False
 
         for ev in events:
-            if ev.get("player", {}).get("id") == player_id_int:
+            etype = ev.get("event_type")
+
+            # Goals
+            if etype == "goal" and ev.get("player", {}).get("id") == player_id_int:
+                goals += 1
                 appeared = True
-                if ev.get("event_type") == "goal":
-                    goals += 1
-            if ev.get("player_in", {}).get("id") == player_id_int:
+            if etype == "penalty_goal" and ev.get("player", {}).get("id") == player_id_int:
+                penalty_goals += 1
+                goals += 1  # räknas även som mål
                 appeared = True
+
+            # Assists
+            if ev.get("assist_player", {}).get("id") == player_id_int:
+                assists += 1
+                appeared = True
+
+            # Cards
+            if etype == "yellow_card" and ev.get("player", {}).get("id") == player_id_int:
+                yellow_cards += 1
+                appeared = True
+            if etype == "red_card" and ev.get("player", {}).get("id") == player_id_int:
+                red_cards += 1
+                appeared = True
+
+            # Substitutions
+            if etype == "substitution":
+                if ev.get("player_in", {}).get("id") == player_id_int:
+                    subs_in += 1
+                    appeared = True
+                if ev.get("player_out", {}).get("id") == player_id_int:
+                    subs_out += 1
+                    appeared = True
 
         if appeared:
             apps += 1
@@ -45,9 +78,15 @@ def collect_player_stats(player_id: str, league_id: str, season: str):
         "season": season,
         "apps": apps,
         "goals": goals,
+        "penalty_goals": penalty_goals,
+        "assists": assists,
+        "yellow_cards": yellow_cards,
+        "red_cards": red_cards,
+        "substitutions_in": subs_in,
+        "substitutions_out": subs_out,
     }
 
-    out_path = f"stats/players/{season}/{league_id}/{player_id}.json"
+    out_path = f"stats/{season}/{league_id}/players/{player_id}.json"
     azure_blob.upload_json(CONTAINER, out_path, stats)
     print(f"[collect_player_stats] Uploaded stats for {player_id} → {out_path}")
 
