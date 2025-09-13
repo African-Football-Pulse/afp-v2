@@ -1,0 +1,42 @@
+name: Extract Full Season
+
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: "Numeric league_id"
+        required: true
+      manifest:
+        description: "Blob path to manifest.json from fullseason"
+        required: true
+        default: "stats/2025-09-13/228/manifest.json"
+      with_api:
+        description: "Fetch details via API"
+        required: false
+        default: "false"
+
+jobs:
+  extract-fullseason:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests azure-storage-blob
+
+      - name: Run collect_extract_fullseason
+        env:
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.with_api }}" = "true" ]; then
+            python -m src.collectors.collect_extract_fullseason \
+              --league_id "${{ github.event.inputs.league_id }}" \
+              --manifest "${{ github.event.inputs.manifest }}" \
+              --with_api
+          else
+            python -m src.collectors.collect_extract_fullseason \
+              --league_id "${{ github.event.inputs.league_id }}" \
+              --manifest "${{ github.event.inputs.manifest }}"
+          fi
