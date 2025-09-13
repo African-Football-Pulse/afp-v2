@@ -14,8 +14,16 @@ def collect_teams(league_id: int):
     print(f"[collect_teams] Loading seasons from {seasons_path} ...")
     seasons_meta = azure_blob.get_json(container, seasons_path)
 
+    # Hantera olika format (list eller dict med "results")
+    if isinstance(seasons_meta, dict) and "results" in seasons_meta:
+        seasons = seasons_meta["results"]
+    elif isinstance(seasons_meta, list):
+        seasons = seasons_meta
+    else:
+        raise ValueError(f"Unexpected seasons format: {type(seasons_meta)}")
+
     # Filtrera aktiva säsonger
-    active_seasons = [s["season"]["year"] for s in seasons_meta if s["season"].get("is_active")]
+    active_seasons = [s["season"]["year"] for s in seasons if s.get("season", {}).get("is_active")]
     if not active_seasons:
         print(f"[collect_teams] No active seasons found for league {league_id}")
         return
@@ -52,12 +60,7 @@ def collect_teams(league_id: int):
             except Exception as e:
                 print(f"[collect_teams] ⚠️ Failed to fetch/save team {tid}: {e}")
 
-        # Spara manifest
-        manifest_out = f"teams/{league_id}/manifest.json"
-        azure_blob.put_text(container, manifest_out, json.dumps({"teams": sorted(team_ids)}, indent=2))
-        print(f"[collect_teams] Uploaded manifest → {manifest_out}")
-
 
 if __name__ == "__main__":
-    # Exempel: Premier League (kan ändras i workflow)
+    # Exempel: Premier League
     collect_teams(228)
