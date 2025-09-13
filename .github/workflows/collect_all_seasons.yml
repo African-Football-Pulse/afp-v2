@@ -1,0 +1,20 @@
+name: Collect All Seasons
+
+on:
+  workflow_dispatch:
+
+jobs:
+  collect-all-seasons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Run collect_all_seasons
+        env:
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+        run: |
+          python -m src.tools.collect_all_seasons
