@@ -12,37 +12,32 @@ def load_manifest(season: str, league_id: str):
     return azure_blob.get_json(CONTAINER, path)
 
 
-def load_match(season: str, league_id: str, match_id: str):
-    path = f"stats/{season}/{league_id}/{match_id}.json"
-    return azure_blob.get_json(CONTAINER, path)
-
-
 def collect_player_stats(player_id: str, league_id: str, season: str):
     manifest = load_manifest(season, league_id)
 
-    # manifest kan vara dict (med "matches") eller lista (direkt matchobjekt)
-    if isinstance(manifest, dict):
-        matches = manifest.get("matches", [])
-    elif isinstance(manifest, list):
-        matches = manifest
-    else:
-        matches = []
+    if not isinstance(manifest, list):
+        print("[collect_player_stats] Unexpected manifest format")
+        return
 
     apps = 0
     goals = 0
 
-    for match in matches:
-        match_id = match["id"]
-        match_data = load_match(season, league_id, match_id)
+    player_id_int = int(player_id)
 
-        events = match_data.get("events", [])
+    for match in manifest:
+        events = match.get("events", [])
+        appeared = False
+
         for ev in events:
-            # Appearance
-            if ev.get("player", {}).get("id") == int(player_id):
-                apps += 1
-                # Goal
+            if ev.get("player", {}).get("id") == player_id_int:
+                appeared = True
                 if ev.get("event_type") == "goal":
                     goals += 1
+            if ev.get("player_in", {}).get("id") == player_id_int:
+                appeared = True
+
+        if appeared:
+            apps += 1
 
     stats = {
         "player_id": player_id,
