@@ -13,7 +13,7 @@ def collect_players_africa(league_id: int, season: str, whitelist: dict):
     print(f"[collect_players_africa] Loading manifest {manifest_path} ...")
     manifest = azure_blob.get_json(container, manifest_path)
 
-    # Ibland är manifest en lista, ibland dict med "matches"
+    # Manifest kan vara en lista eller en dict med "matches"
     if isinstance(manifest, dict) and "matches" in manifest:
         matches = manifest["matches"]
     elif isinstance(manifest, list):
@@ -25,27 +25,24 @@ def collect_players_africa(league_id: int, season: str, whitelist: dict):
 
     for m in matches:
         for ev in m.get("events", []):
-            # event.player
-            if "player" in ev and isinstance(ev["player"], dict):
-                pid = ev["player"].get("id")
-                name = ev["player"].get("name", "")
-                if pid and name and is_african(name, whitelist):
-                    found_ids.add(pid)
+            for key in ["player", "assist_player", "player_in", "player_out"]:
+                if key in ev and isinstance(ev[key], dict):
+                    pid = ev[key].get("id")
+                    name = ev[key].get("name", "")
+                    if not pid or not name:
+                        continue
 
-            # event.assist_player
-            if "assist_player" in ev and isinstance(ev["assist_player"], dict):
-                pid = ev["assist_player"].get("id")
-                name = ev["assist_player"].get("name", "")
-                if pid and name and is_african(name, whitelist):
-                    found_ids.add(pid)
+                    if is_african(name, whitelist):
+                        found_ids.add(pid)
+                        print(f"[collect_players_africa] ✅ Matched {name} (id={pid}) in event {ev.get('event_type')}")
 
     print(f"[collect_players_africa] Found {len(found_ids)} African players in league {league_id}, season {season}")
 
-    # Hämta & spara via API
+    # Hämta & spara spelare via API
     for pid in sorted(found_ids):
+        params = {"player_id": pid, "auth_token": token}
+        headers = {"Content-Type": "application/json", "Accept-Encoding": "gzip"}
         try:
-            params = {"player_id": pid, "auth_token": token}
-            headers = {"Content-Type": "application/json", "Accept-Encoding": "gzip"}
             resp = requests.get(API_URL, headers=headers, params=params, timeout=10)
             resp.raise_for_status()
             player_data = resp.json()
