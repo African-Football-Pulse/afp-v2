@@ -1,15 +1,15 @@
 name: Collect Stats
 
 on:
-  push:
-    branches:
-      - feature/stats
   workflow_dispatch:
     inputs:
       smoke:
         description: "Run in smoke mode (only 5 matches)"
         required: false
         default: "false"
+  push:
+    branches:
+      - feature/stats
 
 jobs:
   collect-stats:
@@ -26,12 +26,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install soccerdata pandas azure-storage-blob pyyaml
+          pip install requests pyyaml azure-storage-blob
 
       - name: Run collect_stats from config
         env:
-          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
-          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
         run: |
           python src/collectors/collect_stats.py \
