@@ -7,6 +7,10 @@ on:
         description: "League ID (e.g. 228 for Premier League)"
         required: true
         default: "228"
+      season:
+        description: "Season (e.g. 2024-2025)"
+        required: true
+        default: "2024-2025"
 
 jobs:
   collect-teams:
@@ -33,5 +37,5 @@ jobs:
         run: |
           python - <<EOF
           from src.tools.collect_teams import collect_teams
-          collect_teams(int("${{ github.event.inputs.league_id }}"))
+          collect_teams(int("${{ github.event.inputs.league_id }}"), "${{ github.event.inputs.season }}")
           EOF
