@@ -33,15 +33,16 @@ jobs:
         env:
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
-        
         run: |
           LEAGUE_ID="${{ github.event.inputs.league_id }}"
           MANIFEST="${{ github.event.inputs.manifest }}"
+
           # fallback om inputs saknas (t.ex. vid re-run)
           if [ -z "$LEAGUE_ID" ]; then LEAGUE_ID=228; fi
           if [ -z "$MANIFEST" ]; then MANIFEST="outputs/stats/2025-09-13/228/manifest.json"; fi
-          
+
           echo "Running with league_id=$LEAGUE_ID, manifest=$MANIFEST"
+
           python -m src.collectors.collect_match_details \
             --league_id "$LEAGUE_ID" \
             --manifest "$MANIFEST"
