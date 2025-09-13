@@ -1,9 +1,6 @@
 name: Collect Match Details
 
 on:
-  push:
-    branches:
-      - feature/stats
   workflow_dispatch:
     inputs:
       league_id:
@@ -11,9 +8,9 @@ on:
         required: true
         default: "228"
       manifest:
-        description: "Path to manifest.json (from previous collect_stats run)"
+        description: "Blob path to manifest.json (from collect_stats)"
         required: true
-        default: "outputs/stats/2025-09-13/228/manifest.json"
+        default: "stats/2025-09-13/228/manifest.json"
 
 jobs:
   collect-match-details:
@@ -42,7 +39,7 @@ jobs:
 
           # fallback om inputs saknas (t.ex. vid re-run)
           if [ -z "$LEAGUE_ID" ]; then LEAGUE_ID=228; fi
-          if [ -z "$MANIFEST" ]; then MANIFEST="outputs/stats/2025-09-13/228/manifest.json"; fi
+          if [ -z "$MANIFEST" ]; then MANIFEST="stats/2025-09-13/228/manifest.json"; fi
 
           echo "Running with league_id=$LEAGUE_ID, manifest=$MANIFEST"
 
