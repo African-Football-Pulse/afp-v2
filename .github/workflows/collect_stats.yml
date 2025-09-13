@@ -1,6 +1,9 @@
 name: Collect Stats
 
 on:
+  push:
+    branches:
+      - feature/stats
   workflow_dispatch:
     inputs:
       smoke:
