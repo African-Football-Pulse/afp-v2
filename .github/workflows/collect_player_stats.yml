@@ -6,7 +6,7 @@ on:
       PLAYER_ID:
         description: "Player ID (SoccerData ID)"
         required: true
-        default: "56780"
+        default: "82284"
       LEAGUE_ID:
         description: "League ID (Premier League=228, Ligue 1=235, Bundesliga=241, Serie A=253, La Liga=297)"
         required: true
