@@ -1,0 +1,25 @@
+leagues:
+  - name: premier_league
+    id: 228
+    season: "2024-2025"
+    enabled: true
+
+  - name: la_liga
+    id: 538
+    season: "2024-2025"
+    enabled: false
+
+  - name: bundesliga
+    id: 314
+    season: "2024-2025"
+    enabled: false
+
+  - name: ligue_1
+    id: 301
+    season: "2024-2025"
+    enabled: false
+
+  - name: serie_a
+    id: 227
+    season: "2024-2025"
+    enabled: false

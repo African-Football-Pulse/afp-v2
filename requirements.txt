@@ -6,3 +6,5 @@ requests>=2.32.0
 PyYAML>=6.0.1
 pydub
 ffmpeg-python
+soccerdata>=1.9.1
+pandas>=2.2.0
