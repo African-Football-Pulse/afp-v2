@@ -8,53 +8,52 @@ from src.storage import azure_blob
 SOCCERDATA_AUTH_KEY = os.getenv("SOCCERDATA_AUTH_KEY")
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
+USER_AGENT = "AfricanFootballPulseBot/1.0 (contact: patrik@africanfootballpulse.com)"
+
 
 def fetch_soccerdata_player(player_id: int):
+    """Fetch structured player data from SoccerData API"""
     url = "https://api.soccerdataapi.com/player/"
     params = {"player_id": player_id, "auth_token": SOCCERDATA_AUTH_KEY}
-    resp = requests.get(url, params=params, headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
+    resp = requests.get(url, params=params, headers=headers)
     resp.raise_for_status()
     return resp.json()
 
 
 def fetch_wikipedia_profile(wiki_url: str):
+    """Fetch summary and infobox data from Wikipedia"""
     title = wiki_url.split("/wiki/")[-1]
     api_url = "https://en.wikipedia.org/w/api.php"
     params = {
-        "action": "parse",
-        "page": title,
+        "action": "query",
         "format": "json",
-        "prop": "text|sections"
+        "prop": "extracts|pageprops|categories",
+        "titles": title,
+        "explaintext": 1,
     }
-    resp = requests.get(api_url, params=params)
+    headers = {"User-Agent": USER_AGENT}
+    resp = requests.get(api_url, params=params, headers=headers)
     resp.raise_for_status()
     data = resp.json()
 
-    html = data["parse"]["text"]["*"]
-    soup = BeautifulSoup(html, "html.parser")
+    pages = data.get("query", {}).get("pages", {})
+    if not pages:
+        return {}
 
-    # Infobox extraction
+    page = next(iter(pages.values()))
+    extract = page.get("extract", "")
+
+    # Basic infobox parsing (optional improvement: parse HTML via BeautifulSoup)
     personal = {}
-    infobox = soup.find("table", {"class": "infobox"})
-    if infobox:
-        for row in infobox.find_all("tr"):
-            header = row.find("th")
-            cell = row.find("td")
-            if header and cell:
-                key = header.text.strip()
-                val = cell.text.strip()
-                if "Date of birth" in key:
-                    personal["date_of_birth"] = val
-                elif "Place of birth" in key:
-                    personal["place_of_birth"] = val
-                elif "Height" in key:
-                    personal["height"] = val
-                elif "Position" in key:
-                    personal["position"] = val
-                elif "Current team" in key:
-                    personal["current_team"] = val
+    if "born" in extract.lower():
+        # very naive parsing, but can be expanded
+        lines = extract.split("\n")
+        for line in lines[:20]:  # scan first lines for personal info
+            if "born" in line.lower():
+                personal["date_of_birth"] = line.strip()
 
-    return {"personal": personal}
+    return {"personal": personal, "summary": extract[:2000]}  # limit summary
 
 
 def load_masterfile():
@@ -87,28 +86,29 @@ def build_profile(player_meta: dict):
         "name": name,
         "sources": player_meta.get("sources", {}),
         "profile": {
-            "summary": f"{name} is a professional footballer.",
+            "summary": wiki.get("summary", f"{name} is a professional footballer."),
             "personal": wiki.get("personal", {}),
             "club_career": None,
             "international_career": None,
             "style_of_play": None,
             "career_statistics": {},
             "honours": [],
-            "trivia": []
-        }
+            "trivia": [],
+        },
     }
 
     return profile
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--player-id", required=True, help="Player ID (SoccerData ID or AFRxxx)")
-    args = parser.parse_args()
-    player_id = args.player_id
+def save_profile(profile: dict):
+    pid = profile["id"]
+    path = f"players/profiles/{pid}.json"
+    azure_blob.upload_json(CONTAINER, path, profile)
+    print(f"[collect_player_profiles] Uploaded profile for {profile['name']} → {path}")
 
+
+def run_single(player_id: str):
     print(f"[collect_player_profiles] Looking up {player_id} in masterfile...")
-
     master = load_masterfile()
     players = master.get("players", [])
 
@@ -123,12 +123,37 @@ def main():
         raise ValueError(f"Player {player_id} not found in masterfile!")
 
     profile = build_profile(player_meta)
+    save_profile(profile)
 
-    # Save to Azure
-    path = f"players/profiles/{player_id}.json"
-    azure_blob.upload_json(CONTAINER, path, profile)
-    print(f"[collect_player_profiles] Uploaded profile for {profile['name']} → {path}")
+
+def run_all():
+    master = load_masterfile()
+    players = master.get("players", [])
+    print(f"[collect_player_profiles] Building profiles for {len(players)} players...")
+
+    for i, p in enumerate(players, start=1):
+        try:
+            profile = build_profile(p)
+            save_profile(profile)
+            print(f"[{i}/{len(players)}] {p['name']} done.")
+        except Exception as e:
+            print(f"[ERROR] Failed for {p.get('name', p.get('id'))}: {e}")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--player-id", help="Player ID (SoccerData ID or AFRxxx)")
+    parser.add_argument("--all", action="store_true", help="Process all players in masterfile")
+    args = parser.parse_args()
+
+    if args.all:
+        run_all()
+    elif args.player_id:
+        run_single(args.player_id)
+    else:
+        print("⚠️ You must specify either --player-id or --all")
 
 
 if __name__ == "__main__":
     main()
+
