@@ -35,5 +35,5 @@ jobs:
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
         run: |
           python -m src.collectors.collect_match_details \
-            --league_id "${{ github.event.inputs.league_id }}" \
-            --manifest "${{ github.event.inputs.manifest }}"
+            --league_id "${{ github.event.inputs.league_id || 228 }}" \
+            --manifest "${{ github.event.inputs.manifest || 'outputs/stats/2025-09-13/228/manifest.json' }}"
