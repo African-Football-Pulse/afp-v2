@@ -36,15 +36,18 @@ def fetch_match_details(match_id: int, token: str):
 
 def run(league_id: int, manifest_blob_path: str):
     token = os.environ["SOCCERDATA_AUTH_KEY"]
-    # 🔹 Defaulta nu till 'afp' istället för 'producer'
+    # 🔹 Default till 'afp' istället för 'producer'
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
     # Hämta manifest från Blob
     manifest_text = azure_blob.get_text(container, manifest_blob_path)
     manifest = json.loads(manifest_text)
 
+    # Flexibel hantering av formatet
     matches = []
-    if isinstance(manifest, list) and len(manifest) > 0 and "matches" in manifest[0]:
+    if isinstance(manifest, dict) and "matches" in manifest:
+        matches = manifest["matches"]
+    elif isinstance(manifest, list) and len(manifest) > 0 and "matches" in manifest[0]:
         matches = manifest[0]["matches"]
 
     print(f"[collect_match_details] Found {len(matches)} matches in manifest.")
@@ -55,6 +58,7 @@ def run(league_id: int, manifest_blob_path: str):
         if not match_id:
             continue
 
+        # Alltid försöka hämta detaljer (även om vi redan har bra data i manifestet)
         details = fetch_match_details(match_id, token)
         if not details:
             continue
