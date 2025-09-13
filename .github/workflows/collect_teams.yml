@@ -1,0 +1,34 @@
+name: Collect Teams
+
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: "League ID (e.g. 228 for Premier League)"
+        required: true
+        default: "228"
+
+jobs:
+  collect-teams:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_teams
+        env:
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+          AZURE_STORAGE_CONTAINER: afp
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          python src/tools/collect_teams.py
