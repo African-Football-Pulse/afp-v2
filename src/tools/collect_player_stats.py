@@ -51,7 +51,8 @@ def collect_player_stats(player_id: str, league_id: str, season: str):
                     print(f"[DEBUG] Penalty goal for {player_id} in match {match.get('id')}")
 
                 # Assists
-                if str(ev.get("assist_player", {}).get("id")) == player_id_str:
+                assist = ev.get("assist_player")
+                if assist and str(assist.get("id")) == player_id_str:
                     assists += 1
                     appeared = True
                     print(f"[DEBUG] Assist for {player_id} in match {match.get('id')}")
