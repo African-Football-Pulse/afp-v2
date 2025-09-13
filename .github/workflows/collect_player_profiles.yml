@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       PLAYER_ID:
-        description: "Player ID (SoccerData ID eller internt AFR-ID)"
+        description: "Player ID (SoccerData ID or AFRxxx)"
         required: true
         default: "56780"
 
