@@ -20,7 +20,7 @@ def run_from_config(config_path: str, season: str, with_api: bool = False):
         manifest_path = f"stats/{season}/{league_id}/manifest.json"
 
         print(f"[collect_extract_fullseason] Extracting matches for {name} (id={league_id}, season={season})")
-        run(league_id, manifest_path, with_api)
+        run(league_id, manifest_path, with_api, mode="fullseason", season=season)
 
 
 if __name__ == "__main__":
