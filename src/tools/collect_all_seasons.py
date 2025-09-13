@@ -1,102 +1,54 @@
 import os
-import json
 import requests
 import yaml
 from src.storage import azure_blob
 
-BASE_URL = "https://api.soccerdataapi.com/season/"
-import os
-import json
-import requests
-import yaml
-from src.storage import azure_blob
+SOCCERDATA_AUTH_KEY = os.environ.get("SOCCERDATA_AUTH_KEY")
+BLOB_CONTAINER_SAS_URL = os.environ.get("BLOB_CONTAINER_SAS_URL")
 
-BASE_URL = "https://api.soccerdataapi.com/season/"
-
-def collect_seasons_for_league(league_id: int):
-    token = os.environ["SOCCERDATA_AUTH_KEY"]
-
-    params = {
-        "auth_token": token,
-        "league_id": league_id,
+def fetch_seasons(league_id: int):
+    """Hämta alla säsonger för en viss liga från SoccerData API."""
+    url = "https://api.soccerdataapi.com/season/"
+    params = {"league_id": league_id, "auth_token": SOCCERDATA_AUTH_KEY}
+    headers = {
+        "Accept-Encoding": "gzip",
+        "Content-Type": "application/json",
     }
 
-    resp = requests.get(BASE_URL, headers={"Content-Type": "application/json"}, params=params, timeout=30)
+    print(f"[collect_all_seasons] Fetching seasons for league_id={league_id}...")
+    resp = requests.get(url, headers=headers, params=params)
     resp.raise_for_status()
     return resp.json()
 
-
 def run_from_config(config_path: str):
+    """Läs config/leagues.yaml och hämta alla säsonger för varje aktiv liga."""
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     leagues = cfg.get("leagues", [])
-    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
+    container = azure_blob.get_container_client(BLOB_CONTAINER_SAS_URL)
 
     for league in leagues:
         if not league.get("enabled", False):
             continue
 
         league_id = league["id"]
-        league_name = league.get("name", str(league_id))
+        name = league["name"]
+        country = league.get("country", "N/A")
 
-        print(f"\n[collect_all_seasons] Fetching seasons for {league_name} (id={league_id})...")
-        data = collect_seasons_for_league(league_id)
+        data = fetch_seasons(league_id)
 
-        # Lagra i Azure
-        blob_path = f"meta/seasons_{league_id}.json"
-        azure_blob.put_text(container, blob_path, json.dumps(data, indent=2, ensure_ascii=False))
-        print(f"[collect_all_seasons] Uploaded to Azure: {blob_path}")
-
-        # Logga ut alla säsonger direkt
-        results = data.get("results", [])
-        if not results:
-            print(f"[collect_all_seasons] ⚠️ No seasons found for {league_name}")
+        # Filtrera ut None från "year"
+        years = [s.get("year") for s in data.get("results", []) if s.get("year")]
+        if years:
+            print(f"[collect_all_seasons] Seasons found for {name} ({country}): {', '.join(years)}")
         else:
-            years = [s.get("year") for s in results]
-            active = [s.get("year") for s in results if s.get("is_active")]
-            print(f"[collect_all_seasons] Seasons found: {', '.join(years)}")
-            if active:
-                print(f"[collect_all_seasons] Active season(s): {', '.join(active)}")
+            print(f"[collect_all_seasons] No valid seasons found for {name} ({country})")
 
-
-if __name__ == "__main__":
-    run_from_config("config/leagues.yaml")
-
-def collect_seasons_for_league(league_id: int):
-    token = os.environ["SOCCERDATA_AUTH_KEY"]
-
-    params = {
-        "auth_token": token,
-        "league_id": league_id,
-    }
-
-    resp = requests.get(BASE_URL, headers={"Content-Type": "application/json"}, params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def run_from_config(config_path: str):
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-
-    leagues = cfg.get("leagues", [])
-    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
-
-    for league in leagues:
-        if not league.get("enabled", False):
-            continue
-
-        league_id = league["id"]
-        league_name = league.get("name", str(league_id))
-
-        print(f"[collect_all_seasons] Fetching seasons for {league_name} (id={league_id})...")
-        data = collect_seasons_for_league(league_id)
-
+        # Spara hela svaret i Azure
         blob_path = f"meta/seasons_{league_id}.json"
-        azure_blob.put_text(container, blob_path, json.dumps(data, indent=2, ensure_ascii=False))
+        azure_blob.upload_json(container, blob_path, data)
         print(f"[collect_all_seasons] Uploaded to Azure: {blob_path}")
-
 
 if __name__ == "__main__":
     run_from_config("config/leagues.yaml")
