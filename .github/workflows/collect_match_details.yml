@@ -1,0 +1,39 @@
+name: Collect Match Details
+
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: "Numeric league_id (e.g. 228 for Premier League)"
+        required: true
+        default: "228"
+      manifest:
+        description: "Path to manifest.json (from previous collect_stats run)"
+        required: true
+        default: "outputs/stats/2025-09-13/228/manifest.json"
+
+jobs:
+  collect-match-details:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pyyaml azure-storage-blob
+
+      - name: Run collect_match_details
+        env:
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+        run: |
+          python -m src.collectors.collect_match_details \
+            --league_id "${{ github.event.inputs.league_id }}" \
+            --manifest "${{ github.event.inputs.manifest }}"
