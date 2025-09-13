@@ -34,22 +34,41 @@ def fetch_match_details(match_id: int, token: str):
         return None
 
 
-def run(league_id: int, manifest_blob_path: str):
+def extract_matches(manifest):
+    """
+    Hitta matcher i manifest oavsett struktur.
+    """
+    matches = []
+
+    if isinstance(manifest, dict):
+        if "matches" in manifest:
+            matches.extend(manifest["matches"])
+        if "stage" in manifest and isinstance(manifest["stage"], list):
+            for st in manifest["stage"]:
+                if "matches" in st:
+                    matches.extend(st["matches"])
+
+    elif isinstance(manifest, list):
+        for entry in manifest:
+            if "matches" in entry:
+                matches.extend(entry["matches"])
+            if "stage" in entry and isinstance(entry["stage"], list):
+                for st in entry["stage"]:
+                    if "matches" in st:
+                        matches.extend(st["matches"])
+
+    return matches
+
+
+def run(league_id: int, manifest_blob_path: str, with_api: bool = False):
     token = os.environ["SOCCERDATA_AUTH_KEY"]
-    # 🔹 Default till 'afp' istället för 'producer'
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
     # Hämta manifest från Blob
     manifest_text = azure_blob.get_text(container, manifest_blob_path)
     manifest = json.loads(manifest_text)
 
-    # Flexibel hantering av formatet
-    matches = []
-    if isinstance(manifest, dict) and "matches" in manifest:
-        matches = manifest["matches"]
-    elif isinstance(manifest, list) and len(manifest) > 0 and "matches" in manifest[0]:
-        matches = manifest[0]["matches"]
-
+    matches = extract_matches(manifest)
     print(f"[collect_match_details] Found {len(matches)} matches in manifest.")
 
     date_str = today_str()
@@ -58,10 +77,14 @@ def run(league_id: int, manifest_blob_path: str):
         if not match_id:
             continue
 
-        # Alltid försöka hämta detaljer (även om vi redan har bra data i manifestet)
-        details = fetch_match_details(match_id, token)
-        if not details:
-            continue
+        if with_api:
+            # Hämta detaljer via API
+            details = fetch_match_details(match_id, token)
+            if not details:
+                continue
+        else:
+            # Använd matchdata direkt från manifest
+            details = m
 
         blob_path = f"stats/{date_str}/{league_id}/{match_id}.json"
         upload_json(container, blob_path, details)
@@ -71,6 +94,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--league_id", type=int, required=True, help="Numeric league_id from SoccerData API")
     parser.add_argument("--manifest", type=str, required=True, help="Blob path to manifest.json (from collect_stats)")
+    parser.add_argument("--with_api", action="store_true", help="Fetch each match from API instead of only using manifest")
     args = parser.parse_args()
 
-    run(args.league_id, args.manifest)
+    run(args.league_id, args.manifest, args.with_api)
