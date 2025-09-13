@@ -26,8 +26,7 @@ def run_from_config(config_path: str):
         cfg = yaml.safe_load(f)
 
     leagues = cfg.get("leagues", [])
-    service_client = azure_blob.get_blob_service_client(BLOB_CONTAINER_SAS_URL)
-    container = service_client.get_container_client("afp")
+    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
 
     for league in leagues:
