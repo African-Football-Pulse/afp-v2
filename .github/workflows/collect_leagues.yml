@@ -1,4 +1,4 @@
-name: Collect League IDs
+name: Collect League Metadata
 
 on:
   workflow_dispatch:
@@ -7,34 +7,14 @@ jobs:
   collect-leagues:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          pip install requests azure-storage-blob
-
-      - name: Fetch leagues
+      - run: pip install requests azure-storage-blob
+      - name: Run collect_leagues
         env:
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
         run: |
-          python - <<'EOF'
-          import os, requests, json
-          from src.storage import azure_blob
-
-          token = os.environ["SOCCERDATA_AUTH_KEY"]
-          url = "https://api.soccerdataapi.com/leagues/"
-          resp = requests.get(url, params={"auth_token": token}, timeout=30)
-          resp.raise_for_status()
-          leagues = resp.json()
-
-          data = json.dumps(leagues, indent=2, ensure_ascii=False)
-          azure_blob.put_text("afp", "meta/leagues.json", data, content_type="application/json")
-          print(f"[collect_leagues] Uploaded leagues to meta/leagues.json")
-          EOF
+          python -m src.tools.collect_leagues
