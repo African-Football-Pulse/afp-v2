@@ -7,9 +7,6 @@ on:
         description: "Run in smoke mode (only 5 matches)"
         required: false
         default: "false"
-  push:
-    branches:
-      - feature/stats
 
 jobs:
   collect-stats:
