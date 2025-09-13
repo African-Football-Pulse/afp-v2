@@ -1,61 +1,63 @@
-# src/collectors/collect_teams.py
-
-import argparse
+import os
+import json
 import requests
 from src.storage import azure_blob
 
-API_URL = "https://api.soccerdataapi.com/team/"
-CONTAINER = "afp"
+BASE_URL = "https://api.soccerdataapi.com/team/"
 
-def fetch_team(team_id, token):
-    params = {"team_id": team_id, "auth_token": token}
-    headers = {"Content-Type": "application/json", "Accept-Encoding": "gzip"}
-    resp = requests.get(API_URL, headers=headers, params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+def collect_teams(league_id: int):
+    token = os.environ["SOCCERDATA_AUTH_KEY"]
+    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
-def save_team(league_id, team_id, data):
-    path = f"teams/{league_id}/{team_id}.json"
-    azure_blob.upload_json(CONTAINER, path, data)
+    # Läs säsongsinfo
+    seasons_path = f"meta/seasons_{league_id}.json"
+    print(f"[collect_teams] Loading seasons from {seasons_path} ...")
+    seasons_meta = azure_blob.get_json(container, seasons_path)
 
-def save_manifest(league_id, team_ids):
-    path = f"teams/{league_id}/manifest.json"
-    azure_blob.upload_json(CONTAINER, path, {"teams": sorted(team_ids)})
+    # Filtrera aktiva säsonger
+    active_seasons = [s["season"]["year"] for s in seasons_meta if s["season"].get("is_active")]
+    if not active_seasons:
+        print(f"[collect_teams] No active seasons found for league {league_id}")
+        return
 
-def collect_teams_for_league(league_id: int, season: str, token: str):
-    # Läs match-manifest från Azure
-    manifest_path = f"stats/{season}/{league_id}/manifest.json"
-    match_manifest = azure_blob.get_json(CONTAINER, manifest_path)
+    for season in active_seasons:
+        print(f"[collect_teams] Processing league {league_id}, season {season} ...")
 
-    # Extrahera unika team_id
-    team_ids = set()
-    for m in match_manifest.get("matches", []):
-        if "home_team" in m and "id" in m["home_team"]:
-            team_ids.add(m["home_team"]["id"])
-        if "away_team" in m and "id" in m["away_team"]:
-            team_ids.add(m["away_team"]["id"])
+        # Läs match-manifest
+        manifest_path = f"stats/{season}/{league_id}/manifest.json"
+        match_manifest = azure_blob.get_json(container, manifest_path)
 
-    # Hämta & spara varje team
-    for tid in sorted(team_ids):
-        try:
-            team_data = fetch_team(tid, token)
-            save_team(league_id, tid, team_data)
-            print(f"✅ Saved team {tid} for league {league_id}")
-        except Exception as e:
-            print(f"⚠️ Failed to fetch/save team {tid}: {e}")
+        # Extrahera unika team_id
+        team_ids = set()
+        for m in match_manifest.get("matches", []):
+            if "home_team" in m and "id" in m["home_team"]:
+                team_ids.add(m["home_team"]["id"])
+            if "away_team" in m and "id" in m["away_team"]:
+                team_ids.add(m["away_team"]["id"])
 
-    # Spara manifest
-    save_manifest(league_id, team_ids)
-    print(f"League {league_id}: {len(team_ids)} teams saved")
+        print(f"[collect_teams] Found {len(team_ids)} unique teams")
 
-def main():
-    parser = argparse.ArgumentParser(description="Collect teams for a league/season")
-    parser.add_argument("--league_id", type=int, required=True, help="League ID (e.g. 228 for Premier League)")
-    parser.add_argument("--season", type=str, required=True, help="Season string (e.g. 2024-2025)")
-    parser.add_argument("--token", type=str, required=True, help="Auth token for SoccerData API")
-    args = parser.parse_args()
+        # Hämta & spara varje team
+        for tid in sorted(team_ids):
+            params = {"team_id": tid, "auth_token": token}
+            headers = {"Content-Type": "application/json", "Accept-Encoding": "gzip"}
+            try:
+                resp = requests.get(BASE_URL, headers=headers, params=params, timeout=30)
+                resp.raise_for_status()
+                team_data = resp.json()
 
-    collect_teams_for_league(args.league_id, args.season, args.token)
+                team_path = f"teams/{league_id}/{tid}.json"
+                azure_blob.put_text(container, team_path, json.dumps(team_data, indent=2, ensure_ascii=False))
+                print(f"[collect_teams] Uploaded team {tid} → {team_path}")
+            except Exception as e:
+                print(f"[collect_teams] ⚠️ Failed to fetch/save team {tid}: {e}")
+
+        # Spara manifest
+        manifest_out = f"teams/{league_id}/manifest.json"
+        azure_blob.put_text(container, manifest_out, json.dumps({"teams": sorted(team_ids)}, indent=2))
+        print(f"[collect_teams] Uploaded manifest → {manifest_out}")
+
 
 if __name__ == "__main__":
-    main()
+    # Exempel: Premier League
+    collect_teams(league_id=228)
