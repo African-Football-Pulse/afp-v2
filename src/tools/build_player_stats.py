@@ -13,7 +13,8 @@ def load_history(player_id: str):
     """Load player history from master file"""
     path = "players/africa/players_africa_history.json"
     history_all = azure_blob.get_json(CONTAINER, path)
-    return history_all.get(player_id, {}).get("history", [])
+    pid = str(player_id)   # säkerställ sträng
+    return history_all.get(pid, {}).get("history", [])
 
 
 def run_collect_stats(player_id: str, league_id: str, season: str):
