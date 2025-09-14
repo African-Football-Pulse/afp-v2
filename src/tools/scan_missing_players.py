@@ -13,24 +13,29 @@ def normalize(name: str) -> str:
     return re.sub(r"[^a-z]", "", name.lower())
 
 
+def get_lastname(name: str) -> str:
+    parts = name.split()
+    return normalize(parts[-1]) if parts else ""
+
+
 def scan_missing_players():
     missing = azure_blob.get_json(CONTAINER, MISSING_PATH)
     master = azure_blob.get_json(CONTAINER, MASTER_PATH)
 
-    # 👇 Fix: master är en dict med ev. listvärden
+    # Bygg alias från master (fix för dict/list values)
     name_to_alias = {}
     for pid, pdata in master.items():
         if isinstance(pdata, list) and pdata:
             pdata = pdata[0]
         if not isinstance(pdata, dict):
             continue
-
         pname = normalize(pdata.get("name", ""))
         aliases = [normalize(a) for a in pdata.get("aliases", [])]
         name_to_alias[pname] = aliases
 
     results = {}
 
+    # Hitta alla manifest
     blob_list = azure_blob.list_prefix(CONTAINER, "stats/")
     manifests = [b for b in blob_list if b.endswith("manifest.json")]
 
@@ -46,24 +51,34 @@ def scan_missing_players():
             continue
 
         for event in data:
-            player = event.get("player", {})
-            pid = str(player.get("id", ""))
-            pname = player.get("name", "")
+            for role in ["player", "assist_player"]:
+                p = event.get(role, {})
+                pid = str(p.get("id", ""))
+                pname = p.get("name", "")
+                if not pname:
+                    continue
 
-            norm_name = normalize(pname)
+                norm_name = normalize(pname)
+                lastname = get_lastname(pname)
 
-            for mid, mdata in missing.items():
-                target_name = normalize(mdata["name"])
-                aliases = name_to_alias.get(target_name, [])
+                for mid, mdata in missing.items():
+                    target_name = normalize(mdata["name"])
+                    target_last = get_lastname(mdata["name"])
+                    aliases = name_to_alias.get(target_name, [])
 
-                if norm_name == target_name or norm_name in aliases:
-                    if mid not in results:
-                        results[mid] = {"name": mdata["name"], "found_ids": {}}
-                    results[mid]["found_ids"].setdefault(pid, [])
-                    results[mid]["found_ids"][pid].append(
-                        {"season": season, "league_id": league_id}
-                    )
+                    if (
+                        norm_name == target_name
+                        or norm_name in aliases
+                        or lastname == target_last
+                    ):
+                        if mid not in results:
+                            results[mid] = {"name": mdata["name"], "found_ids": {}}
+                        results[mid]["found_ids"].setdefault(pid, [])
+                        results[mid]["found_ids"][pid].append(
+                            {"season": season, "league_id": league_id}
+                        )
 
+    # Ladda upp resultat till Azure
     azure_blob.upload_json(CONTAINER, OUTPUT_PATH, results)
     print(f"[scan_missing_players] Uploaded results → {OUTPUT_PATH}")
     print(f"[scan_missing_players] Players scanned: {len(missing)}")
