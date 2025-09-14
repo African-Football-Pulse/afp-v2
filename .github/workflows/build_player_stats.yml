@@ -34,5 +34,5 @@ jobs:
           AZURE_TENANT_ID:         ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_SECRET:     ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
-          echo "Container: $AZURE_STORAGE_CONTAINER"
+          echo "Building stats for player ${{ github.event.inputs.player_id }}"
           python -m src.tools.build_player_stats --player ${{ github.event.inputs.player_id }}
