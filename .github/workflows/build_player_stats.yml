@@ -1,4 +1,4 @@
-name: Build Player Stats (One-off)
+name: Build Player Stats
 
 on:
   workflow_dispatch:
@@ -24,20 +24,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run build_player_stats
-        run: |
-          python -m src.tools.build_player_stats --player ${{ github.event.inputs.player_id }}
-
-      - name: Upload to Azure Blob
-        run: |
-          az storage blob upload-batch \
-            --account-name $AZURE_STORAGE_ACCOUNT \
-            --destination $AZURE_CONTAINER/stats/players \
-            --source stats/players \
-            --overwrite true
         env:
+          AFP_OPENAI_SECRETKEY: ${{ secrets.AFP_OPENAI_SECRETKEY }}
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          python -m src.tools.build_player_stats --player ${{ github.event.inputs.player_id }}
