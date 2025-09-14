@@ -1,31 +1,36 @@
-import os
 import json
 from pathlib import Path
 
-BASE_PATH = "stats/players"
-HISTORY_FILE = "players/africa/players_africa_history.json"
+# Repo root = två nivåer upp från detta script (src/tools/.. → repo root)
+BASE_DIR = Path(__file__).resolve().parents[2]
+
+# Paths
+BASE_PATH = BASE_DIR / "stats" / "players"
+HISTORY_FILE = BASE_DIR / "players" / "africa" / "players_africa_history.json"
 
 def load_history(player_id: str):
+    if not HISTORY_FILE.exists():
+        raise FileNotFoundError(f"History file not found: {HISTORY_FILE}")
     with open(HISTORY_FILE, "r", encoding="utf-8") as f:
         history = json.load(f)
     return history.get(player_id, {}).get("history", [])
 
 def load_season_stats(season: str, league_id: str, player_id: str):
-    path = f"stats/{season}/{league_id}/players/{player_id}.json"
-    if not os.path.exists(path):
+    path = BASE_DIR / "stats" / season / league_id / "players" / f"{player_id}.json"
+    if not path.exists():
         return None
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def save_player_season(player_id: str, season: str, stats: dict):
-    outdir = Path(f"{BASE_PATH}/{player_id}")
+    outdir = BASE_PATH / player_id
     outdir.mkdir(parents=True, exist_ok=True)
     outfile = outdir / f"{season}.json"
     with open(outfile, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
 
 def update_totals(player_id: str):
-    player_dir = Path(f"{BASE_PATH}/{player_id}")
+    player_dir = BASE_PATH / player_id
     totals = {
         "player_id": player_id,
         "apps": 0,
