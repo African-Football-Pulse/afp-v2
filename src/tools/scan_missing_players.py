@@ -17,10 +17,15 @@ def scan_missing_players():
     missing = azure_blob.get_json(CONTAINER, MISSING_PATH)
     master = azure_blob.get_json(CONTAINER, MASTER_PATH)
 
-    # 👇 Fix: master är en dict, inte en lista
+    # 👇 Fix: master är en dict med ev. listvärden
     name_to_alias = {}
     for pid, pdata in master.items():
-        pname = normalize(pdata["name"])
+        if isinstance(pdata, list) and pdata:
+            pdata = pdata[0]
+        if not isinstance(pdata, dict):
+            continue
+
+        pname = normalize(pdata.get("name", ""))
         aliases = [normalize(a) for a in pdata.get("aliases", [])]
         name_to_alias[pname] = aliases
 
