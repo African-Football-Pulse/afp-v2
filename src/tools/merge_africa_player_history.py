@@ -11,10 +11,10 @@ OUTPUT_PATH = "players/africa/players_africa_history.json"
 def list_meta_paths():
     """Hitta alla player_history-filer i meta/."""
     paths = []
-    blob_list = azure_blob.list_blobs(CONTAINER, "meta/")
-    for blob in blob_list:
-        if "player_history_" in blob.name and blob.name.endswith(".json"):
-            paths.append(blob.name)
+    blob_list = azure_blob.list_prefix(CONTAINER, "meta/")
+    for blob_name in blob_list:
+        if "player_history_" in blob_name and blob_name.endswith(".json"):
+            paths.append(blob_name)
     return paths
 
 
