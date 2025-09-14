@@ -71,7 +71,8 @@ def put_text(container: str, blob_path: str, text: str, content_type: str = "tex
 
 def get_text(container: str, blob_path: str) -> str:
     svc = _client()
-    blob = svc.get_blob_client(container=container, blob=blob_path)  # ✅ FIX: explicit args
+    container_client = svc.get_container_client(container)
+    blob = container_client.get_blob_client(blob_path)   # ✅ fix
     return blob.download_blob().readall().decode("utf-8")
 
 
@@ -83,7 +84,8 @@ def get_json(container: str, blob_path: str):
 
 def exists(container: str, blob_path: str) -> bool:
     svc = _client()
-    blob = svc.get_blob_client(container=container, blob=blob_path)  # ✅ FIX: explicit args
+    container_client = svc.get_container_client(container)
+    blob = container_client.get_blob_client(blob_path)   # ✅ fix
     return blob.exists()
 
 
