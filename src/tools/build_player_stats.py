@@ -5,8 +5,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 # Paths
-BASE_PATH = BASE_DIR / "stats" / "players"
-HISTORY_FILE = BASE_DIR / "players" / "africa" / "players_africa_history.json"
+BASE_PATH = BASE_DIR / "afp" / "stats" / "players"
+HISTORY_FILE = BASE_DIR / "afp" / "players" / "africa" / "players_africa_history.json"
 
 def load_history(player_id: str):
     if not HISTORY_FILE.exists():
