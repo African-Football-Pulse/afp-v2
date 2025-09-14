@@ -1,65 +1,52 @@
 import os
-import json
 from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-MASTER_PATH = "players/africa/players_africa_master.json"
-OUTPUT_PATH = "players/africa/players_africa_history.json"
-
-
-def list_meta_paths():
-    """Hitta alla player_history-filer i meta/."""
-    paths = []
-    blob_list = azure_blob.list_prefix(CONTAINER, "meta/")
-    for blob_name in blob_list:
-        if "player_history_" in blob_name and blob_name.endswith(".json"):
-            paths.append(blob_name)
-    return paths
-
-
-def load_master():
-    """Läs masterfilen med våra African players."""
-    data = azure_blob.get_json(CONTAINER, MASTER_PATH)
-    if isinstance(data, dict) and "players" in data:
-        return data["players"]
-    return data
-
 
 def merge_history():
-    master = load_master()
+    master = azure_blob.get_json(CONTAINER, "players/africa/players_africa_master.json")
+    result = {}
+    missing = {}
 
-    # Endast spelare med numeriska ID (skip AFR00X)
-    africa_ids = {
-        str(p["id"]): p["name"]
-        for p in master
-        if str(p.get("id", "")).isdigit()
-    }
+    # Läs in alla player_history-filer från meta/
+    history_data = []
+    for path in azure_blob.list_blobs(CONTAINER, "meta/"):
+        if "player_history_" in path:
+            data = azure_blob.get_json(CONTAINER, path)
+            history_data.append(data)
 
-    history_total = {
-        pid: {"id": pid, "name": pname, "history": []}
-        for pid, pname in africa_ids.items()
-    }
+    for pid, pdata in master.items():
+        merged_history = []
+        for season_data in history_data:
+            if pid in season_data:
+                merged_history.extend(season_data[pid].get("history", []))
 
-    for path in list_meta_paths():
-        data = azure_blob.get_json(CONTAINER, path)
-        if not data:
-            continue
+        result[pid] = {
+            "id": pid,
+            "name": pdata["name"],
+            "history": merged_history,
+        }
 
-        for pid, pdata in data.items():
-            if pid in history_total:
-                for entry in pdata.get("history", []):
-                    if entry not in history_total[pid]["history"]:
-                        history_total[pid]["history"].append(entry)
+        # 🔎 Debug: logga antal säsonger
+        print(f"[merge_history] Player {pid} {pdata['name']} → {len(merged_history)} seasons")
 
-    azure_blob.upload_json(CONTAINER, OUTPUT_PATH, history_total)
-    print(f"[merge_africa_player_history] Uploaded → {OUTPUT_PATH}")
-    print(f"[merge_africa_player_history] Players included: {len(history_total)}")
+        if len(merged_history) == 0:
+            missing[pid] = {
+                "id": pid,
+                "name": pdata["name"],
+            }
 
+    # ✅ Spara sammanslagen historik
+    azure_blob.upload_json(CONTAINER, "players/africa/players_africa_history.json", result)
+    print("[merge_history] Uploaded merged history → players/africa/players_africa_history.json")
 
-def main():
-    merge_history()
+    # ✅ Spara separat fil med saknad historik
+    if missing:
+        azure_blob.upload_json(CONTAINER, "players/africa/missing_history.json", missing)
+        print(f"[merge_history] Uploaded missing history → players/africa/missing_history.json "
+              f"({len(missing)} players without history)")
 
 
 if __name__ == "__main__":
-    main()
+    merge_history()
