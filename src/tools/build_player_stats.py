@@ -10,10 +10,13 @@ if not CONTAINER or not CONTAINER.strip():
 
 
 def load_history(player_id: str):
-    """Load player history from master file"""
     path = "players/africa/players_africa_history.json"
     history_all = azure_blob.get_json(CONTAINER, path)
-    pid = str(player_id)   # säkerställ sträng
+    pid = str(player_id)
+
+    print(f"[DEBUG] Loaded history file keys: {list(history_all.keys())[:20]}")
+    print(f"[DEBUG] Looking for player_id={pid}")
+
     return history_all.get(pid, {}).get("history", [])
 
 
