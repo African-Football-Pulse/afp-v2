@@ -18,7 +18,7 @@ def get_lastname(name: str) -> str:
     parts = re.split(r"\s+", name.strip())
     for token in reversed(parts):
         norm = normalize(token)
-        if len(norm) >= 3:   # hoppa över initialer
+        if len(norm) >= 3:  # hoppa över initialer
             return norm
     return normalize(parts[-1]) if parts else ""
 
@@ -56,8 +56,11 @@ def scan_missing_players():
             continue
 
         for event in data:
-            for role in ["player", "assist_player"]:
+            # 👇 Täck alla roller där spelare kan förekomma
+            for role in ["player", "assist_player", "player_in", "player_out"]:
                 p = event.get(role, {})
+                if not isinstance(p, dict):
+                    continue
                 pid = str(p.get("id", ""))
                 pname = p.get("name", "")
                 if not pname:
