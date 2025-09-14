@@ -2,7 +2,7 @@ import argparse
 import os
 from src.storage import azure_blob
 
-CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
 
 def load_history(player_id: str):
