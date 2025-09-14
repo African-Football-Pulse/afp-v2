@@ -1,38 +1,36 @@
 import argparse
 import os
-import json
 from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
 def load_history(player_id: str):
-    """Load players_africa_history.json from Azure and return this player's history"""
+    """Load players_africa_history.json from Azure"""
     path = "players/africa/players_africa_history.json"
     history_all = azure_blob.get_json(CONTAINER, path)
     return history_all.get(player_id, {}).get("history", [])
 
 
 def load_season_stats(season: str, league_id: str, player_id: str):
-    """Load stats/<season>/<league_id>/players/<player_id>.json from Azure"""
+    """Load season stats file from Azure"""
     path = f"stats/{season}/{league_id}/players/{player_id}.json"
-    try:
+    if azure_blob.exists(CONTAINER, path):
         return azure_blob.get_json(CONTAINER, path)
-    except Exception:
-        return None
+    return None
 
 
 def save_player_season(player_id: str, season: str, stats: dict):
-    """Save season stats under stats/players/<player_id>/<season>.json"""
+    """Upload stats to stats/players/<player_id>/<season>.json"""
     path = f"stats/players/{player_id}/{season}.json"
     azure_blob.upload_json(CONTAINER, path, stats)
     print(f"[build_player_stats] Uploaded {path}")
 
 
 def update_totals(player_id: str):
-    """Aggregate all season files for this player into totals.json"""
+    """Aggregate all season stats into totals.json"""
     prefix = f"stats/players/{player_id}/"
-    blobs = azure_blob.list_blobs(CONTAINER, prefix=prefix)
+    blobs = azure_blob.list_prefix(CONTAINER, prefix)
 
     totals = {
         "player_id": player_id,
@@ -46,10 +44,10 @@ def update_totals(player_id: str):
         "seasons": []
     }
 
-    for blob in blobs:
-        if not blob.name.endswith(".json") or blob.name.endswith("totals.json"):
+    for blob_name in blobs:
+        if not blob_name.endswith(".json") or blob_name.endswith("totals.json"):
             continue
-        season_stats = azure_blob.get_json(CONTAINER, blob.name)
+        season_stats = azure_blob.get_json(CONTAINER, blob_name)
         totals["apps"] += season_stats.get("apps", 0)
         totals["goals"] += season_stats.get("goals", 0)
         totals["assists"] += season_stats.get("assists", 0)
@@ -65,7 +63,6 @@ def update_totals(player_id: str):
 
 
 def build_player(player_id: str):
-    """Build per-season and totals stats for one player"""
     history = load_history(player_id)
     if not history:
         print(f"[build_player_stats] No history found for {player_id}")
