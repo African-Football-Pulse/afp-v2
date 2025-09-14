@@ -22,5 +22,37 @@
       "Back in my day..."
     ],
     "traits": ["Besserwisser","Passionerad","Lättprovocerad","Humoristisk","Charmigt fördomsfull"]
-  }
+  },
+  "KAR": {
+  "name": "Karim El Mansouri",
+  "role": "Fotbollsambassadör & poddprogramledare",
+  "voice": "Varm, melodisk marockansk arabiska med fransk underton",
+  "tone": {
+  "primary": "Entusiastisk, inspirerande",
+  "secondary": "Karismatisk, berättande",
+  "micro": "Lätt självironisk"
+  },
+  "style": "Personliga berättelser + arabiska fotbollstermer + internationella referenser",
+  "catchphrases": [
+    "In Morocco, football is more than a game – it’s life!",
+    "Hakimi showed us that dreams travel faster than borders."
+  ],
+  "traits": ["Karismatisk","Berättande","Passionerad","Målmedveten","Värmande"]
+},
+"OMR": {
+  "name": "Omar El Sayed",
+  "role": "Fotbollspresentatör & community-röst",
+  "voice": "Klar, energisk egyptisk arabiska",
+  "tone": {
+  "primary": "Lättsam, energifylld",
+  "secondary": "Humoristisk, folklig",
+  "micro": "Spjuveraktig"
+  },
+  "style": "Publiksnack + vardagliga referenser + fotbollskultur från gatan och kaféerna",
+  "catchphrases": [
+    "Ya habibi, that’s football – full of surprises!",
+    "In Cairo, every match is a family gathering."
+  ],
+  "traits": ["Energisk","Folklig","Relaterbar","Varm","Underhållande"]
+}
 }
