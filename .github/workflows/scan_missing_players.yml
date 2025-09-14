@@ -1,0 +1,35 @@
+name: Scan Missing Players
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan-missing:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scan_missing_players
+        env:
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          AZURE_CLIENT_ID:         ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID:         ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET:     ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          echo "🔍 Scanning manifests for missing players..."
+          python -m src.tools.scan_missing_players | tee scan_log.txt
+          echo "✅ Scan finished."
+          echo "---- SUMMARY (last 30 lines) ----"
+          tail -n 30 scan_log.txt
