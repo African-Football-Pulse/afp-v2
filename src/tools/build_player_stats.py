@@ -1,36 +1,39 @@
+import argparse
+import os
 import json
-from pathlib import Path
+from src.storage import azure_blob
 
-# Repo root = två nivåer upp från detta script (src/tools/.. → repo root)
-BASE_DIR = Path(__file__).resolve().parents[2]
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-# Paths
-BASE_PATH = BASE_DIR / "afp" / "stats" / "players"
-HISTORY_FILE = BASE_DIR / "afp" / "players" / "africa" / "players_africa_history.json"
 
 def load_history(player_id: str):
-    if not HISTORY_FILE.exists():
-        raise FileNotFoundError(f"History file not found: {HISTORY_FILE}")
-    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-        history = json.load(f)
-    return history.get(player_id, {}).get("history", [])
+    """Load players_africa_history.json from Azure and return this player's history"""
+    path = "players/africa/players_africa_history.json"
+    history_all = azure_blob.get_json(CONTAINER, path)
+    return history_all.get(player_id, {}).get("history", [])
+
 
 def load_season_stats(season: str, league_id: str, player_id: str):
-    path = BASE_DIR / "stats" / season / league_id / "players" / f"{player_id}.json"
-    if not path.exists():
+    """Load stats/<season>/<league_id>/players/<player_id>.json from Azure"""
+    path = f"stats/{season}/{league_id}/players/{player_id}.json"
+    try:
+        return azure_blob.get_json(CONTAINER, path)
+    except Exception:
         return None
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+
 
 def save_player_season(player_id: str, season: str, stats: dict):
-    outdir = BASE_PATH / player_id
-    outdir.mkdir(parents=True, exist_ok=True)
-    outfile = outdir / f"{season}.json"
-    with open(outfile, "w", encoding="utf-8") as f:
-        json.dump(stats, f, indent=2, ensure_ascii=False)
+    """Save season stats under stats/players/<player_id>/<season>.json"""
+    path = f"stats/players/{player_id}/{season}.json"
+    azure_blob.upload_json(CONTAINER, path, stats)
+    print(f"[build_player_stats] Uploaded {path}")
+
 
 def update_totals(player_id: str):
-    player_dir = BASE_PATH / player_id
+    """Aggregate all season files for this player into totals.json"""
+    prefix = f"stats/players/{player_id}/"
+    blobs = azure_blob.list_blobs(CONTAINER, prefix=prefix)
+
     totals = {
         "player_id": player_id,
         "apps": 0,
@@ -43,11 +46,10 @@ def update_totals(player_id: str):
         "seasons": []
     }
 
-    for season_file in player_dir.glob("*.json"):
-        if season_file.name == "totals.json":
+    for blob in blobs:
+        if not blob.name.endswith(".json") or blob.name.endswith("totals.json"):
             continue
-        with open(season_file, "r", encoding="utf-8") as f:
-            season_stats = json.load(f)
+        season_stats = azure_blob.get_json(CONTAINER, blob.name)
         totals["apps"] += season_stats.get("apps", 0)
         totals["goals"] += season_stats.get("goals", 0)
         totals["assists"] += season_stats.get("assists", 0)
@@ -55,15 +57,18 @@ def update_totals(player_id: str):
         totals["red_cards"] += season_stats.get("red_cards", 0)
         totals["substitutions_in"] += season_stats.get("substitutions_in", 0)
         totals["substitutions_out"] += season_stats.get("substitutions_out", 0)
-        totals["seasons"].append(season_file.stem)
+        totals["seasons"].append(season_stats.get("season"))
 
-    with open(player_dir / "totals.json", "w", encoding="utf-8") as f:
-        json.dump(totals, f, indent=2, ensure_ascii=False)
+    outpath = f"stats/players/{player_id}/totals.json"
+    azure_blob.upload_json(CONTAINER, outpath, totals)
+    print(f"[build_player_stats] Uploaded {outpath}")
+
 
 def build_player(player_id: str):
+    """Build per-season and totals stats for one player"""
     history = load_history(player_id)
     if not history:
-        print(f"No history found for {player_id}")
+        print(f"[build_player_stats] No history found for {player_id}")
         return
 
     for entry in history:
@@ -76,9 +81,13 @@ def build_player(player_id: str):
     update_totals(player_id)
     print(f"✔ Built stats for player {player_id}")
 
-if __name__ == "__main__":
-    import argparse
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--player", required=True, help="Player ID to build stats for")
     args = parser.parse_args()
     build_player(args.player)
+
+
+if __name__ == "__main__":
+    main()
