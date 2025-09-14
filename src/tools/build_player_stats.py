@@ -2,7 +2,11 @@ import argparse
 import os
 from src.storage import azure_blob
 
+# Samma mönster som övriga script
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+
+if not CONTAINER or not CONTAINER.strip():
+    raise RuntimeError("Environment variable AZURE_STORAGE_CONTAINER is missing or empty")
 
 
 def load_history(player_id: str):
