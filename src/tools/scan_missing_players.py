@@ -14,7 +14,12 @@ def normalize(name: str) -> str:
 
 
 def get_lastname(name: str) -> str:
-    parts = name.split()
+    """Plocka ut efternamn, ignorera initialer som 'V.'."""
+    parts = re.split(r"\s+", name.strip())
+    for token in reversed(parts):
+        norm = normalize(token)
+        if len(norm) >= 3:   # hoppa över initialer
+            return norm
     return normalize(parts[-1]) if parts else ""
 
 
