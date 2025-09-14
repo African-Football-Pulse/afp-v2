@@ -1,0 +1,40 @@
+flowchart TD
+
+  subgraph RAW["Råfiler (Azure Blob)"]
+    A1["manifest.json (per liga/säsong)"]
+    A2["match_001.json ... match_380.json"]
+  end
+
+  subgraph STATS["Statistik (byggs från manifest)"]
+    B1["players/<player_id>.json (per liga/säsong)"]
+    B2["totals.json (sammanställning över säsonger)"]
+    B3["key_metrics.json (mål/90, streaks, form)"]
+  end
+
+  subgraph META["Meta"]
+    M1["players_africa_master.json"]
+    M2["players_africa_history.json"]
+    M3["leagues.yaml"]
+  end
+
+  subgraph PROFILES["Profiler & Lookup"]
+    P1["profiles/<player_id>.json"]
+    P2["lookup.json"]
+  end
+
+  subgraph PODCAST["Sektioner (sections_library.yaml)"]
+    S1["S.STATS.TOP_AFRICAN_PLAYERS"]
+    S2["S.NEWS.*"]
+    S3["S.OPINION.*"]
+  end
+
+  A1 -->|collect_player_stats| B1
+  A2 -->|collect_player_stats| B1
+  B1 --> B2
+  B1 --> B3
+  M1 --> P1
+  M2 --> P1
+  B2 --> P1
+  B3 --> P1
+  P1 --> P2
+  P2 --> PODCAST
