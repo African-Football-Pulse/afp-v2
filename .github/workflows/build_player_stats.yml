@@ -1,4 +1,4 @@
-name: Build Player Stats
+name: Build Player Stats (One-off)
 
 on:
   workflow_dispatch:
@@ -6,8 +6,6 @@ on:
       player_id:
         description: "Player ID (ex. 61819)"
         required: true
-  schedule:
-    - cron: "0 5 * * 1"   # kör varje måndag kl 05:00
 
 jobs:
   build-player-stats:
@@ -27,7 +25,7 @@ jobs:
 
       - name: Run build_player_stats
         run: |
-          python -m src.tools.build_player_stats --player ${{ github.event.inputs.player_id || '61819' }}
+          python -m src.tools.build_player_stats --player ${{ github.event.inputs.player_id }}
 
       - name: Upload to Azure Blob
         run: |
