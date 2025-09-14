@@ -52,6 +52,7 @@ def _client():
     account_url = f"https://{account}.blob.core.windows.net"
     return BlobServiceClient(account_url=account_url, credential=DefaultAzureCredential())
 
+
 def put_bytes(container: str, blob_path: str, data: bytes, content_type: str = "application/octet-stream"):
     svc = _client()
     container_client = svc.get_container_client(container)
@@ -63,36 +64,40 @@ def put_bytes(container: str, blob_path: str, data: bytes, content_type: str = "
     blob.upload_blob(data, overwrite=True, content_type=content_type)
     return f"{container}/{blob_path}"
 
+
 def put_text(container: str, blob_path: str, text: str, content_type: str = "text/plain; charset=utf-8"):
     return put_bytes(container, blob_path, text.encode("utf-8"), content_type)
 
+
 def get_text(container: str, blob_path: str) -> str:
     svc = _client()
-    blob = svc.get_blob_client(container, blob_path)
+    blob = svc.get_blob_client(container=container, blob=blob_path)  # ✅ FIX: explicit args
     return blob.download_blob().readall().decode("utf-8")
+
 
 def get_json(container: str, blob_path: str):
     import json
     text = get_text(container, blob_path)
     return json.loads(text)
 
+
 def exists(container: str, blob_path: str) -> bool:
     svc = _client()
-    blob = svc.get_blob_client(container, blob_path)
+    blob = svc.get_blob_client(container=container, blob=blob_path)  # ✅ FIX: explicit args
     return blob.exists()
+
 
 def list_prefix(container: str, prefix: str):
     svc = _client()
     container_client = svc.get_container_client(container)
     return [b.name for b in container_client.list_blobs(name_starts_with=prefix)]
 
+
 def utc_now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
 
 def upload_json(container: str, blob_path: str, obj, content_type: str = "application/json; charset=utf-8"):
     import json
     data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
     return put_bytes(container, blob_path, data, content_type)
-
-
-
