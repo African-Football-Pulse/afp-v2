@@ -10,25 +10,22 @@ OUTPUT_PATH = "players/africa/missing_scan_results.json"
 
 
 def normalize(name: str) -> str:
-    """Normalisera namn till jämförbar sträng."""
     return re.sub(r"[^a-z]", "", name.lower())
 
 
 def scan_missing_players():
-    # Ladda missing + master
     missing = azure_blob.get_json(CONTAINER, MISSING_PATH)
     master = azure_blob.get_json(CONTAINER, MASTER_PATH)
 
-    # Bygg en alias-mapp från master
+    # 👇 Fix: master är en dict, inte en lista
     name_to_alias = {}
-    for p in master:
-        pname = normalize(p["name"])
-        aliases = [normalize(a) for a in p.get("aliases", [])]
+    for pid, pdata in master.items():
+        pname = normalize(pdata["name"])
+        aliases = [normalize(a) for a in pdata.get("aliases", [])]
         name_to_alias[pname] = aliases
 
     results = {}
 
-    # Loopa igenom alla manifest som redan ligger i stats/
     blob_list = azure_blob.list_prefix(CONTAINER, "stats/")
     manifests = [b for b in blob_list if b.endswith("manifest.json")]
 
@@ -62,13 +59,11 @@ def scan_missing_players():
                         {"season": season, "league_id": league_id}
                     )
 
-    # Ladda upp resultat
     azure_blob.upload_json(CONTAINER, OUTPUT_PATH, results)
     print(f"[scan_missing_players] Uploaded results → {OUTPUT_PATH}")
     print(f"[scan_missing_players] Players scanned: {len(missing)}")
     print(f"[scan_missing_players] Players matched: {len(results)}")
 
-    # Extra: skriv lite loggsammanfattning
     for mid, r in results.items():
         print(f"[scan_missing_players] {r['name']} → {list(r['found_ids'].keys())}")
 
