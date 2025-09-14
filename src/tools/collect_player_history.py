@@ -67,7 +67,7 @@ def main():
 
     history = collect_player_history(args.league_id, args.season)
 
-    out_path = f"meta/player_history_{args.league_id}_{args.season}.json"
+    out_path = f"meta/{season}/player_history_{league_id}.json"
     azure_blob.upload_json(CONTAINER, out_path, history)
     print(f"[collect_player_history] Uploaded → {out_path}")
 
