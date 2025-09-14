@@ -28,7 +28,7 @@ def collect_player_history(league_id: str, season: str):
             away_team = match.get("teams", {}).get("away", {})
 
             for ev in match.get("events", []):
-                # main player
+                # check all roles where a player can appear
                 for role in ["player", "player_in", "player_out", "assist_player"]:
                     p = ev.get(role)
                     if p and "id" in p:
@@ -42,7 +42,7 @@ def collect_player_history(league_id: str, season: str):
                                 "history": []
                             }
 
-                        # Best guess: assign to home/away team based on event
+                        # best guess: assign to home/away team based on event
                         team_side = ev.get("team")
                         team_info = home_team if team_side == "home" else away_team if team_side == "away" else {}
 
@@ -67,7 +67,7 @@ def main():
 
     history = collect_player_history(args.league_id, args.season)
 
-    out_path = f"meta/{season}/player_history_{league_id}.json"
+    out_path = f"meta/{args.season}/player_history_{args.league_id}.json"
     azure_blob.upload_json(CONTAINER, out_path, history)
     print(f"[collect_player_history] Uploaded → {out_path}")
 
