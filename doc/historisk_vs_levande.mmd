@@ -1,0 +1,18 @@
+flowchart LR
+
+  subgraph HIST["Historiskt (låst)"]
+    H1["raw/matches 2017–2025"]
+    H2["stats per season 2017–2025"]
+    H3["totals.json (fryst 24/25)"]
+  end
+
+  subgraph LIVE["Levande (uppdateras weekly)"]
+    L1["stats per season 2025–2026"]
+    L2["key_metrics.json"]
+    L3["profiles/<player_id>.json"]
+    L4["lookup.json"]
+  end
+
+  HIST --> NOTE["player_explorer.ipynb"]
+  LIVE --> NOTE
+  NOTE --> PODCAST["Sektioner (sections_library.yaml)"]
