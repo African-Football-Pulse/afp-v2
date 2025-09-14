@@ -19,14 +19,27 @@ def list_meta_paths():
 
 
 def load_master():
-    return azure_blob.get_json(CONTAINER, MASTER_PATH)
+    """Läs masterfilen med våra African players."""
+    data = azure_blob.get_json(CONTAINER, MASTER_PATH)
+    if isinstance(data, dict) and "players" in data:
+        return data["players"]
+    return data
 
 
 def merge_history():
     master = load_master()
-    africa_ids = {str(p["id"]): p["name"] for p in master}
 
-    history_total = {pid: {"id": pid, "name": pname, "history": []} for pid, pname in africa_ids.items()}
+    # Endast spelare med numeriska ID (skip AFR00X)
+    africa_ids = {
+        str(p["id"]): p["name"]
+        for p in master
+        if str(p.get("id", "")).isdigit()
+    }
+
+    history_total = {
+        pid: {"id": pid, "name": pname, "history": []}
+        for pid, pname in africa_ids.items()
+    }
 
     for path in list_meta_paths():
         data = azure_blob.get_json(CONTAINER, path)
@@ -41,6 +54,7 @@ def merge_history():
 
     azure_blob.upload_json(CONTAINER, OUTPUT_PATH, history_total)
     print(f"[merge_africa_player_history] Uploaded → {OUTPUT_PATH}")
+    print(f"[merge_africa_player_history] Players included: {len(history_total)}")
 
 
 def main():
