@@ -94,9 +94,5 @@ def upload_json(container: str, blob_path: str, obj, content_type: str = "applic
     data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
     return put_bytes(container, blob_path, data, content_type)
 
-from azure.storage.blob import ContainerClient
 
-def list_blobs(container_name: str, prefix: str = ""):
-    """Lista alla blobs i en container under ett prefix."""
-    container = get_container_client(BLOB_CONTAINER_SAS_URL, container_name)
-    return container.list_blobs(name_starts_with=prefix)
+
