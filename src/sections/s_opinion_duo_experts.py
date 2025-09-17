@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
-from scr.lib.base_section import SectionManifest, register_section
+from lib.base_section import SectionManifest, register_section
 
 SECTION_ID = "S.OPINION.DUO_EXPERTS"
 
 def _load_news(date: str, league: str, sources: list[str]) -> list[str]:
+    """Laddar topp-rubriker från flera nyhetskällor."""
     items = []
     for src in sources:
         p = Path(f"collector/curated/news/{src}/{league}/{date}/items.json")
@@ -14,7 +15,7 @@ def _load_news(date: str, league: str, sources: list[str]) -> list[str]:
                 if isinstance(data, dict) and "items" in data:
                     data = data["items"]
                 if isinstance(data, list):
-                    for item in data[:2]:
+                    for item in data[:2]:  # topp 2 per källa
                         if "title" in item:
                             items.append(item["title"])
             except Exception as e:
@@ -35,9 +36,9 @@ def build_section(*, date: str, league: str, **kwargs) -> SectionManifest:
     if headlines:
         dialogue.append({"speaker": "AK", "text": f"Let’s look at today’s headlines: {headlines[0]}"})
         if len(headlines) > 1:
-            dialogue.append({"speaker": "JJK", "text": f"True, and another big one making waves is: {headlines[1]}"})
+            dialogue.append({"speaker": "JJK", "text": f"Absolutely, another big talking point is: {headlines[1]}"})
         if len(headlines) > 2:
-            dialogue.append({"speaker": "AK", "text": f"Exactly, plus {headlines[2]} is stirring debates among fans."})
+            dialogue.append({"speaker": "AK", "text": f"And {headlines[2]} is definitely stirring up debate among fans."})
     else:
         dialogue.append({"speaker": "AK", "text": "There are no major new headlines today, so let’s reflect on recent matches instead."})
 
