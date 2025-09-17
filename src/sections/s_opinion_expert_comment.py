@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from lib.base_section import SectionManifest, register_section
+from src.lib.base_section import SectionManifest, register_section
 
 SECTION_ID = "S.OPINION.EXPERT_COMMENT"
 
