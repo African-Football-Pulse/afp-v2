@@ -1,8 +1,6 @@
-import os, json, pathlib, hashlib, sys
+import os, json, pathlib
 from datetime import datetime
 from typing import List
-
-# Våra gemensamma helpers
 from src.common.blob_io import get_container_client
 
 # ---- Parametrar (kan styras via env)
@@ -57,9 +55,8 @@ def write_text(rel_path: str, text: str, content_type: str) -> str:
 def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
     """
     Returnerar lista av relativa blob-/filvägar som slutar med /section_manifest.json
-    under sections/{date}/{league}/_/.../{lang}/section_manifest.json
     """
-    base_prefix = f"sections/{date}/{league}/_/"
+    base_prefix = f"sections/"
     results: List[str] = []
     if USE_LOCAL:
         base = LOCAL_ROOT / base_prefix
@@ -67,16 +64,42 @@ def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
             return []
         for p in base.rglob("section_manifest.json"):
             posix = p.relative_to(LOCAL_ROOT).as_posix()
-            if f"/{lang}/section_manifest.json" in posix:
+            if f"/{date}/{league}/_/{lang}/section_manifest.json" in posix:
                 results.append(posix)
         return sorted(results)
     else:
         for b in _CONTAINER.list_blobs(name_starts_with=READ_PREFIX + base_prefix):  # type: ignore[attr-defined]
             name = b.name  # type: ignore[attr-defined]
-            if name.endswith("/section_manifest.json") and f"/{lang}/" in name:
-                # ta bort READ_PREFIX för att få en "relativ" väg i resten av koden
+            if name.endswith("/section_manifest.json") and f"/{date}/{league}/_/{lang}/" in name:
                 results.append(name[len(READ_PREFIX):])
         return sorted(results)
+
+# ---------- Ny logik för att bygga episode_script ----------
+def build_episode_script(date: str, league: str, lang: str) -> str:
+    order = [
+        "JINTRO-INGEL",
+        "S.GENERIC.INTRO_POSTMATCH",
+        "S.OPINION.EXPERT_COMMENT",
+        "S.OPINION.DUO_EXPERTS",
+        "S.TOP_AFRICAN_PLAYERS",
+        "OUTRO-JINGEL",
+    ]
+
+    script_parts = []
+    for section in order:
+        try:
+            path = f"sections/{section}/{date}/{league}/_/{lang}/section.md"
+            text = read_text(path)
+            script_parts.append(text.strip())
+            log(f"added section {section}")
+        except FileNotFoundError:
+            log(f"[SKIP] no section for {section} on {date}")
+            continue
+        except Exception as e:
+            log(f"[WARN] failed to read {section}: {e}")
+            continue
+
+    return "\n\n---\n\n".join(script_parts)
 
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str):
@@ -93,13 +116,11 @@ def build_episode(date: str, league: str, lang: str):
     sections_meta = []
     total = 0
     for m in manifests:
-        # Strukturen är .../<SECTION_ID>/<LANG>/section_manifest.json
         parts = m.split("/")
         try:
-            section_id = parts[-3]
+            section_id = parts[1]  # "S.GENERIC.INTRO_POSTMATCH" etc
         except Exception:
             section_id = "UNKNOWN"
-        # Läs manifestet för att plocka target_duration_s om finns
         try:
             raw = json.loads(read_text(m))
             dur = int(raw.get("target_duration_s", 60))
@@ -119,9 +140,10 @@ def build_episode(date: str, league: str, lang: str):
     }
 
     write_text(base + "episode_manifest.json", json.dumps(script, ensure_ascii=False, indent=2), "application/json")
-    write_text(base + "episode_script.txt",
-               "Micro episode (stub) – stitching in Sprint 3",
-               "text/plain; charset=utf-8")
+
+    episode_script = build_episode_script(date, league, lang)
+    write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
+
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_script.txt")
 
@@ -129,7 +151,6 @@ def main():
     mode = "LOCAL" if USE_LOCAL else "SAS"
     log(f"start mode={mode} league={LEAGUE} lang={LANG}")
     if not USE_LOCAL:
-        # Säkerställer att SAS finns & är giltig
         global _CONTAINER
         _CONTAINER = get_container_client()
 
