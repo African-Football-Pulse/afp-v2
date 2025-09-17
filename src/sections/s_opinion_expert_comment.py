@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
-from datetime import datetime
-from src.lib.base_section import SectionManifest, register_section
+from lib.base_section import SectionManifest, register_section
 
 SECTION_ID = "S.OPINION.EXPERT_COMMENT"
 
@@ -16,7 +15,7 @@ def _load_news(date: str, league: str, sources: list[str]) -> list[str]:
                 if isinstance(data, dict) and "items" in data:
                     data = data["items"]
                 if isinstance(data, list):
-                    for item in data[:2]:  # ta max 2 per källa
+                    for item in data[:2]:  # topp 2 per källa
                         if "title" in item:
                             items.append(item["title"])
             except Exception as e:
@@ -33,10 +32,9 @@ def build_section(*, date: str, league: str, **kwargs) -> SectionManifest:
     ]
     headlines = _load_news(date, league, sources)
 
-    # Bygg expert-kommentaren
-    intro = f"As reported by BBC and Guardian today, here are the key stories shaping the Premier League:"
+    intro = "As reported by BBC and Guardian today, here are the key Premier League stories:"
     body_lines = [f"- {h}" for h in headlines] if headlines else ["No fresh headlines available today."]
-    outro = "These developments continue to influence the dynamics across teams and players."
+    outro = "These stories highlight the ongoing dynamics shaping clubs, players, and fans alike."
 
     text = "\n".join([intro, *body_lines, outro])
 
