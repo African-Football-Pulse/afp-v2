@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from lib.base_section import SectionManifest, register_section
+from scr.lib.base_section import SectionManifest, register_section
 
 SECTION_ID = "S.OPINION.DUO_EXPERTS"
 
