@@ -3,11 +3,11 @@ import json
 from collections import defaultdict
 from src.storage import azure_blob
 
+# Samma mönster som build_player_stats.py
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 if not CONTAINER or not CONTAINER.strip():
-    raise RuntimeError("AZURE_STORAGE_CONTAINER is missing or empty")
-
+    CONTAINER = "afp"   # fallback
 
 def generate_club_index():
     master_path = "players/africa/players_africa_master.json"
@@ -34,10 +34,8 @@ def generate_club_index():
     azure_blob.upload_json(CONTAINER, index_path, club_index)
     print(f"[generate_club_index] Uploaded club index → {index_path}")
 
-
 def main():
     generate_club_index()
-
 
 if __name__ == "__main__":
     main()
