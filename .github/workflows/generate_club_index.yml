@@ -1,34 +1,48 @@
-name: Generate Club Index
+import os
+import json
+from collections import defaultdict
+from src.storage import azure_blob
 
-on:
-  workflow_dispatch:
-  push:
-    paths:
-      - "players/africa/players_africa_master.json"
-  schedule:
-    - cron: "0 5 * * *"
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-jobs:
-  generate:
-    runs-on: ubuntu-latest
+def generate_club_index():
+    master_path = "players/africa/players_africa_master.json"
+    master = azure_blob.get_json(CONTAINER, master_path)
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+    if not master or "players" not in master:
+        raise RuntimeError(f"[generate_club_index] Missing or invalid master file at {master_path}")
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
+    club_index = defaultdict(list)
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+    for p in master["players"]:
+        club = p.get("club", "").strip()
+        if not club:
+            continue
+        club_index[club].append({
+            "id": p.get("id"),
+            "name": p["name"],
+            "short_aliases": p.get("short_aliases", []),
+            "aliases": p.get("aliases", []),
+            "country": p.get("country")
+        })
 
-      - name: Run generate_club_index.py
-        env:
-          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
-          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-        run: |
-          python -m src.tools.generate_club_index
+    index_path = "players/africa/players_club_index.json"
+    azure_blob.upload_json(CONTAINER, index_path, club_index)
+
+    # Debug / summary output
+    print(f"[generate_club_index] Uploaded → {index_path}")
+    print(f"[generate_club_index] Indexed {len(club_index)} clubs")
+    for club, players in list(club_index.items())[:10]:  # visa max 10 klubbar
+        print(f"  {club}: {len(players)} spelare")
+    if len(club_index) > 10:
+        print("  ...")
+
+
+def main():
+    print("🔄 Generating club index...")
+    generate_club_index()
+    print("✅ Club index generation complete.")
+
+
+if __name__ == "__main__":
+    main()
