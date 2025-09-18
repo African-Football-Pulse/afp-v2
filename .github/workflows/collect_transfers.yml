@@ -1,12 +1,12 @@
-name: Collect Transfers v2
+name: Collect Transfers
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # kan köras manuellt
   schedule:
     - cron: "0 4 * * *"   # kör varje dag kl 04:00 UTC
 
 jobs:
-  collect:
+  collect-transfers:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,38 +23,9 @@ jobs:
 
       - name: Run collect_transfers
         env:
-          SOCCERDATA_AUTH_KEY:     ${{ secrets.SOCCERDATA_AUTH_KEY }}
-          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
-          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          AZURE_STORAGE_CONTAINER: afp
         run: |
-          echo "🔄 Collecting transfers..."
-          python -m src.tools.collect_transfers | tee transfers_log.txt
-          echo "✅ Done collecting transfers. See summary below:"
-          echo "---- SUMMARY (last 20 lines) ----"
-          tail -n 20 transfers_log.txt
-
-      - name: Show manifest summary
-        env:
-          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
-          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
-        run: |
-          echo "📄 Fetching manifest..."
-          python - <<'PYCODE'
-import os, json
-from src.storage import azure_blob
-
-league_id = 228  # Premier League
-manifest_path = f"transfers/{league_id}/manifest.json"
-container = os.environ["AZURE_STORAGE_CONTAINER"]
-
-if azure_blob.exists(container, manifest_path):
-    data = azure_blob.get_json(container, manifest_path)
-    print(f"✅ Manifest for league {data['league_id']} season {data['season']}")
-    print(f"   Teams collected: {len(data['teams'])}")
-    for t in data["teams"][:5]:  # visa de första 5
-        print(f"   - {t['name']} (id={t['id']}) at {t['collected_at']}")
-else:
-    print(f"⚠️ No manifest found at {manifest_path}")
-PYCODE
+          python -m src.tools.collect_transfers
