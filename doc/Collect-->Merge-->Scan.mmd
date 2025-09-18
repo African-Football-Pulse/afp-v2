@@ -1,29 +1,29 @@
 flowchart TD
 
   subgraph Collect
-    A1[collect_leagues → meta/leagues.json]
-    A2[collect_all_seasons → meta/seasons_{league_id}.json]
-    A3[collect_stats_fullseason → stats/{season}/{league_id}/...]
-    A4[collect_stats_weekly → stats/{YYYY-MM-DD}/{league_id}/...]
-    A5[collect_extract_fullseason → matchfiles]
-    A6[collect_extract_weekly → matchfiles]
-    A7[collect_player_history → meta/{season}/player_history_{league_id}.json]
-    A8[collect_player_stats → stats/{season}/{league_id}/players/{player_id}.json]
-    A9[collect_players_africa → players/{league_id}/{player_id}.json]
-    A10[collect_player_profiles → players/profiles/{player_id}.json]
-    A11[collect_teams → teams/{league_id}/...]
-    A12[collect_transfers → transfers/{league_id}/...]
+    A1[collect_leagues (meta/leagues.json)]
+    A2[collect_all_seasons (meta/seasons_{league_id}.json)]
+    A3[collect_stats_fullseason (stats/{season}/{league_id}/...)]
+    A4[collect_stats_weekly (stats/{YYYY-MM-DD}/{league_id}/...)]
+    A5[collect_extract_fullseason (matchfiles)]
+    A6[collect_extract_weekly (matchfiles)]
+    A7[collect_player_history (meta/{season}/player_history_{league_id}.json)]
+    A8[collect_player_stats (stats/{season}/{league_id}/players/{player_id}.json)]
+    A9[collect_players_africa (players/{league_id}/{player_id}.json)]
+    A10[collect_player_profiles (players/profiles/{player_id}.json)]
+    A11[collect_teams (teams/{league_id}/...)]
+    A12[collect_transfers (transfers/{league_id}/...)]
   end
 
   subgraph Merge
-    M1[merge_players_africa → players_africa_master.json + portraits]
-    M2[merge_africa_player_history → players_africa_history.json + missing_history.json]
-    M3[merge_transfers → players_africa_master_draft.json]
-    M4[generate_club_index → players_club_index.json]
+    M1[merge_players_africa (players_africa_master.json + portraits)]
+    M2[merge_africa_player_history (players_africa_history.json + missing_history.json)]
+    M3[merge_transfers (players_africa_master_draft.json)]
+    M4[generate_club_index (players_club_index.json)]
   end
 
   subgraph Scan
-    S1[scan_missing_players → missing_scan_results.json]
+    S1[scan_missing_players (missing_scan_results.json)]
   end
 
   %% Connections
