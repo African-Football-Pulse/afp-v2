@@ -1,12 +1,12 @@
 name: Generate Club Index
 
 on:
-  workflow_dispatch:    # Manuell körning
+  workflow_dispatch:
   push:
     paths:
-      - "players/africa/players_africa_master.json"   # Trigger när masterlistan ändras
+      - "players/africa/players_africa_master.json"
   schedule:
-    - cron: "0 5 * * *"   # Daglig körning kl 05:00 UTC
+    - cron: "0 5 * * *"
 
 jobs:
   generate:
