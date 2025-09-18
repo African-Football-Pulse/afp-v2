@@ -1,0 +1,34 @@
+name: Generate Club Index
+
+on:
+  workflow_dispatch:    # Manuell körning
+  push:
+    paths:
+      - "players/africa/players_africa_master.json"   # Trigger när masterlistan ändras
+  schedule:
+    - cron: "0 5 * * *"   # Daglig körning kl 05:00 UTC
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run generate_club_index.py
+        env:
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          python -m src.tools.generate_club_index
