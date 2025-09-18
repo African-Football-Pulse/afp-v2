@@ -1,9 +1,9 @@
 name: Build and Deploy Assemble
 
 on:
-  workflow_dispatch:   # kan startas manuellt i GitHub UI
+  workflow_dispatch:    # Manuell trigger via Actions
   schedule:
-    - cron: "0 6 * * *"   # kör automatiskt varje dag kl 06:00 UTC
+    - cron: "0 6 * * *" # Automatisk körning varje dag 06:00 UTC
 
 jobs:
   assemble:
@@ -12,15 +12,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build assembler image
-        run: docker build -t afp-assembler .
+      - name: Build docker image
+        run: docker build -t afp .
 
-      - name: Run assembler
+      - name: Run assemble
         run: |
           docker run --rm \
+            -e JOB_TYPE=src.assembler.build_episode \
             -e LEAGUE=premier_league \
             -e LANG=en \
-            -e READ_PREFIX=sections/ \
+            -e READ_PREFIX="" \
             -e WRITE_PREFIX=assembler/ \
             -e BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}" \
-            afp-assembler
+            afp
