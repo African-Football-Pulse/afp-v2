@@ -3,9 +3,8 @@ from datetime import datetime
 from typing import List
 from src.common.blob_io import get_container_client
 
-# ---- Parametrar (kan styras via env)
 LEAGUE = os.getenv("LEAGUE", "premier_league")
-LANG   = os.getenv("LANG", "en")
+LANG   = os.getenv("LANG", "en")  # Behövs ej för path längre, men kvar i manifest
 POD_ID = os.getenv("POD_ID", f"afp-{LEAGUE}-daily-{LANG}")
 
 USE_LOCAL   = os.getenv("USE_LOCAL", "0") == "1"
@@ -14,8 +13,7 @@ LOCAL_ROOT  = pathlib.Path("/app/local_out")
 READ_PREFIX  = "" if USE_LOCAL else os.getenv("READ_PREFIX", "")
 WRITE_PREFIX = "" if USE_LOCAL else os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "assembler/"))
 
-# Sätts i main() om online
-_CONTAINER = None  # type: ignore
+_CONTAINER = None  # sätts i main()
 
 def log(msg: str) -> None:
     print(f"[assemble] {msg}", flush=True)
@@ -26,37 +24,25 @@ def today() -> str:
 def _ensure_parent(p: pathlib.Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
 
-# ---------- I/O helpers ----------
-def _read_text_local(rel_path: str) -> str:
-    p = LOCAL_ROOT / rel_path
-    if not p.exists():
-        raise FileNotFoundError(f"Local file not found: {p}")
-    return p.read_text(encoding="utf-8")
-
-def _write_text_local(rel_path: str, text: str, content_type: str = "text/plain; charset=utf-8") -> str:
-    p = LOCAL_ROOT / rel_path
-    _ensure_parent(p)
-    p.write_text(text, encoding="utf-8")
-    return str(p)
-
+# ---------- I/O ----------
 def read_text(rel_path: str) -> str:
     if USE_LOCAL:
-        return _read_text_local(rel_path)
+        p = LOCAL_ROOT / rel_path
+        return p.read_text(encoding="utf-8")
     blob = _CONTAINER.get_blob_client(blob=READ_PREFIX + rel_path)  # type: ignore[attr-defined]
     return blob.download_blob().readall().decode("utf-8")
 
 def write_text(rel_path: str, text: str, content_type: str) -> str:
     if USE_LOCAL:
-        return _write_text_local(rel_path, text, content_type)
+        p = LOCAL_ROOT / rel_path
+        _ensure_parent(p)
+        p.write_text(text, encoding="utf-8")
+        return str(p)
     blob = _CONTAINER.get_blob_client(blob=WRITE_PREFIX + rel_path)  # type: ignore[attr-defined]
     blob.upload_blob(text.encode("utf-8"), overwrite=True, content_type=content_type)
     return WRITE_PREFIX + rel_path
 
-def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
-    """
-    Returnerar lista av relativa blob-/filvägar som slutar med /section_manifest.json
-    Fångar både paths med språk (…/_/en/) och utan (…/_/).
-    """
+def list_section_manifests(date: str, league: str) -> List[str]:
     base_prefix = f"sections/"
     results: List[str] = []
     if USE_LOCAL:
@@ -65,23 +51,20 @@ def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
             return []
         for p in base.rglob("section_manifest.json"):
             posix = p.relative_to(LOCAL_ROOT).as_posix()
-            if f"/{date}/{league}/_/{lang}/section_manifest.json" in posix or f"/{date}/{league}/_/section_manifest.json" in posix:
+            if f"/{date}/{league}/_/section_manifest.json" in posix:
                 results.append(posix)
         return sorted(results)
     else:
         log(f"DEBUG: listing blobs with prefix={READ_PREFIX + base_prefix}")
         for b in _CONTAINER.list_blobs(name_starts_with=READ_PREFIX + base_prefix):  # type: ignore[attr-defined]
             name = b.name  # type: ignore[attr-defined]
-            log(f"DEBUG: scanned blob: {name}")
-            if name.endswith("/section_manifest.json"):
-                if f"/{date}/{league}/_/{lang}/" in name or f"/{date}/{league}/_/section_manifest.json" in name:
-                    log(f"DEBUG: manifest match -> {name}")
-                    results.append(name[len(READ_PREFIX):])
+            if name.endswith("/section_manifest.json") and f"/{date}/{league}/_/" in name:
+                log(f"DEBUG: manifest match -> {name}")
+                results.append(name[len(READ_PREFIX):])
         return sorted(results)
 
-# ---------- Ny logik för att bygga episode_script ----------
-def build_episode_script(date: str, league: str, lang: str) -> str:
-    # Ordning enligt mapparna i blobben
+# ---------- Bygg script ----------
+def build_episode_script(date: str, league: str) -> str:
     order = [
         "S.GENERIC.INTRO_POSTMATCH",
         "S.OPINION.EXPERT_COMMENT",
@@ -89,37 +72,25 @@ def build_episode_script(date: str, league: str, lang: str) -> str:
         "S.STATS.TOP_AFRICAN_PLAYERS",
     ]
 
-    script_parts = []
-
-    # Placeholder: intro-jingel
-    script_parts.append("[INTRO JINGEL]")
+    script_parts = ["[INTRO JINGEL]"]
 
     for section in order:
-        path = f"sections/{section}/{date}/{league}/_/{lang}/section.md"
-        alt_path = f"sections/{section}/{date}/{league}/_/section.md"
-        log(f"DEBUG: trying to read {path} (alt: {alt_path})")
+        path = f"sections/{section}/{date}/{league}/_/section.md"
+        log(f"DEBUG: trying {path}")
         try:
-            try:
-                text = read_text(path)
-            except Exception:
-                text = read_text(alt_path)
+            text = read_text(path)
             script_parts.append(text.strip())
             log(f"added section {section}")
-        except FileNotFoundError:
-            log(f"[SKIP] no section for {section} on {date}")
-            continue
         except Exception as e:
-            log(f"[WARN] failed to read {section}: {e}")
+            log(f"[SKIP] could not read {section} on {date}: {e}")
             continue
 
-    # Placeholder: outro-jingel
     script_parts.append("[OUTRO JINGEL]")
-
     return "\n\n---\n\n".join(script_parts)
 
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str):
-    manifests = list_section_manifests(date, league, lang)
+    manifests = list_section_manifests(date, league)
     log(f"found manifests: {len(manifests)}")
     base = f"episodes/{date}/{league}/daily/{lang}/"
 
@@ -133,10 +104,7 @@ def build_episode(date: str, league: str, lang: str):
     total = 0
     for m in manifests:
         parts = m.split("/")
-        try:
-            section_id = parts[1]  # "S.GENERIC.INTRO_POSTMATCH" etc
-        except Exception:
-            section_id = "UNKNOWN"
+        section_id = parts[1] if len(parts) > 1 else "UNKNOWN"
         try:
             raw = json.loads(read_text(m))
             dur = int(raw.get("target_duration_s", 60))
@@ -157,7 +125,7 @@ def build_episode(date: str, league: str, lang: str):
 
     write_text(base + "episode_manifest.json", json.dumps(script, ensure_ascii=False, indent=2), "application/json")
 
-    episode_script = build_episode_script(date, league, lang)
+    episode_script = build_episode_script(date, league)
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
 
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
@@ -169,7 +137,6 @@ def main():
     if not USE_LOCAL:
         global _CONTAINER
         _CONTAINER = get_container_client()
-
     date = today()
     build_episode(date, LEAGUE, LANG)
     log("done")
