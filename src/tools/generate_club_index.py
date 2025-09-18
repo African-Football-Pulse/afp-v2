@@ -1,41 +1,37 @@
-import os
-import json
-from collections import defaultdict
-from src.storage import azure_blob
+name: Generate Club Index
 
-# Samma mönster som build_player_stats.py
-CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "players/africa/players_africa_master.json"
+  schedule:
+    - cron: "0 5 * * *"
 
-if not CONTAINER or not CONTAINER.strip():
-    CONTAINER = "afp"   # fallback
+jobs:
+  generate:
+    runs-on: ubuntu-latest
 
-def generate_club_index():
-    master_path = "players/africa/players_africa_master.json"
-    master = azure_blob.get_json(CONTAINER, master_path)
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-    if not master or "players" not in master:
-        raise RuntimeError(f"[generate_club_index] Missing or invalid master file at {master_path}")
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-    club_index = defaultdict(list)
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-    for p in master["players"]:
-        club = p.get("club", "").strip()
-        if not club:
-            continue
-        club_index[club].append({
-            "id": p.get("id"),
-            "name": p["name"],
-            "short_aliases": p.get("short_aliases", []),
-            "aliases": p.get("aliases", []),
-            "country": p.get("country")
-        })
-
-    index_path = "players/africa/players_club_index.json"
-    azure_blob.upload_json(CONTAINER, index_path, club_index)
-    print(f"[generate_club_index] Uploaded club index → {index_path}")
-
-def main():
-    generate_club_index()
-
-if __name__ == "__main__":
-    main()
+      - name: Run generate_club_index
+        env:
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Generating club index..."
+          python -m src.tools.generate_club_index | tee generate_log.txt
+          echo "✅ Done. See summary below:"
+          echo "---- SUMMARY (last 20 lines) ----"
+          tail -n 20 generate_log.txt
