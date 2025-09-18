@@ -68,9 +68,12 @@ def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
                 results.append(posix)
         return sorted(results)
     else:
+        log(f"DEBUG: listing blobs with prefix={READ_PREFIX + base_prefix}")
         for b in _CONTAINER.list_blobs(name_starts_with=READ_PREFIX + base_prefix):  # type: ignore[attr-defined]
             name = b.name  # type: ignore[attr-defined]
+            log(f"DEBUG: scanned blob: {name}")
             if name.endswith("/section_manifest.json") and f"/{date}/{league}/_/{lang}/" in name:
+                log(f"DEBUG: manifest match -> {name}")
                 results.append(name[len(READ_PREFIX):])
         return sorted(results)
 
@@ -90,9 +93,9 @@ def build_episode_script(date: str, league: str, lang: str) -> str:
     script_parts.append("[INTRO JINGEL]")
 
     for section in order:
+        path = f"sections/{section}/{date}/{league}/_/{lang}/section.md"
+        log(f"DEBUG: trying to read {path}")
         try:
-            path = f"sections/{section}/{date}/{league}/_/{lang}/section.md"
-            log(f"reading {path}")
             text = read_text(path)
             script_parts.append(text.strip())
             log(f"added section {section}")
