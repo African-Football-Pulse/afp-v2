@@ -158,5 +158,10 @@ def main():
     build_episode(date, LEAGUE, LANG)
     log("done")
 
+    # ✅ Grön bock vid klart
+    GREEN = "\033[92m"
+    RESET = "\033[0m"
+    print(f"{GREEN}✅ Episode build completed successfully!{RESET}", flush=True)
+
 if __name__ == "__main__":
     main()
