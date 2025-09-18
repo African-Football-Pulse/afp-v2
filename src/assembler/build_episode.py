@@ -11,7 +11,7 @@ POD_ID = os.getenv("POD_ID", f"afp-{LEAGUE}-daily-{LANG}")
 USE_LOCAL   = os.getenv("USE_LOCAL", "0") == "1"
 LOCAL_ROOT  = pathlib.Path("/app/local_out")
 
-READ_PREFIX  = "" if USE_LOCAL else os.getenv("READ_PREFIX", "producer/")
+READ_PREFIX  = "" if USE_LOCAL else os.getenv("READ_PREFIX", "")
 WRITE_PREFIX = "" if USE_LOCAL else os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "assembler/"))
 
 # Sätts i main() om online
@@ -76,19 +76,23 @@ def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
 
 # ---------- Ny logik för att bygga episode_script ----------
 def build_episode_script(date: str, league: str, lang: str) -> str:
+    # Ordning enligt mapparna i blobben
     order = [
-        "JINTRO-INGEL",
         "S.GENERIC.INTRO_POSTMATCH",
         "S.OPINION.EXPERT_COMMENT",
         "S.OPINION.DUO_EXPERTS",
-        "S.TOP_AFRICAN_PLAYERS",
-        "OUTRO-JINGEL",
+        "S.STATS.TOP_AFRICAN_PLAYERS",
     ]
 
     script_parts = []
+
+    # Placeholder: intro-jingel
+    script_parts.append("[INTRO JINGEL]")
+
     for section in order:
         try:
             path = f"sections/{section}/{date}/{league}/_/{lang}/section.md"
+            log(f"reading {path}")
             text = read_text(path)
             script_parts.append(text.strip())
             log(f"added section {section}")
@@ -98,6 +102,9 @@ def build_episode_script(date: str, league: str, lang: str) -> str:
         except Exception as e:
             log(f"[WARN] failed to read {section}: {e}")
             continue
+
+    # Placeholder: outro-jingel
+    script_parts.append("[OUTRO JINGEL]")
 
     return "\n\n---\n\n".join(script_parts)
 
@@ -134,7 +141,7 @@ def build_episode(date: str, league: str, lang: str):
         "date": date,
         "type": "micro",
         "lang": lang,
-        "jingles": {"intro": "jingles/J2.mp3", "outro": "jingles/J2.mp3"},
+        "jingles": {"intro": "JINGEL_INTRO_PATH", "outro": "JINGEL_OUTRO_PATH"},
         "sections": sections_meta,
         "duration_s": total,
     }
