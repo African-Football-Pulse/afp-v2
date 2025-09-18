@@ -1,4 +1,4 @@
-name: Collect Transfers
+name: Collect Transfers v2
 
 on:
   workflow_dispatch:
