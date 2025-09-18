@@ -2,54 +2,175 @@ league: premier_league
 sources:
   - name: guardian_football
     url: https://www.theguardian.com/football/rss
+    active: true
   - name: bbc_football
     url: http://feeds.bbci.co.uk/sport/football/rss.xml
+    active: true
   - name: sky_sports_premier_league
     url: https://www.skysports.com/rss/12040
+    active: true
   - name: independent_football
     url: https://www.independent.co.uk/sport/football/rss
+    active: true
   - name: epl
     url: http://www.football-news-views.co.uk/premier-league-rss.xml
+    active: true
   - name: english_championship
     url: http://www.football-news-views.co.uk/championship-rss.xml
+    active: true
   - name: arsenal
-    url: https://www.football-news-views.co.uk/arsenalrss.xml
+    url: https://www.footballcritic.com/rss/arsenal
+    active: true
   - name: aston_villa
-    url: https://www.football-news-views.co.uk/aston-villarss.xml
+    url: https://www.footballcritic.com/rss/aston-villa
+    active: true
+  - name: bournemouth
+    url: https://www.footballcritic.com/rss/bournemouth
+    active: true
+  - name: brentford
+    url: https://www.footballcritic.com/rss/brentford
+    active: true
+  - name: brighton
+    url: https://www.footballcritic.com/rss/brighton
+    active: true
   - name: burnley
-    url: https://www.football-news-views.co.uk/burnleyrss.xml
+    url: https://www.footballcritic.com/rss/burnley
+    active: true
   - name: chelsea
-    url: https://www.football-news-views.co.uk/chelsearss.xml
+    url: https://www.footballcritic.com/rss/chelsea
+    active: true
   - name: crystal_palace
-    url: https://www.football-news-views.co.uk/crystal-palacerss.xml
+    url: https://www.footballcritic.com/rss/crystal-palace
+    active: true
   - name: everton
-    url: https://www.football-news-views.co.uk/evertonrss.xml
-  - name: hull
-    url: https://www.football-news-views.co.uk/hull-cityrss.xml
-  - name: leicester
-    url: https://www.football-news-views.co.uk/leicester-cityrss.xml
+    url: https://www.footballcritic.com/rss/everton
+    active: true
+  - name: fulham
+    url: https://www.footballcritic.com/rss/fulham
+    active: true
+  - name: leeds_united
+    url: https://www.footballcritic.com/rss/leeds-united
+    active: true
   - name: liverpool
-    url: https://www.football-news-views.co.uk/liverpoolrss.xml
+    url: https://www.footballcritic.com/rss/liverpool
+    active: true
   - name: manchester_city
-    url: https://www.football-news-views.co.uk/manchester-cityrss.xml
+    url: https://www.footballcritic.com/rss/manchester-city
+    active: true
   - name: manchester_united
-    url: https://www.football-news-views.co.uk/manchester-unitedrss.xml
-  - name: newcastle
-    url: https://www.football-news-views.co.uk/newcastle-unitedrss.xml
-  - name: qpr
-    url: https://www.football-news-views.co.uk/qprrss.xml
-  - name: southampton
-    url: https://www.football-news-views.co.uk/southamptonrss.xml
-  - name: stoke
-    url: https://www.football-news-views.co.uk/stoke-cityrss.xml
-  - name: sunderland
-    url: https://www.football-news-views.co.uk/sunderlandrss.xml
-  - name: swansea
-    url: https://www.football-news-views.co.uk/swansearss.xml
+    url: https://www.footballcritic.com/rss/manchester-united
+    active: true
+  - name: newcastle_united
+    url: https://www.footballcritic.com/rss/newcastle-united
+    active: true
+  - name: nottingham_forest
+    url: https://www.footballcritic.com/rss/nottingham-forest
+    active: true
+  - name: sheffield_united
+    url: https://www.footballcritic.com/rss/sheffield-united
+    active: true
   - name: tottenham
-    url: https://www.football-news-views.co.uk/tottenham-hotspurrss.xml
-  - name: west_brom
-    url: https://www.football-news-views.co.uk/west-bromrss.xml
+    url: https://www.footballcritic.com/rss/tottenham
+    active: true
   - name: west_ham
-    url: https://www.football-news-views.co.uk/west-hamrss.xml
-timeout_s: 15
+    url: https://www.footballcritic.com/rss/west-ham
+    active: true
+  - name: wolves
+    url: https://www.footballcritic.com/rss/wolves
+    active: true
+
+league: bundesliga
+sources:
+  - name: bayer_leverkusen
+    url: https://www.footballcritic.com/rss/bayer-leverkusen
+    active: true
+  - name: bayern_munich
+    url: https://www.footballcritic.com/rss/bayern-munich
+    active: true
+  - name: borussia_dortmund
+    url: https://www.footballcritic.com/rss/borussia-dortmund
+    active: true
+  - name: borussia_monchengladbach
+    url: https://www.footballcritic.com/rss/borussia-monchengladbach
+    active: true
+  - name: eintracht_frankfurt
+    url: https://www.footballcritic.com/rss/eintracht-frankfurt
+    active: true
+  - name: rb_leipzig
+    url: https://www.footballcritic.com/rss/rb-leipzig
+    active: true
+  - name: schalke_04
+    url: https://www.footballcritic.com/rss/schalke-04
+    active: true
+  - name: union_berlin
+    url: https://www.footballcritic.com/rss/union-berlin
+    active: true
+  - name: vfb_stuttgart
+    url: https://www.footballcritic.com/rss/vfb-stuttgart
+    active: true
+  - name: vfl_wolfsburg
+    url: https://www.footballcritic.com/rss/vfl-wolfsburg
+    active: true
+
+league: ligue_1
+sources:
+  - name: lille
+    url: https://www.footballcritic.com/rss/lille
+    active: true
+  - name: lyon
+    url: https://www.footballcritic.com/rss/lyon
+    active: true
+  - name: marseille
+    url: https://www.footballcritic.com/rss/marseille
+    active: true
+  - name: monaco
+    url: https://www.footballcritic.com/rss/monaco
+    active: true
+  - name: nice
+    url: https://www.footballcritic.com/rss/nice
+    active: true
+  - name: paris_saint_germain
+    url: https://www.footballcritic.com/rss/paris-saint-germain
+    active: true
+  - name: rennes
+    url: https://www.footballcritic.com/rss/rennes
+    active: true
+
+league: la_liga
+sources:
+  - name: atletico_madrid
+    url: https://www.footballcritic.com/rss/atletico-madrid
+    active: true
+  - name: barcelona
+    url: https://www.footballcritic.com/rss/barcelona
+    active: true
+  - name: real_betis
+    url: https://www.footballcritic.com/rss/real-betis
+    active: true
+  - name: real_madrid
+    url: https://www.footballcritic.com/rss/real-madrid
+    active: true
+  - name: real_sociedad
+    url: https://www.footballcritic.com/rss/real-sociedad
+    active: true
+  - name: sevilla
+    url: https://www.footballcritic.com/rss/sevilla
+    active: true
+  - name: valencia
+    url: https://www.footballcritic.com/rss/valencia
+    active: true
+  - name: villarreal
+    url: https://www.footballcritic.com/rss/villarreal
+    active: true
+
+league: eredivisie
+sources:
+  - name: ajax
+    url: https://www.footballcritic.com/rss/ajax
+    active: true
+  - name: feyenoord
+    url: https://www.footballcritic.com/rss/feyenoord
+    active: true
+  - name: psv
+    url: https://www.footballcritic.com/rss/psv
+    active: true
