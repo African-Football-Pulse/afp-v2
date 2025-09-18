@@ -8,6 +8,10 @@ sources:
     url: https://www.skysports.com/rss/12040
   - name: independent_football
     url: https://www.independent.co.uk/sport/football/rss
+  - name: epl
+    url: http://www.football-news-views.co.uk/premier-league-rss.xml
+  - name: english_championship
+    url: http://www.football-news-views.co.uk/championship-rss.xml
   - name: arsenal
     url: https://www.football-news-views.co.uk/arsenalrss.xml
   - name: aston_villa
