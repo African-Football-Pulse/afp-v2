@@ -1,0 +1,41 @@
+name: Merge Transfers
+
+on:
+  workflow_dispatch:
+    inputs:
+      player_id:
+        description: "Optional: limit run to a single player_id (e.g. 62179 for Taiwo)"
+        required: false
+        default: ""
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run merge_transfers
+        env:
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Running merge_transfers..."
+          if [ -n "${{ github.event.inputs.player_id }}" ]; then
+            python -m src.tools.merge_transfers --league-id 228 --season 2024-2025 --player-id ${{ github.event.inputs.player_id }} | tee merge_log.txt
+          else
+            python -m src.tools.merge_transfers --league-id 228 --season 2024-2025 | tee merge_log.txt
+          fi
+          echo "✅ Done. See summary below:"
+          echo "---- SUMMARY (last 20 lines) ----"
+          tail -n 20 merge_log.txt
