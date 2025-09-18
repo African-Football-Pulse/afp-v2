@@ -18,7 +18,8 @@ def merge_transfers(league_id: int, season: str, player_id: int = None):
     # Läs masterfil
     master_path = "players/africa/players_africa_master.json"
     master = azure_blob.get_json(container, master_path)
-    master_by_id = {p["id"]: p for p in master}
+    players = master.get("players", [])
+    master_by_id = {p["id"]: p for p in players}
 
     # Läs manifest
     manifest_path = f"transfers/{league_id}/manifest.json"
@@ -38,7 +39,7 @@ def merge_transfers(league_id: int, season: str, player_id: int = None):
                 continue
 
             if pid not in master_by_id:
-                continue  # Vi bryr oss bara om spelare i master
+                continue  # vi bryr oss bara om spelare i master
 
             player = master_by_id[pid]
             transfer_date = parse_date(t.get("transfer_date"))
@@ -83,6 +84,7 @@ def merge_transfers(league_id: int, season: str, player_id: int = None):
 
     # Spara tillbaka masterfilen
     if updates > 0:
+        master["players"] = players
         azure_blob.put_text(container, master_path, json.dumps(master, indent=2, ensure_ascii=False))
         print(f"[merge_transfers] Saved {updates} updates → {master_path}")
     else:
