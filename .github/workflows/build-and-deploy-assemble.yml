@@ -1,154 +1,26 @@
-name: Build + Deploy Assemble (ACA)
+name: Build and Deploy Assemble
 
 on:
-  workflow_dispatch:
-    inputs:
-      resource_group:
-        description: "Azure Resource Group (t.ex. afp-rg)"
-        required: true
-        type: string
-      job_name:
-        description: "ACA Job name"
-        required: true
-        default: "afp-assemble-job"
-        type: string
-      acr_name:
-        description: "ACR (utan .azurecr.io), t.ex. afpacr"
-        required: true
-        type: string
-      image_name:
-        description: "Image-namn i ACR"
-        required: true
-        default: "afp-runner"
-        type: string
-      blob_prefix:
-        description: "Skrivprefix (där assemble lägger output)"
-        required: true
-        default: "assembler/"
-        type: string
-      read_prefix:
-        description: "Läsprefix (var assemble läser sections från)"
-        required: true
-        default: "producer/"
-        type: string
-      lang:
-        description: "Språk-stig för episodes (t.ex. en)"
-        required: true
-        default: "en"
-        type: string
-
-env:
-  SECRET_NAME: blob-container-sas-url
+  workflow_dispatch:   # kan startas manuellt i GitHub UI
+  schedule:
+    - cron: "0 6 * * *"   # kör automatiskt varje dag kl 06:00 UTC
 
 jobs:
-  build-deploy:
+  assemble:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build assembler image
+        run: docker build -t afp-assembler .
 
-      - name: Enable Container Apps CLI
+      - name: Run assembler
         run: |
-          az extension add --name containerapp --upgrade -y || true
-          az config set extension.use_dynamic_install=yes_without_prompt
-
-      - name: ACR login (AAD)
-        run: az acr login --name "${{ inputs.acr_name }}"
-
-      - name: Compute image ref (uses run number)
-        run: |
-          echo "IMAGE_TAG=gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-          echo "IMAGE_REF=${{ inputs.acr_name }}.azurecr.io/${{ inputs.image_name }}:gh-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-          echo "DATE_UTC=$(date -u +%F)" >> $GITHUB_ENV
-
-      - name: Build & push image
-        run: |
-          docker build -t "$IMAGE_REF" .
-          docker push "$IMAGE_REF"
-
-      - name: Ensure SAS secret on job
-        run: |
-          az containerapp job secret set \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --secrets "${{ env.SECRET_NAME }}=${{ secrets.BLOB_CONTAINER_SAS_URL }}"
-
-      # Rendera YAML-mallen med rätt värden
-      - name: Render assemble YAML
-        run: |
-          mkdir -p infra
-          cp infra/assemble-job.template.yaml infra/assemble-job.rendered.yaml
-          sed -i "s|__IMAGE_REF__|$IMAGE_REF|g" infra/assemble-job.rendered.yaml
-          sed -i "s|__READ_PREFIX__|${{ inputs.read_prefix }}|g" infra/assemble-job.rendered.yaml
-          sed -i "s|__BLOB_PREFIX__|${{ inputs.blob_prefix }}|g" infra/assemble-job.rendered.yaml
-          sed -i "s|__LANG__|${{ inputs.lang }}|g" infra/assemble-job.rendered.yaml
-          echo '--- rendered YAML ---'
-          cat infra/assemble-job.rendered.yaml
-
-      # Uppdatera jobbet med YAML (inkl. command/args via YAML)
-      - name: Update job from YAML
-        run: |
-          az containerapp job update \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --yaml infra/assemble-job.rendered.yaml
-
-      # Starta och fånga execution-namnet
-      - name: Start job (capture execution name)
-        id: start_run
-        run: |
-          EXEC_NAME=$(az containerapp job start \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --query name -o tsv)
-          echo "EXEC_NAME=$EXEC_NAME" >> $GITHUB_ENV
-          echo "Started: $EXEC_NAME"
-
-      # Vänta in status; visa sista loggraderna vid fail/timeout
-      - name: Wait for execution status
-        run: |
-          echo "Waiting for execution: $EXEC_NAME"
-          for i in {1..60}; do
-            ST=$(az containerapp job execution show \
-                  --name "${{ inputs.job_name }}" \
-                  --resource-group "${{ inputs.resource_group }}" \
-                  --execution "$EXEC_NAME" \
-                  --query properties.status -o tsv 2>/dev/null || echo "Pending")
-            echo "[$i] Status: $ST"
-            if [ "$ST" = "Succeeded" ]; then
-              echo "Job Succeeded"; exit 0
-            fi
-            if [ "$ST" = "Failed" ]; then
-              echo "---- Last 200 log lines ----"
-              az containerapp job execution logs show \
-                --name "${{ inputs.job_name }}" \
-                --resource-group "${{ inputs.resource_group }}" \
-                --execution "$EXEC_NAME" \
-                --tail 200 || true
-              exit 1
-            fi
-            sleep 5
-          done
-          echo "Timeout waiting for job execution"
-          az containerapp job execution logs show \
-            --name "${{ inputs.job_name }}" \
-            --resource-group "${{ inputs.resource_group }}" \
-            --execution "$EXEC_NAME" \
-            --tail 200 || true
-          exit 1
-
-      - name: Summary
-        run: |
-          echo "### Assemble deployed & ran" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: \`$IMAGE_REF\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Execution: \`$EXEC_NAME\`" >> $GITHUB_STEP_SUMMARY
+          docker run --rm \
+            -e LEAGUE=premier_league \
+            -e LANG=en \
+            -e READ_PREFIX=sections/ \
+            -e WRITE_PREFIX=assembler/ \
+            -e BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}" \
+            afp-assembler
