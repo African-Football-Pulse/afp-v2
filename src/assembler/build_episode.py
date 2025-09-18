@@ -55,6 +55,7 @@ def write_text(rel_path: str, text: str, content_type: str) -> str:
 def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
     """
     Returnerar lista av relativa blob-/filvägar som slutar med /section_manifest.json
+    Fångar både paths med språk (…/_/en/) och utan (…/_/).
     """
     base_prefix = f"sections/"
     results: List[str] = []
@@ -64,7 +65,7 @@ def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
             return []
         for p in base.rglob("section_manifest.json"):
             posix = p.relative_to(LOCAL_ROOT).as_posix()
-            if f"/{date}/{league}/_/{lang}/section_manifest.json" in posix:
+            if f"/{date}/{league}/_/{lang}/section_manifest.json" in posix or f"/{date}/{league}/_/section_manifest.json" in posix:
                 results.append(posix)
         return sorted(results)
     else:
@@ -72,9 +73,10 @@ def list_section_manifests(date: str, league: str, lang: str) -> List[str]:
         for b in _CONTAINER.list_blobs(name_starts_with=READ_PREFIX + base_prefix):  # type: ignore[attr-defined]
             name = b.name  # type: ignore[attr-defined]
             log(f"DEBUG: scanned blob: {name}")
-            if name.endswith("/section_manifest.json") and f"/{date}/{league}/_/{lang}/" in name:
-                log(f"DEBUG: manifest match -> {name}")
-                results.append(name[len(READ_PREFIX):])
+            if name.endswith("/section_manifest.json"):
+                if f"/{date}/{league}/_/{lang}/" in name or f"/{date}/{league}/_/section_manifest.json" in name:
+                    log(f"DEBUG: manifest match -> {name}")
+                    results.append(name[len(READ_PREFIX):])
         return sorted(results)
 
 # ---------- Ny logik för att bygga episode_script ----------
@@ -94,9 +96,13 @@ def build_episode_script(date: str, league: str, lang: str) -> str:
 
     for section in order:
         path = f"sections/{section}/{date}/{league}/_/{lang}/section.md"
-        log(f"DEBUG: trying to read {path}")
+        alt_path = f"sections/{section}/{date}/{league}/_/section.md"
+        log(f"DEBUG: trying to read {path} (alt: {alt_path})")
         try:
-            text = read_text(path)
+            try:
+                text = read_text(path)
+            except Exception:
+                text = read_text(alt_path)
             script_parts.append(text.strip())
             log(f"added section {section}")
         except FileNotFoundError:
