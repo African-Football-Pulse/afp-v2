@@ -8,4 +8,44 @@ sources:
     url: https://www.skysports.com/rss/12040
   - name: independent_football
     url: https://www.independent.co.uk/sport/football/rss
+  - name: arsenal
+    url: https://www.football-news-views.co.uk/arsenalrss.xml
+  - name: aston_villa
+    url: https://www.football-news-views.co.uk/aston-villarss.xml
+  - name: burnley
+    url: https://www.football-news-views.co.uk/burnleyrss.xml
+  - name: chelsea
+    url: https://www.football-news-views.co.uk/chelsearss.xml
+  - name: crystal_palace
+    url: https://www.football-news-views.co.uk/crystal-palacerss.xml
+  - name: everton
+    url: https://www.football-news-views.co.uk/evertonrss.xml
+  - name: hull
+    url: https://www.football-news-views.co.uk/hull-cityrss.xml
+  - name: leicester
+    url: https://www.football-news-views.co.uk/leicester-cityrss.xml
+  - name: liverpool
+    url: https://www.football-news-views.co.uk/liverpoolrss.xml
+  - name: manchester_city
+    url: https://www.football-news-views.co.uk/manchester-cityrss.xml
+  - name: manchester_united
+    url: https://www.football-news-views.co.uk/manchester-unitedrss.xml
+  - name: newcastle
+    url: https://www.football-news-views.co.uk/newcastle-unitedrss.xml
+  - name: qpr
+    url: https://www.football-news-views.co.uk/qprrss.xml
+  - name: southampton
+    url: https://www.football-news-views.co.uk/southamptonrss.xml
+  - name: stoke
+    url: https://www.football-news-views.co.uk/stoke-cityrss.xml
+  - name: sunderland
+    url: https://www.football-news-views.co.uk/sunderlandrss.xml
+  - name: swansea
+    url: https://www.football-news-views.co.uk/swansearss.xml
+  - name: tottenham
+    url: https://www.football-news-views.co.uk/tottenham-hotspurrss.xml
+  - name: west_brom
+    url: https://www.football-news-views.co.uk/west-bromrss.xml
+  - name: west_ham
+    url: https://www.football-news-views.co.uk/west-hamrss.xml
 timeout_s: 15
