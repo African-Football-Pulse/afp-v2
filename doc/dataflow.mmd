@@ -2,7 +2,7 @@ flowchart TD
 
   %% Data objects
   D1[(Leagues.json)]
-  D2[(Seasons_{league}.json)]
+  D2[(Seasons files)]
   D3[(Match manifests)]
   D4[(Match files)]
   D5[(Player history)]
@@ -11,11 +11,12 @@ flowchart TD
   D8[(Teams)]
   D9[(Transfers)]
   D10[(Master players)]
-  D11[(Player history merged)]
+  D11[(Merged history)]
   D12[(Transfers draft)]
   D13[(Club index)]
   D14[(Missing history)]
   D15[(Scan results)]
+  P1[(Profiles)]
 
   %% Collect
   CL[collect_leagues] --> D1
@@ -29,7 +30,7 @@ flowchart TD
   CA[collect_players_africa] --> D7
   CT[collect_teams] --> D8
   CTR[collect_transfers] --> D9
-  CPROF[collect_player_profiles] --> P1[(Profiles)]
+  CPROF[collect_player_profiles] --> P1
 
   %% Merge
   M1[merge_players_africa] --> D10
