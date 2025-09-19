@@ -1,57 +1,57 @@
 flowchart TD
 
   %% Data objects
-  D1[(Leagues.json)]
-  D2[(Seasons files)]
-  D3[(Match manifests)]
-  D4[(Match files)]
-  D5[(Player history)]
-  D6[(Player stats)]
-  D7[(Players Africa)]
-  D8[(Teams)]
-  D9[(Transfers)]
-  D10[(Master players)]
-  D11[(Merged history)]
-  D12[(Transfers draft)]
-  D13[(Club index)]
-  D14[(Missing history)]
-  D15[(Scan results)]
-  P1[(Profiles)]
+  L[(Leagues.json)]
+  S[(Seasons files)]
+  M[(Match files)]
+  H[(Player history)]
+  PS[(Player stats)]
+  PA[(Players Africa)]
+  T[(Teams)]
+  TR[(Transfers)]
+  P[(Profiles)]
+  MASTER[(Master players)]
+  MH[(Merged history)]
+  DRAFT[(Transfers draft)]
+  CI[(Club index)]
+  MISS[(Missing history)]
+  SCAN[(Scan results)]
 
   %% Collect
-  CL[collect_leagues] --> D1
-  CS[collect_all_seasons] --> D2
-  CF[collect_stats_fullseason] --> D3
-  CW[collect_stats_weekly] --> D3
-  CE1[collect_extract_fullseason] --> D4
-  CE2[collect_extract_weekly] --> D4
-  CH[collect_player_history] --> D5
-  CP[collect_player_stats] --> D6
-  CA[collect_players_africa] --> D7
-  CT[collect_teams] --> D8
-  CTR[collect_transfers] --> D9
-  CPROF[collect_player_profiles] --> P1
+  CL[collect_leagues] --> L
+  L --> CS[collect_all_seasons]
+  CS --> S
+
+  CE1[collect_extract_fullseason] --> M
+  CE2[collect_extract_weekly] --> M
+
+  M --> CH[collect_player_history]
+  M --> CP[collect_player_stats]
+  M --> CA[collect_players_africa]
+  M --> CT[collect_teams]
+
+  CH --> H
+  CP --> PS
+  CA --> PA
+  CT --> T
+
+  CTR[collect_transfers] --> TR
+  CPROF[collect_player_profiles] --> P
 
   %% Merge
-  M1[merge_players_africa] --> D10
-  M2[merge_africa_player_history] --> D11
-  M2 --> D14
-  M3[merge_transfers] --> D12
-  M4[generate_club_index] --> D13
+  M1[merge_players_africa] --> MASTER
+  M2[merge_africa_player_history] --> MH
+  M2 --> MISS
+  M3[merge_transfers] --> DRAFT
+  M4[generate_club_index] --> CI
 
   %% Scan
-  S1[scan_missing_players] --> D15
+  S1[scan_missing_players] --> SCAN
 
   %% Connections
-  D1 --> CS
-  D2 --> CF
-  D3 --> CH
-  D3 --> CP
-  D3 --> CA
-  D3 --> CT
-  D8 --> CTR
-  D5 --> M2
-  D7 --> M1
-  D9 --> M3
-  D10 --> M4
-  D11 --> S1
+  H --> M2
+  PA --> M1
+  T --> CTR
+  TR --> M3
+  MASTER --> M4
+  MH --> S1
