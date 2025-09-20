@@ -1,4 +1,4 @@
-name: Collect All Seasons
+name: 02 Collect All Seasons
 
 on:
   workflow_dispatch:
