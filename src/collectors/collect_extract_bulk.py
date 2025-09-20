@@ -16,6 +16,8 @@ def run_bulk(config_path="config/leagues.yaml", season_filter=None, with_api=Fal
         league_id = league["id"]
         name = league["name"]
 
+        print(f"\n[bulk_extract] Processing league: {name} (league_id={league_id})")
+
         # Läs seasons från meta/seasons_{league_id}.json
         blob_path = f"meta/seasons_{league_id}.json"
         try:
@@ -25,16 +27,22 @@ def run_bulk(config_path="config/leagues.yaml", season_filter=None, with_api=Fal
             continue
 
         data = json.loads(text)
+
+        # Default: alla säsonger
         seasons = [s["season"]["year"] for s in data.get("results", [])]
 
-        # Eventuell filter (t.ex. bara aktiv säsong)
+        # Filter: endast aktiva säsonger
         if season_filter == "active":
             seasons = [s["season"]["year"] for s in data.get("results", []) if s["season"].get("is_active")]
 
+        if not seasons:
+            print(f"[bulk_extract] ⚠️ No seasons found for {name}")
+            continue
+
         for season in seasons:
+            print(f"[bulk_extract]   -> extracting season {season}")
             manifest_path = f"stats/{season}/{league_id}/manifest.json"
             try:
-                print(f"[bulk_extract] Extracting matches for {name} ({league_id}), season={season}")
                 collect_match_details.run(
                     league_id=league_id,
                     manifest_path=manifest_path,
@@ -43,8 +51,8 @@ def run_bulk(config_path="config/leagues.yaml", season_filter=None, with_api=Fal
                     season=season
                 )
             except Exception as e:
-                print(f"[bulk_extract] ⚠️ Failed for {name} ({league_id}), season={season}: {e}")
+                print(f"[bulk_extract] ⚠️ Failed for {name}, season={season}: {e}")
 
 if __name__ == "__main__":
-    # Exempel: kör alla enabled ligor, bara aktiva säsonger
+    # Kör alla enabled ligor, bara aktiva säsonger
     run_bulk(season_filter="active")
