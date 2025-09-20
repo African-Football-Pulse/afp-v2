@@ -4,99 +4,107 @@ import yaml
 import json
 from src.storage import azure_blob
 
-def run_bulk(season: str, config_path="config/leagues.yaml"):
-    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Läs ligor från config
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    leagues = [l for l in cfg.get("leagues", []) if l.get("enabled", False)]
+def run_bulk(season: str, leagues: list):
+    """
+    Kör bulk-extraktion för alla ligor/cuper i en given säsong.
+    Läser manifest.json för varje liga/cup och laddar upp matchfiler till Azure.
+    """
+    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
     print(f"[bulk_extract] Starting bulk extract for season {season}", flush=True)
 
-    summary = []
-    total_matches = 0
+    total_exported = 0
+    total_skipped = 0
 
     for league in leagues:
         league_id = league["id"]
-        name = league["name"]
+        league_name = league["name"]
         is_cup = league.get("is_cup", False)
 
         manifest_path = f"stats/{season}/{league_id}/manifest.json"
-
         try:
             manifest_text = azure_blob.get_text(container, manifest_path)
         except Exception:
-            print(f"[bulk_extract] ⚠️ Manifest not found: {manifest_path}", flush=True)
-            summary.append((name, league_id, 0, "no manifest"))
+            print(f"[bulk_extract] ⚠️ No manifest found for {league_name} (id={league_id})", flush=True)
             continue
 
-        manifest = json.loads(manifest_text)
+        try:
+            manifest = json.loads(manifest_text)
+        except Exception as e:
+            print(f"[bulk_extract] ⚠️ Could not parse manifest for {league_name} ({e})", flush=True)
+            continue
+
+        # Plocka ut matcher
         matches = []
-
-        if is_cup:
-            # Cup: dict med results = stages, varje stage har matches
-            if isinstance(manifest, dict):
-                for stage in manifest.get("results", []):
-                    matches.extend(stage.get("matches", []))
+        if not is_cup:
+            # Ligor → direkt results-lista
+            if isinstance(manifest, dict) and isinstance(manifest.get("results"), list):
+                matches = manifest["results"]
         else:
-            # Liga: kan vara dict (results direkt) eller lista (stage → matches)
-            if isinstance(manifest, dict):
-                matches = manifest.get("results", [])
-            elif isinstance(manifest, list):
-                for league_data in manifest:
-                    for stage in league_data.get("stage", []):
-                        matches.extend(stage.get("matches", []))
+            # Cuper → loopa stages
+            if isinstance(manifest, dict) and isinstance(manifest.get("results"), list):
+                for stage in manifest["results"]:
+                    stage_matches = stage.get("matches", [])
+                    if stage_matches:
+                        matches.extend(stage_matches)
 
-        if not matches:
-            print(f"[bulk_extract] ⚠️ No matches found in manifest for {name} (league_id={league_id})", flush=True)
-            summary.append((name, league_id, 0, "empty manifest"))
-            continue
+        print(f"[bulk_extract] {league_name} (league_id={league_id}): {len(matches)} matches in manifest", flush=True)
 
         exported = 0
         skipped = 0
 
-        print(f"[bulk_extract] {name} (league_id={league_id}): {len(matches)} matches in manifest", flush=True)
+        if matches:
+            print(f"[bulk_extract]   -> extracting {len(matches)} matches...", flush=True)
 
-        for idx, match in enumerate(matches, start=1):
-            print(f"[bulk_extract]   Processing match {idx}/{len(matches)}", flush=True)
+            for match in matches:
+                match_id = match.get("id")
+                if not match_id:
+                    skipped += 1
+                    continue
 
-            match_id = match.get("id")
-            if not match_id:
-                print(f"[bulk_extract] ⚠️ Skipped match without id in {name} ({season})", flush=True)
-                continue
+                blob_path = f"stats/{season}/{league_id}/{match_id}.json"
 
-            blob_path = f"stats/{season}/{league_id}/{match_id}.json"
+                # Hoppa över om filen redan finns
+                try:
+                    azure_blob.get_text(container, blob_path)
+                    skipped += 1
+                    continue
+                except Exception:
+                    pass
 
-            # Skip om fil redan finns
-            try:
-                azure_blob.get_text(container, blob_path)
-                skipped += 1
-                continue
-            except Exception:
-                pass  # filen finns inte, kör vidare
+                azure_blob.upload_json(container, blob_path, match)
+                exported += 1
 
-            azure_blob.upload_json(container, blob_path, match)
-            exported += 1
+        print(f"[bulk_extract]   Done: {exported} exported, {skipped} skipped\n", flush=True)
+        total_exported += exported
+        total_skipped += skipped
 
-        total_matches += exported
-        summary.append((name, league_id, exported, f"skipped {skipped}" if skipped else "ok"))
-
-    print(f"\n[bulk_extract] ✅ Done for season {season}", flush=True)
     print("=== Summary ===", flush=True)
-    for name, league_id, count, note in summary:
-        print(f"{name:25} (id={league_id}): {count} matches exported ({note})", flush=True)
-    print(f"TOTAL: {total_matches} matches exported across {len(leagues)} leagues", flush=True)
+    print(f"TOTAL exported: {total_exported}", flush=True)
+    print(f"TOTAL skipped: {total_skipped}", flush=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=str, required=True, help="Season string, e.g. 2024-2025")
     parser.add_argument(
-        "--season",
+        "--mode",
         type=str,
-        required=True,
-        help="Season string, e.g. 2024-2025"
+        choices=["league", "cup", "all"],
+        default="all",
+        help="Filter to run only leagues, only cups, or all"
     )
     args = parser.parse_args()
 
-    run_bulk(args.season)
+    # Ladda config
+    with open("config/leagues.yaml", "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    leagues = [l for l in cfg.get("leagues", []) if l.get("enabled", False)]
+
+    if args.mode == "league":
+        leagues = [l for l in leagues if not l.get("is_cup", False)]
+    elif args.mode == "cup":
+        leagues = [l for l in leagues if l.get("is_cup", False)]
+
+    run_bulk(args.season, leagues)
