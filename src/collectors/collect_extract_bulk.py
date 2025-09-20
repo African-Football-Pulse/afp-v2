@@ -1,10 +1,10 @@
+import argparse
 import os
 import yaml
 import json
-from src.collectors import collect_match_details
 from src.storage import azure_blob
 
-def run_bulk(config_path="config/leagues.yaml", season_filter=None, with_api=False):
+def run_bulk(season: str, config_path="config/leagues.yaml"):
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
     # Läs ligor från config
@@ -12,47 +12,38 @@ def run_bulk(config_path="config/leagues.yaml", season_filter=None, with_api=Fal
         cfg = yaml.safe_load(f)
     leagues = [l for l in cfg.get("leagues", []) if l.get("enabled", False)]
 
+    print(f"[bulk_extract] Starting bulk extract for season {season}")
+
     for league in leagues:
         league_id = league["id"]
         name = league["name"]
 
-        print(f"\n[bulk_extract] Processing league: {name} (league_id={league_id})")
+        manifest_path = f"stats/{season}/{league_id}/manifest.json"
 
-        # Läs seasons från meta/seasons_{league_id}.json
-        blob_path = f"meta/seasons_{league_id}.json"
         try:
-            text = azure_blob.get_text(container, blob_path)
+            manifest_text = azure_blob.get_text(container, manifest_path)
         except Exception as e:
-            print(f"[bulk_extract] ⚠️ Could not read {blob_path}: {e}")
+            print(f"[bulk_extract] ⚠️ Manifest not found: {manifest_path}")
             continue
 
-        data = json.loads(text)
+        manifest = json.loads(manifest_text)
+        matches = manifest.get("results", [])
 
-        # Default: alla säsonger
-        seasons = [s["season"]["year"] for s in data.get("results", [])]
+        print(f"[bulk_extract] {name} (league_id={league_id}): {len(matches)} matches")
 
-        # Filter: endast aktiva säsonger
-        if season_filter == "active":
-            seasons = [s["season"]["year"] for s in data.get("results", []) if s["season"].get("is_active")]
+        for match in matches:
+            match_id = match.get("id")
+            if not match_id:
+                continue
+            blob_path = f"stats/{season}/{league_id}/{match_id}.json"
+            azure_blob.upload_json(container, blob_path, match)
+            print(f"[bulk_extract]   -> wrote {blob_path}")
 
-        if not seasons:
-            print(f"[bulk_extract] ⚠️ No seasons found for {name}")
-            continue
-
-        for season in seasons:
-            print(f"[bulk_extract]   -> extracting season {season}")
-            manifest_path = f"stats/{season}/{league_id}/manifest.json"
-            try:
-                collect_match_details.run(
-                    league_id=league_id,
-                    manifest_path=manifest_path,
-                    with_api=with_api,
-                    mode="fullseason",
-                    season=season
-                )
-            except Exception as e:
-                print(f"[bulk_extract] ⚠️ Failed for {name}, season={season}: {e}")
+    print(f"[bulk_extract] ✅ Done for season {season}")
 
 if __name__ == "__main__":
-    # Kör alla enabled ligor, bara aktiva säsonger
-    run_bulk(season_filter="active")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=str, required=True, help="Season string, e.g. 2024-2025")
+    args = parser.parse_args()
+
+    run_bulk(args.season)
