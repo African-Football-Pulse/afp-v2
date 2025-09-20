@@ -113,12 +113,14 @@ def main():
     parser.add_argument("--season", required=True, help="Season (e.g., 2024-2025)")
     args = parser.parse_args()
 
-    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
+    # ✅ hämta container med guard mot None/tom sträng
+    container = os.environ.get("AZURE_STORAGE_CONTAINER") or "afp"
     africa_ids = load_master_ids(container)
     leagues = load_leagues()
 
     print(f"[player_history_bulk] Starting player history collection for season {args.season}", flush=True)
 
+    total_players = 0
     for league in leagues:
         league_id = str(league["id"])
         matches = load_matches(container, args.season, league)
@@ -134,7 +136,9 @@ def main():
         azure_blob.upload_json(container, out_path, history)
         print(f"[player_history_bulk] Uploaded → {out_path} ({len(history)} players)", flush=True)
 
-    print("[player_history_bulk] Done", flush=True)
+        total_players += len(history)
+
+    print(f"[player_history_bulk] DONE. Total players with history this season: {total_players}", flush=True)
 
 
 if __name__ == "__main__":
