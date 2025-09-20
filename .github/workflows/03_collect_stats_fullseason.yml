@@ -1,4 +1,4 @@
-name: Collect Stats Full Season
+name: 03 Collect Stats Full Season
 
 on:
   workflow_dispatch:
