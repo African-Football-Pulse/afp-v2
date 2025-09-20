@@ -2,19 +2,6 @@ name: 04 Collect Extract Fullseason Bulk
 
 on:
   workflow_dispatch:
-    inputs:
-      season:
-        description: "Season string (e.g. 2024-2025)"
-        required: true
-        default: "2024-2025"
-      league_id:
-        description: "Numeric league_id (e.g. 228 for Premier League)"
-        required: true
-        default: "228"
-      with_api:
-        description: "Fetch details via API"
-        required: false
-        default: "false"
 
 jobs:
   extract-fullseason:
@@ -25,10 +12,9 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - name: Run collect_extract_fullseason_bulk
 
+      - name: Run collect_extract_fullseason_bulk
         env:
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
-          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
         run: |
           python -m src.collectors.collect_extract_bulk --season_filter active
