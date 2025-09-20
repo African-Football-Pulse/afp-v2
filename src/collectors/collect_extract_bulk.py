@@ -14,7 +14,7 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
 
     print(f"[bulk_extract] Starting bulk extract for season {season}")
 
-    summary = []  # lista för summering
+    summary = []
     total_matches = 0
 
     for league in leagues:
@@ -32,14 +32,14 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
 
         manifest = json.loads(manifest_text)
 
-        # Hantera både listor och dict med "results"
-        if isinstance(manifest, list):
-            matches = manifest
-        else:
-            matches = manifest.get("results", [])
+        # Traversera: lista → stage → matches
+        matches = []
+        for league_data in manifest:
+            for stage in league_data.get("stage", []):
+                matches.extend(stage.get("matches", []))
 
         if not matches:
-            print(f"[bulk_extract] ⚠️ No matches in manifest for {name} (league_id={league_id})")
+            print(f"[bulk_extract] ⚠️ No matches found in manifest for {name} (league_id={league_id})")
             summary.append((name, league_id, 0, "empty manifest"))
             continue
 
@@ -75,6 +75,7 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
     for name, league_id, count, note in summary:
         print(f"{name:25} (id={league_id}): {count} matches exported ({note})")
     print(f"TOTAL: {total_matches} matches exported across {len(leagues)} leagues")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
