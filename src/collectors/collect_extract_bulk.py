@@ -32,16 +32,21 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
             continue
 
         manifest = json.loads(manifest_text)
-
         matches = []
 
         if is_cup:
-            # Cup-struktur: results = list of stages, each with matches
-            for stage in manifest.get("results", []):
-                matches.extend(stage.get("matches", []))
+            # Cup: dict med results = stages, varje stage har matches
+            if isinstance(manifest, dict):
+                for stage in manifest.get("results", []):
+                    matches.extend(stage.get("matches", []))
         else:
-            # Liga-struktur: results = list of matches direkt
-            matches = manifest.get("results", [])
+            # Liga: kan vara dict (results direkt) eller lista (stage → matches)
+            if isinstance(manifest, dict):
+                matches = manifest.get("results", [])
+            elif isinstance(manifest, list):
+                for league_data in manifest:
+                    for stage in league_data.get("stage", []):
+                        matches.extend(stage.get("matches", []))
 
         if not matches:
             print(f"[bulk_extract] ⚠️ No matches found in manifest for {name} (league_id={league_id})")
