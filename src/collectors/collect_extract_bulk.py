@@ -1,102 +1,82 @@
 import argparse
 import os
 import yaml
-import json
 from src.storage import azure_blob
 
-def run_bulk(season: str, config_path="config/leagues.yaml"):
+
+def run_bulk(season: str):
+    """
+    Kör bulk-extraktion för alla ligor i en viss säsong.
+    Hämtar manifest från Azure och exporterar matchfiler.
+    """
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Läs ligor från config
-    with open(config_path, "r", encoding="utf-8") as f:
+    # Läs in konfiguration för ligor
+    with open("config/leagues.yaml", "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
-    leagues = [l for l in cfg.get("leagues", []) if l.get("enabled", False)]
+
+    leagues = [lg for lg in cfg.get("leagues", []) if lg.get("enabled", False)]
 
     print(f"[bulk_extract] Starting bulk extract for season {season}", flush=True)
 
-    summary = []
-    total_matches = 0
-
     for league in leagues:
         league_id = league["id"]
-        name = league["name"]
-        is_cup = league.get("is_cup", False)
+        league_name = league["name"]
 
         manifest_path = f"stats/{season}/{league_id}/manifest.json"
-
         try:
             manifest_text = azure_blob.get_text(container, manifest_path)
         except Exception:
-            print(f"[bulk_extract] ⚠️ Manifest not found: {manifest_path}", flush=True)
-            summary.append((name, league_id, 0, "no manifest"))
+            print(f"[bulk_extract] ⚠️ No manifest found for {league_name} (id={league_id})")
             continue
 
-        manifest = json.loads(manifest_text)
-        matches = []
+        try:
+            import json
+            manifest = json.loads(manifest_text)
+        except Exception as e:
+            print(f"[bulk_extract] ⚠️ Could not parse manifest for {league_name} ({e})")
+            continue
 
-        if is_cup:
-            # Cup: dict med results = stages, varje stage har matches
-            if isinstance(manifest, dict):
-                for stage in manifest.get("results", []):
-                    matches.extend(stage.get("matches", []))
+        # Hantera olika format (dict eller list)
+        if isinstance(manifest, dict):
+            matches = manifest.get("results", [])
+        elif isinstance(manifest, list):
+            matches = manifest
         else:
-            # Liga: kan vara dict (results direkt) eller lista (stage → matches)
-            if isinstance(manifest, dict):
-                matches = manifest.get("results", [])
-            elif isinstance(manifest, list):
-                for league_data in manifest:
-                    for stage in league_data.get("stage", []):
-                        matches.extend(stage.get("matches", []))
-
-        if not matches:
-            print(f"[bulk_extract] ⚠️ No matches found in manifest for {name} (league_id={league_id})", flush=True)
-            summary.append((name, league_id, 0, "empty manifest"))
+            print(f"[bulk_extract] ⚠️ Unexpected manifest format for {league_name}")
             continue
 
-        exported = 0
-        skipped = 0
+        print(f"[bulk_extract] {league_name} (league_id={league_id}): {len(matches)} matches in manifest")
 
-        print(f"[bulk_extract] {name} (league_id={league_id}): {len(matches)} matches in manifest", flush=True)
+        exported, skipped = 0, 0
+        if matches:
+            print(f"[bulk_extract]   -> extracting {len(matches)} matches...", flush=True)
 
-        for idx, match in enumerate(matches, start=1):
-            print(f"[bulk_extract]   Processing match {idx}/{len(matches)}", flush=True)
+            for match in matches:
+                match_id = match.get("id")
+                if not match_id:
+                    skipped += 1
+                    continue
 
-            match_id = match.get("id")
-            if not match_id:
-                print(f"[bulk_extract] ⚠️ Skipped match without id in {name} ({season})", flush=True)
-                continue
+                blob_path = f"stats/{season}/{league_id}/{match_id}.json"
 
-            blob_path = f"stats/{season}/{league_id}/{match_id}.json"
+                # Hoppa om filen redan finns
+                try:
+                    azure_blob.get_text(container, blob_path)
+                    skipped += 1
+                    continue
+                except Exception:
+                    pass
 
-            # Skip om fil redan finns
-            try:
-                azure_blob.get_text(container, blob_path)
-                skipped += 1
-                continue
-            except Exception:
-                pass  # filen finns inte, kör vidare
+                azure_blob.upload_json(container, blob_path, match)
+                exported += 1
 
-            azure_blob.upload_json(container, blob_path, match)
-            exported += 1
-
-        total_matches += exported
-        summary.append((name, league_id, exported, f"skipped {skipped}" if skipped else "ok"))
-
-    print(f"\n[bulk_extract] ✅ Done for season {season}", flush=True)
-    print("=== Summary ===", flush=True)
-    for name, league_id, count, note in summary:
-        print(f"{name:25} (id={league_id}): {count} matches exported ({note})", flush=True)
-    print(f"TOTAL: {total_matches} matches exported across {len(leagues)} leagues", flush=True)
+        print(f"[bulk_extract]   Done: {exported} exported, {skipped} skipped\n", flush=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--season",
-        type=str,
-        required=True,
-        help="Season string, e.g. 2024-2025"
-    )
+    parser.add_argument("--season", type=str, required=True, help="Season string, e.g. 2024-2025")
     args = parser.parse_args()
 
     run_bulk(args.season)
