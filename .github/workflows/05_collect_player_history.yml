@@ -1,0 +1,36 @@
+name: 05_collect_player_history
+
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: 'League ID (e.g., 228 for PL)'
+        required: true
+      season:
+        description: 'Season (e.g., 2024-2025)'
+        required: true
+
+jobs:
+  collect-player-history:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_player_history
+        run: |
+          python -m src.collectors.collect_player_history \
+            --league-id "${{ github.event.inputs.league_id }}" \
+            --season "${{ github.event.inputs.season }}"
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
