@@ -22,4 +22,5 @@ jobs:
         env:
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
-          python -m src.collectors.collect_extract_bulk --season "${{ github.event.inputs.season }}"
+          python -u -m src.collectors.collect_extract_bulk --season "${{ github.event.inputs.season }}"
+
