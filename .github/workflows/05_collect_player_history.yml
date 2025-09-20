@@ -1,4 +1,4 @@
-name: 05_collect_player_history
+name: 05 Collect Player History
 
 on:
   workflow_dispatch:
