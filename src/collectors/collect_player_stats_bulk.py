@@ -1,7 +1,7 @@
 import os
 import argparse
-import subprocess
 from src.storage import azure_blob
+from src.collectors.collect_player_stats import collect_player_stats
 
 CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER") or "afp"
 HISTORY_PATH = "players/africa/players_africa_history.json"
@@ -13,17 +13,12 @@ def load_history(container: str):
 
 
 def run_collect_stats(player_id: str, league_id: str, season: str):
-    """Kör collect_player_stats.py för given spelare/ligasäsong"""
+    """Anropa direkt collect_player_stats-funktionen"""
     print(f"[collect_player_stats_bulk] Collecting stats for {player_id}, league {league_id}, season {season}", flush=True)
-    subprocess.run(
-        [
-            "python", "-m", "src.collectors.collect_player_stats",
-            "--player-id", str(player_id),
-            "--league-id", str(league_id),
-            "--season", season
-        ],
-        check=True
-    )
+    try:
+        collect_player_stats(str(player_id), str(league_id), season)
+    except Exception as e:
+        print(f"[collect_player_stats_bulk] ❌ Error for {player_id}, league {league_id}, season {season}: {e}", flush=True)
 
 
 def main():
