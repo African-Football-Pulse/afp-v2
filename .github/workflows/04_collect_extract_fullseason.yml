@@ -1,4 +1,4 @@
-name: Collect Extract Fullseason
+name: 04 Collect Extract Fullseason
 
 on:
   workflow_dispatch:
