@@ -12,7 +12,7 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
         cfg = yaml.safe_load(f)
     leagues = [l for l in cfg.get("leagues", []) if l.get("enabled", False)]
 
-    print(f"[bulk_extract] Starting bulk extract for season {season}")
+    print(f"[bulk_extract] Starting bulk extract for season {season}", flush=True)
 
     summary = []
     total_matches = 0
@@ -27,7 +27,7 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
         try:
             manifest_text = azure_blob.get_text(container, manifest_path)
         except Exception:
-            print(f"[bulk_extract] ⚠️ Manifest not found: {manifest_path}")
+            print(f"[bulk_extract] ⚠️ Manifest not found: {manifest_path}", flush=True)
             summary.append((name, league_id, 0, "no manifest"))
             continue
 
@@ -49,19 +49,21 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
                         matches.extend(stage.get("matches", []))
 
         if not matches:
-            print(f"[bulk_extract] ⚠️ No matches found in manifest for {name} (league_id={league_id})")
+            print(f"[bulk_extract] ⚠️ No matches found in manifest for {name} (league_id={league_id})", flush=True)
             summary.append((name, league_id, 0, "empty manifest"))
             continue
 
         exported = 0
         skipped = 0
 
-        print(f"[bulk_extract] {name} (league_id={league_id}): {len(matches)} matches in manifest")
+        print(f"[bulk_extract] {name} (league_id={league_id}): {len(matches)} matches in manifest", flush=True)
 
-        for match in matches:
+        for idx, match in enumerate(matches, start=1):
+            print(f"[bulk_extract]   Processing match {idx}/{len(matches)}", flush=True)
+
             match_id = match.get("id")
             if not match_id:
-                print(f"[bulk_extract] ⚠️ Skipped match without id in {name} ({season})")
+                print(f"[bulk_extract] ⚠️ Skipped match without id in {name} ({season})", flush=True)
                 continue
 
             blob_path = f"stats/{season}/{league_id}/{match_id}.json"
@@ -80,11 +82,11 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
         total_matches += exported
         summary.append((name, league_id, exported, f"skipped {skipped}" if skipped else "ok"))
 
-    print("\n[bulk_extract] ✅ Done for season", season)
-    print("=== Summary ===")
+    print(f"\n[bulk_extract] ✅ Done for season {season}", flush=True)
+    print("=== Summary ===", flush=True)
     for name, league_id, count, note in summary:
-        print(f"{name:25} (id={league_id}): {count} matches exported ({note})")
-    print(f"TOTAL: {total_matches} matches exported across {len(leagues)} leagues")
+        print(f"{name:25} (id={league_id}): {count} matches exported ({note})", flush=True)
+    print(f"TOTAL: {total_matches} matches exported across {len(leagues)} leagues", flush=True)
 
 
 if __name__ == "__main__":
