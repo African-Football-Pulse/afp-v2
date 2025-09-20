@@ -38,13 +38,17 @@ def run_bulk(season: str, leagues: list):
         matches = []
 
         if is_cup:
-            # Cup: kan vara dict med results eller lista av stages
+            # Cup: kan vara dict med results eller lista av rounds
             if isinstance(manifest, dict) and isinstance(manifest.get("results"), list):
-                for stage in manifest["results"]:
+                stages = manifest.get("results", [])
+                print(f"[bulk_extract] {league_name} (league_id={league_id}): {len(stages)} stages found", flush=True)
+                for stage in stages:
                     matches.extend(stage.get("matches", []))
             elif isinstance(manifest, list):
-                for stage in manifest:
-                    matches.extend(stage.get("matches", []))
+                print(f"[bulk_extract] {league_name} (league_id={league_id}): {len(manifest)} rounds found", flush=True)
+                for round_data in manifest:
+                    if "matches" in round_data:
+                        matches.extend(round_data["matches"])
         else:
             # Liga: kan vara dict (results direkt) eller lista (stages med matcher)
             if isinstance(manifest, dict) and isinstance(manifest.get("results"), list):
@@ -110,6 +114,6 @@ if __name__ == "__main__":
     if args.mode == "league":
         leagues = [l for l in leagues if not l.get("is_cup", False)]
     elif args.mode == "cup":
-        leagues = [l for l in leagues if l.get("is_cup", False)]
+        leagues = [l for l in leagues if l.get("is_cup", True)]
 
     run_bulk(args.season, leagues)
