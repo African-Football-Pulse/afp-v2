@@ -1,7 +1,5 @@
 name: 07 Collect Player Stats Bulk
 
-name: 07_collect_player_stats_bulk
-
 on:
   workflow_dispatch:
     inputs:
