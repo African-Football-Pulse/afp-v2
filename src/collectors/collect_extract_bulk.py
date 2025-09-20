@@ -22,12 +22,17 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
 
         try:
             manifest_text = azure_blob.get_text(container, manifest_path)
-        except Exception as e:
+        except Exception:
             print(f"[bulk_extract] ⚠️ Manifest not found: {manifest_path}")
             continue
 
         manifest = json.loads(manifest_text)
-        matches = manifest.get("results", [])
+
+        # Hantera både listor och dict med "results"
+        if isinstance(manifest, list):
+            matches = manifest
+        else:
+            matches = manifest.get("results", [])
 
         print(f"[bulk_extract] {name} (league_id={league_id}): {len(matches)} matches")
 
@@ -43,7 +48,4 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=str, required=True, help="Season string, e.g. 2024-2025")
-    args = parser.parse_args()
-
-    run_bulk(args.season)
+    parser.add_argument("--season", type=str, required=True, help=_
