@@ -17,8 +17,10 @@ def run_collect_stats(player_id: str, league_id: str, season: str):
     print(f"[collect_player_stats_bulk] Collecting stats for {player_id}, league {league_id}, season {season}", flush=True)
     try:
         collect_player_stats(str(player_id), str(league_id), season)
+        return True
     except Exception as e:
         print(f"[collect_player_stats_bulk] ❌ Error for {player_id}, league {league_id}, season {season}: {e}", flush=True)
+        return False
 
 
 def main():
@@ -34,6 +36,7 @@ def main():
 
     processed = 0
     missing = 0
+    created_files = 0
 
     for pid, pdata in history_all.items():
         player_history = pdata.get("history", [])
@@ -45,7 +48,9 @@ def main():
         for entry in player_history:
             season = entry["season"]
             league_id = entry["league_id"]
-            run_collect_stats(pid, league_id, season)
+            ok = run_collect_stats(pid, league_id, season)
+            if ok:
+                created_files += 1
 
         processed += 1
 
@@ -56,6 +61,7 @@ def main():
     print("=== Summary ===", flush=True)
     print(f"Processed players: {processed}", flush=True)
     print(f"Missing players: {missing}", flush=True)
+    print(f"Created stats files: {created_files}", flush=True)
     print("[collect_player_stats_bulk] DONE", flush=True)
 
 
