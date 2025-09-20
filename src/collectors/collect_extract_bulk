@@ -1,0 +1,50 @@
+import os
+import yaml
+import json
+from src.collectors import collect_match_details
+from src.storage import azure_blob
+
+def run_bulk(config_path="config/leagues.yaml", season_filter=None, with_api=False):
+    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
+
+    # Läs ligor från config
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    leagues = [l for l in cfg.get("leagues", []) if l.get("enabled", False)]
+
+    for league in leagues:
+        league_id = league["id"]
+        name = league["name"]
+
+        # Läs seasons från meta/seasons_{league_id}.json
+        blob_path = f"meta/seasons_{league_id}.json"
+        try:
+            text = azure_blob.get_text(container, blob_path)
+        except Exception as e:
+            print(f"[bulk_extract] ⚠️ Could not read {blob_path}: {e}")
+            continue
+
+        data = json.loads(text)
+        seasons = [s["season"]["year"] for s in data.get("results", [])]
+
+        # Eventuell filter (t.ex. bara aktiv säsong)
+        if season_filter == "active":
+            seasons = [s["season"]["year"] for s in data.get("results", []) if s["season"].get("is_active")]
+
+        for season in seasons:
+            manifest_path = f"stats/{season}/{league_id}/manifest.json"
+            try:
+                print(f"[bulk_extract] Extracting matches for {name} ({league_id}), season={season}")
+                collect_match_details.run(
+                    league_id=league_id,
+                    manifest_path=manifest_path,
+                    with_api=with_api,
+                    mode="fullseason",
+                    season=season
+                )
+            except Exception as e:
+                print(f"[bulk_extract] ⚠️ Failed for {name} ({league_id}), season={season}: {e}")
+
+if __name__ == "__main__":
+    # Exempel: kör alla enabled ligor, bara aktiva säsonger
+    run_bulk(season_filter="active")
