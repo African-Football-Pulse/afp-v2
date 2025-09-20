@@ -3,9 +3,6 @@ name: 05_collect_player_history
 on:
   workflow_dispatch:
     inputs:
-      league_id:
-        description: 'League ID (e.g., 228 for PL)'
-        required: true
       season:
         description: 'Season (e.g., 2024-2025)'
         required: true
@@ -25,10 +22,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run collect_player_history
+      - name: Run collect_player_history_bulk
         run: |
-          python -m src.collectors.collect_player_history \
-            --league-id "${{ github.event.inputs.league_id }}" \
+          python -m src.collectors.collect_player_history_bulk \
             --season "${{ github.event.inputs.season }}"
         env:
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
