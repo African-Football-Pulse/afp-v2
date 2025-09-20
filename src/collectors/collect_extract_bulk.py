@@ -20,6 +20,7 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
     for league in leagues:
         league_id = league["id"]
         name = league["name"]
+        is_cup = league.get("is_cup", False)
 
         manifest_path = f"stats/{season}/{league_id}/manifest.json"
 
@@ -32,11 +33,15 @@ def run_bulk(season: str, config_path="config/leagues.yaml"):
 
         manifest = json.loads(manifest_text)
 
-        # Traversera: lista → stage → matches
         matches = []
-        for league_data in manifest:
-            for stage in league_data.get("stage", []):
+
+        if is_cup:
+            # Cup-struktur: results = list of stages, each with matches
+            for stage in manifest.get("results", []):
                 matches.extend(stage.get("matches", []))
+        else:
+            # Liga-struktur: results = list of matches direkt
+            matches = manifest.get("results", [])
 
         if not matches:
             print(f"[bulk_extract] ⚠️ No matches found in manifest for {name} (league_id={league_id})")
