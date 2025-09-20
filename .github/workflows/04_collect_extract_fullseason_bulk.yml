@@ -7,6 +7,10 @@ on:
         description: "Season string (e.g. 2024-2025)"
         required: true
         default: "2024-2025"
+      mode:
+        description: "Choose what to collect (league, cup, all)"
+        required: true
+        default: "all"
 
 jobs:
   extract-fullseason:
@@ -18,9 +22,10 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
 
-      - name: Run collect_extract_fullseason_bulk
+      - name: Run collect_extract_bulk
         env:
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
-          python -u -m src.collectors.collect_extract_bulk --season "${{ github.event.inputs.season }}"
-
+          python -u -m src.collectors.collect_extract_bulk \
+            --season "${{ github.event.inputs.season }}" \
+            --mode "${{ github.event.inputs.mode }}"
