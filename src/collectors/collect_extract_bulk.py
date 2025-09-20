@@ -35,19 +35,24 @@ def run_bulk(season: str, leagues: list):
             print(f"[bulk_extract] ⚠️ Could not parse manifest for {league_name} ({e})", flush=True)
             continue
 
-        # Plocka ut matcher
         matches = []
-        if not is_cup:
-            # Ligor → direkt results-lista
-            if isinstance(manifest, dict) and isinstance(manifest.get("results"), list):
-                matches = manifest["results"]
-        else:
-            # Cuper → loopa stages
+
+        if is_cup:
+            # Cup: kan vara dict med results eller lista av stages
             if isinstance(manifest, dict) and isinstance(manifest.get("results"), list):
                 for stage in manifest["results"]:
-                    stage_matches = stage.get("matches", [])
-                    if stage_matches:
-                        matches.extend(stage_matches)
+                    matches.extend(stage.get("matches", []))
+            elif isinstance(manifest, list):
+                for stage in manifest:
+                    matches.extend(stage.get("matches", []))
+        else:
+            # Liga: kan vara dict (results direkt) eller lista (stages med matcher)
+            if isinstance(manifest, dict) and isinstance(manifest.get("results"), list):
+                matches = manifest["results"]
+            elif isinstance(manifest, list):
+                for league_data in manifest:
+                    for stage in league_data.get("stage", []):
+                        matches.extend(stage.get("matches", []))
 
         print(f"[bulk_extract] {league_name} (league_id={league_id}): {len(matches)} matches in manifest", flush=True)
 
