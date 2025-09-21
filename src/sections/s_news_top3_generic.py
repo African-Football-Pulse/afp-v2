@@ -64,9 +64,12 @@ def build_section(args=None):
     all_items: List[Dict[str, Any]] = []
     feeds = [f.strip() for f in feeds_csv.split(",") if f.strip()]
     for feed in feeds:
-        all_items.extend(_load_items_for_feed(feed, league, day))
+        feed_items = _load_items_for_feed(feed, league, day)
+        print(f"[s_news_top3_generic] {feed} → {len(feed_items)} items")
+        all_items.extend(feed_items)
 
     if not all_items:
+        print("[s_news_top3_generic] Inga items hittades totalt")
         return {
             "section_id": section_id,
             "league": league,
@@ -80,6 +83,8 @@ def build_section(args=None):
     items_sorted = _sort_items(all_items)
     picked = _pick_topn_diverse(items_sorted, top_n)
     body = _render_section(league, day, picked)
+
+    print(f"[s_news_top3_generic] Totalt {len(all_items)} items → valde {len(picked)}")
 
     return {
         "section_id": section_id,
