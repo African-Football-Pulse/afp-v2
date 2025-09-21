@@ -1,9 +1,11 @@
 name: 11 Collect Transfers Bulk
 
 on:
-  workflow_dispatch:    # manuellt startbar
-  schedule:
-    - cron: "0 5 * * *"   # kör varje dag kl 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to collect (e.g. 2025-2026)"
+        required: true
 
 jobs:
   collect-transfers:
@@ -23,13 +25,13 @@ jobs:
 
       - name: Run collect_transfers_bulk
         env:
+          SEASON: ${{ github.event.inputs.season }}
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-          AZURE_STORAGE_CONTAINER: afp
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
           echo "🔄 Collecting transfers..."
           python -m src.collectors.collect_transfers_bulk | tee transfers_log.txt
           echo "✅ Done. See summary below:"
-          echo "---- SUMMARY (last 20 lines) ----"
           tail -n 20 transfers_log.txt
