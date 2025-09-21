@@ -2,10 +2,9 @@ defaults:
   date: "{{today}}"
   league: premier_league
   write_latest: true
-  personas: config/personas.json   # gemensam default
 
 tasks:
-  - section_code: S.NEWS.TOP3
+  - section: NEWS.TOP3
     args:
       - --league
       - premier_league
@@ -13,9 +12,9 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
+      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
 
-  - section_code: S.NEWS.TOP_AFRICAN_PLAYERS
+  - section: NEWS.TOP_AFRICAN_PLAYERS
     args:
       - --league
       - premier_league
@@ -23,23 +22,17 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
+      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
 
-  - section_code: S.OPINION.EXPERT_COMMENT
+  - section: GENERIC.INTRO_POSTMATCH
     args:
       - --league
       - premier_league
       - --outdir
       - sections
       - --write-latest
-      - --news
-      - producer/candidates/{{today}}/scored.jsonl
-      - --personas
-      - config/personas.json
-      - --persona-id
-      - AK         # Ama K solo (English)
 
-  - section_code: S.OPINION.DUO_EXPERTS
+  - section: OPINION.EXPERT_COMMENT
     args:
       - --league
       - premier_league
@@ -47,13 +40,9 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
-      - --personas
-      - config/personas.json
-      - --persona-ids
-      - AK,JJK     # Ama K + Coach JJ (English)
+      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
 
-  - section_code: S.OPINION.DUO_EXPERTS
+  - section: OPINION.DUO_EXPERTS
     args:
       - --league
       - premier_league
@@ -61,8 +50,12 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
-      - --personas
-      - config/personas.json
-      - --persona-ids
-      - OM,KR      # Omar + Karim (English)
+      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+
+  - section: GENERIC.INTRO_DAILY
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
