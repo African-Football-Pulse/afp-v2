@@ -37,6 +37,10 @@ jobs:
             $([ -n "${{ github.event.inputs.limit }}" ] && echo "--limit ${{ github.event.inputs.limit }}") \
             $([ -n "${{ github.event.inputs.player_id }}" ] && echo "--player-id ${{ github.event.inputs.player_id }}") \
             | tee build_stats_bulk_log.txt
+          
           echo "✅ Done. See summary below:"
           echo "---- SUMMARY (last 20 lines) ----"
           tail -n 20 build_stats_bulk_log.txt
+          
+          echo "---- HIGHLIGHT ----"
+          grep "Totals.json created:" build_stats_bulk_log.txt || echo "⚠️ No totals.json created"
