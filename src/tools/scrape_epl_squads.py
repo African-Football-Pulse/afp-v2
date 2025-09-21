@@ -31,9 +31,17 @@ EPL_CLUBS = {
 AZURE_PATH = "meta/2025-2026/epl_squads.json"
 LOCAL_FALLBACK = "epl_squads.json"
 
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0 Safari/537.36"
+    )
+}
+
 def scrape_club_squad(club, url):
     print(f"🔎 Scraping {club}...")
-    resp = requests.get(url)
+    resp = requests.get(url, headers=HEADERS)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -70,12 +78,18 @@ def scrape_club_squad(club, url):
 
 def main():
     all_squads = {}
+    total_players = 0
+
     for club, url in EPL_CLUBS.items():
         try:
-            all_squads[club] = scrape_club_squad(club, url)
+            squad = scrape_club_squad(club, url)
+            all_squads[club] = squad
+            total_players += len(squad)
         except Exception as e:
             print(f"⚠️ Error scraping {club}: {e}")
             all_squads[club] = []
+
+    print(f"📊 Totalt {total_players} spelare scraped för alla klubbar")
 
     data = json.dumps(all_squads, indent=2, ensure_ascii=False)
 
