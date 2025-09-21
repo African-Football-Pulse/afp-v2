@@ -12,9 +12,13 @@ def today_str():
 
 
 def load_master_players():
-    path = "config/master_players.json"
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """Ladda masterlistan över afrikanska spelare från Azure Blob Storage."""
+    blob_path = os.getenv(
+        "MASTER_PLAYERS_BLOB",
+        "players/africa/players_africa_master.json"
+    )
+    print(f"[produce_candidates] Loading master players from blob: {blob_path}")
+    return azure_blob.get_json(CONTAINER, blob_path)
 
 
 def load_curated_news():
