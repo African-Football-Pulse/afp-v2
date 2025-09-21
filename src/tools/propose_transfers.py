@@ -5,7 +5,6 @@ from src.storage import azure_blob
 
 MASTER_PATH = "players/africa/players_africa_master.json"
 DRAFT_PATH = "players/africa/players_africa_master_draft.json"
-TRANSFERS_DIR = "transfers"
 
 def parse_date(date_str):
     """Convert SoccerData date (dd-mm-yyyy) to ISO string."""
@@ -15,22 +14,7 @@ def parse_date(date_str):
     except Exception:
         return None
 
-def get_latest_season(container):
-    """Hitta senaste säsongskatalogen i transfers/ baserat på namn YYYY-YYYY."""
-    blobs = azure_blob.list_blobs(container, TRANSFERS_DIR)
-    # plocka ut första nivån under transfers/
-    seasons = set()
-    for b in blobs:
-        rel = b["name"].replace(TRANSFERS_DIR + "/", "")
-        parts = rel.split("/")
-        if len(parts) > 1 and parts[0]:
-            seasons.add(parts[0])
-    if not seasons:
-        raise FileNotFoundError("No season directories found in transfers/")
-    seasons_sorted = sorted(seasons, key=lambda s: int(s.split("-")[0]))
-    return seasons_sorted[-1]
-
-def propose_transfers():
+def propose_transfers(season="2024-2025", league_id=228):
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
     # Läs master
@@ -38,13 +22,10 @@ def propose_transfers():
     players = master.get("players", [])
     master_by_id = {str(p["id"]): p for p in players}
 
-    # Hitta senaste säsong
-    season_name = get_latest_season(container)
-    print(f"[propose_transfers] Using season {season_name}")
-
-    # Läs alla teamfiler
-    blobs = azure_blob.list_blobs(container, f"{TRANSFERS_DIR}/{season_name}")
-    team_files = [b["name"] for b in blobs if b["name"].endswith(".json")]
+    # Läs manifest
+    manifest_path = f"meta/{season}/teams_{league_id}.json"
+    manifest = azure_blob.get_json(container, manifest_path)
+    team_files = [t["path"] for t in manifest["teams"]]
 
     updates = 0
     changes = []
@@ -53,7 +34,6 @@ def propose_transfers():
         team_data = azure_blob.get_json(container, team_path)
         transfers_out = team_data.get("transfers", {}).get("transfers_out", [])
 
-        # Grupp per player_id
         by_player = {}
         for t in transfers_out:
             pid = str(t.get("player_id"))
@@ -67,7 +47,7 @@ def propose_transfers():
 
             player = master_by_id[pid]
 
-            # Sortera transfers efter datum
+            # sortera transfers efter datum
             parsed = []
             for t in t_list:
                 d = parse_date(t.get("transfer_date"))
@@ -123,17 +103,18 @@ def propose_transfers():
 
                 updates += 1
 
-    # Spara draft i Azure
+    # spara draft
     master["players"] = players
     azure_blob.put_text(container, DRAFT_PATH, json.dumps(master, indent=2, ensure_ascii=False))
 
-    # Spara diff i Azure
+    # spara diff
     if changes:
-        diff_path = f"players/africa/diff_{season_name}.json"
+        diff_path = f"players/africa/diff_{season}.json"
         azure_blob.put_text(container, diff_path, json.dumps(changes, indent=2, ensure_ascii=False))
         print(f"[propose_transfers] {updates} players updated. Draft: {DRAFT_PATH}, Diff: {diff_path}")
     else:
         print("[propose_transfers] No updates proposed.")
 
 if __name__ == "__main__":
-    propose_transfers()
+    # Hårdkodat standard just nu
+    propose_transfers(season="2024-2025", league_id=228)
