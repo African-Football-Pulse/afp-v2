@@ -4,6 +4,16 @@ defaults:
   write_latest: true
 
 tasks:
+  - section_code: S.NEWS.TOP3
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - producer/candidates/{{today}}/scored.jsonl
+
   - section_code: S.NEWS.TOP_AFRICAN_PLAYERS
     args:
       - --league
@@ -13,39 +23,3 @@ tasks:
       - --write-latest
       - --news
       - producer/candidates/{{today}}/scored.jsonl
-
-  - section_code: S.OPINION.EXPERT_COMMENT
-    args:
-      - --league
-      - premier_league
-      - --outdir
-      - sections
-      - --write-latest
-      - --news
-      - producer/candidates/{{today}}/scored.jsonl
-
-  - section_code: S.GENERIC.INTRO_POSTMATCH
-    args:
-      - --league
-      - premier_league
-      - --outdir
-      - sections
-      - --write-latest
-
-  - section_code: S.OPINION.DUO_EXPERTS
-    args:
-      - --league
-      - premier_league
-      - --outdir
-      - sections
-      - --write-latest
-      - --news
-      - producer/candidates/{{today}}/scored.jsonl
-
-  - section_code: S.GENERIC.INTRO_DAILY
-    args:
-      - --league
-      - premier_league
-      - --outdir
-      - sections
-      - --write-latest
