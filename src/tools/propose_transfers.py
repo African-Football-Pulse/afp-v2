@@ -26,6 +26,8 @@ def propose_transfers():
     all_files = azure_blob.list_prefix(container, "transfers/")
     team_files = [f for f in all_files if f.endswith(".json") and "team_" in f]
 
+    print(f"[propose_transfers] Found {len(team_files)} team files under transfers/")
+
     updates = 0
     changes = []
 
@@ -46,7 +48,6 @@ def propose_transfers():
 
             player = master_by_id[pid]
 
-            # Sortera transfers på datum
             parsed = []
             for t in t_list:
                 d = parse_date(t.get("transfer_date"))
