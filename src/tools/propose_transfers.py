@@ -1,6 +1,5 @@
 import os
 import json
-import argparse
 from datetime import datetime
 from pathlib import Path
 
@@ -17,18 +16,32 @@ def load_json(path):
         return json.load(f)
 
 def save_json(path, data):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def propose_transfers(league_id: int, season: str, transfers_dir="transfers", master_path="players_africa_master.json"):
+def get_latest_season(transfers_dir="transfers"):
+    """Hitta senaste säsongskatalogen i transfers/ baserat på namn YYYY-YYYY."""
+    base_dir = Path(transfers_dir)
+    seasons = [p for p in base_dir.iterdir() if p.is_dir()]
+    if not seasons:
+        raise FileNotFoundError("No season directories found in transfers/")
+    # Sortera på första året i namnet
+    seasons_sorted = sorted(seasons, key=lambda p: int(p.name.split("-")[0]))
+    return seasons_sorted[-1]
+
+def propose_transfers(transfers_dir="transfers", master_path="players_africa_master.json"):
     # Läs master
     master = load_json(master_path)
     players = master.get("players", [])
     master_by_id = {str(p["id"]): p for p in players}
 
-    # Hitta alla transferfiler
-    base_dir = Path(transfers_dir) / season
-    team_files = list(base_dir.glob("*.json"))
+    # Hitta senaste säsong
+    season_dir = get_latest_season(transfers_dir)
+    season_name = season_dir.name
+    print(f"[propose_transfers] Using season {season_name}")
+
+    team_files = list(season_dir.glob("*.json"))
 
     updates = 0
     changes = []
@@ -117,15 +130,11 @@ def propose_transfers(league_id: int, season: str, transfers_dir="transfers", ma
 
     # Spara diff-logg
     if changes:
-        diff_path = f"transfers/diff_{season}_{league_id}.json"
+        diff_path = f"transfers/diff_{season_name}.json"
         save_json(diff_path, changes)
         print(f"[propose_transfers] {updates} players updated. Draft: {draft_path}, Diff: {diff_path}")
     else:
         print("[propose_transfers] No updates proposed.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--league-id", type=int, default=228)
-    parser.add_argument("--season", type=str, default="2024-2025")
-    args = parser.parse_args()
-    propose_transfers(args.league_id, args.season)
+    propose_transfers()
