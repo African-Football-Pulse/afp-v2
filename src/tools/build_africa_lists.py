@@ -1,16 +1,18 @@
 import json
 import os
+from src.storage import azure_blob
 
-EPL_SQUADS_PATH = "meta/2025-2026/epl_squads.json"
+EPL_SQUADS_BLOB = "meta/2025-2026/epl_squads.json"
 AFRICA_CODES_PATH = "config/africa_fifa_codes.json"
 OUTPUT_PATH = "players/africa/players_by_club.json"
 
 def build_players_by_club():
-    # Load EPL squads
-    with open(EPL_SQUADS_PATH, "r", encoding="utf-8") as f:
-        squads = json.load(f)
+    container = os.environ.get("AZURE_STORAGE_CONTAINER")
 
-    # Load Africa FIFA codes
+    # Load EPL squads from Azure
+    squads = azure_blob.get_json(container, EPL_SQUADS_BLOB)
+
+    # Load Africa FIFA codes from local config
     with open(AFRICA_CODES_PATH, "r", encoding="utf-8") as f:
         africa_codes = set(json.load(f).keys())
 
@@ -31,13 +33,8 @@ def build_players_by_club():
         if africa_players:
             result[club] = africa_players
 
-    # Ensure output dir exists
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-
-    # Save result
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-
+    # Save result back to Azure
+    azure_blob.upload_json(container, OUTPUT_PATH, result)
     print(f"[build_africa_lists] Saved {len(result)} clubs with African players → {OUTPUT_PATH}")
 
 if __name__ == "__main__":
