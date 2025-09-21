@@ -1,7 +1,9 @@
-import os
 import json
 from datetime import datetime
 from pathlib import Path
+
+MASTER_PATH = "players/africa/players_africa_master.json"
+TRANSFERS_DIR = "transfers"
 
 def parse_date(date_str):
     """Convert SoccerData date (dd-mm-yyyy) to ISO string."""
@@ -20,24 +22,25 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def get_latest_season(transfers_dir="transfers"):
+def get_latest_season():
     """Hitta senaste säsongskatalogen i transfers/ baserat på namn YYYY-YYYY."""
-    base_dir = Path(transfers_dir)
+    base_dir = Path(TRANSFERS_DIR)
     seasons = [p for p in base_dir.iterdir() if p.is_dir()]
     if not seasons:
         raise FileNotFoundError("No season directories found in transfers/")
-    # Sortera på första året i namnet
     seasons_sorted = sorted(seasons, key=lambda p: int(p.name.split("-")[0]))
     return seasons_sorted[-1]
 
-def propose_transfers(transfers_dir="transfers", master_path="players_africa_master.json"):
+def propose_transfers():
     # Läs master
-    master = load_json(master_path)
+    if not Path(MASTER_PATH).exists():
+        raise FileNotFoundError(f"Master file not found: {MASTER_PATH}")
+    master = load_json(MASTER_PATH)
     players = master.get("players", [])
     master_by_id = {str(p["id"]): p for p in players}
 
     # Hitta senaste säsong
-    season_dir = get_latest_season(transfers_dir)
+    season_dir = get_latest_season()
     season_name = season_dir.name
     print(f"[propose_transfers] Using season {season_name}")
 
@@ -83,7 +86,6 @@ def propose_transfers(transfers_dir="transfers", master_path="players_africa_mas
 
             loan_status = "loan" if transfer_type == "loan" else "permanent"
 
-            # Spara skillnader
             proposed = {
                 "club": to_team_name,
                 "club_id": to_team_id,
@@ -104,10 +106,8 @@ def propose_transfers(transfers_dir="transfers", master_path="players_africa_mas
                     "diff": diff
                 })
 
-                # Uppdatera i draft
                 player.update(proposed)
 
-                # Se till att historik finns
                 if "transfer_history" not in player:
                     player["transfer_history"] = []
                 for d, t in parsed:
@@ -124,13 +124,13 @@ def propose_transfers(transfers_dir="transfers", master_path="players_africa_mas
                 updates += 1
 
     # Spara draft
-    draft_path = "players_africa_master_draft.json"
+    draft_path = "players/africa/players_africa_master_draft.json"
     master["players"] = players
     save_json(draft_path, master)
 
-    # Spara diff-logg
+    # Spara diff
     if changes:
-        diff_path = f"transfers/diff_{season_name}.json"
+        diff_path = f"players/africa/diff_{season_name}.json"
         save_json(diff_path, changes)
         print(f"[propose_transfers] {updates} players updated. Draft: {draft_path}, Diff: {diff_path}")
     else:
