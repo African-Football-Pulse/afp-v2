@@ -1,9 +1,9 @@
 name: 11 Collect Teams Current Bulk
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:    # manuell start
   schedule:
-    - cron: "0 7 * * *"   # kör varje dag kl 07:00 UTC
+    - cron: "0 8 * * *"   # kör varje dag kl 08:00 UTC
 
 jobs:
   collect-teams-current:
