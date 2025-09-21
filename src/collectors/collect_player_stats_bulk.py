@@ -8,12 +8,10 @@ HISTORY_PATH = "players/africa/players_africa_history.json"
 
 
 def load_history(container: str):
-    """Läs in full historikfil för afrikanska spelare"""
     return azure_blob.get_json(container, HISTORY_PATH)
 
 
 def run_collect_stats(player_id: str, league_id: str, season: str):
-    """Anropa direkt collect_player_stats-funktionen"""
     print(f"[collect_player_stats_bulk] Collecting stats for {player_id}, league {league_id}, season {season}", flush=True)
     try:
         collect_player_stats(str(player_id), str(league_id), season)
@@ -25,13 +23,16 @@ def run_collect_stats(player_id: str, league_id: str, season: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, help="Optional limit on number of players (for testing)")
+    parser.add_argument("--limit", help="Optional limit on number of players (for testing)")
     args = parser.parse_args()
+
+    # ✅ omvandla till int om värde finns, annars None
+    limit = int(args.limit) if args.limit else None
 
     container = CONTAINER
     history_all = load_history(container)
-
     players = list(history_all.keys())
+
     print(f"[collect_player_stats_bulk] Starting bulk collect for {len(players)} players", flush=True)
 
     processed = 0
@@ -54,8 +55,8 @@ def main():
 
         processed += 1
 
-        if args.limit and processed >= args.limit:
-            print(f"[collect_player_stats_bulk] Limit {args.limit} reached, stopping.", flush=True)
+        if limit and processed >= limit:
+            print(f"[collect_player_stats_bulk] Limit {limit} reached, stopping.", flush=True)
             break
 
     print("=== Summary ===", flush=True)
