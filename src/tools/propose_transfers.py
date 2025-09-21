@@ -23,8 +23,8 @@ def propose_transfers():
     master_by_id = {str(p["id"]): p for p in players}
 
     # Lista alla teamfiler oavsett säsong/ligamapp
-    blobs = azure_blob.list_blobs(container, "transfers/")
-    team_files = [b["name"] for b in blobs if "team_" in b["name"] and b["name"].endswith(".json")]
+    all_files = azure_blob.list_prefix(container, "transfers/")
+    team_files = [f for f in all_files if f.endswith(".json") and "team_" in f]
 
     updates = 0
     changes = []
@@ -46,6 +46,7 @@ def propose_transfers():
 
             player = master_by_id[pid]
 
+            # Sortera transfers på datum
             parsed = []
             for t in t_list:
                 d = parse_date(t.get("transfer_date"))
@@ -93,7 +94,7 @@ def propose_transfers():
 
                 updates += 1
 
-    # Spara draft och diff
+    # Spara utkast och diff i Azure
     master["players"] = players
     azure_blob.put_text(container, DRAFT_PATH, json.dumps(master, indent=2, ensure_ascii=False))
     azure_blob.put_text(container, DIFF_PATH, json.dumps(changes, indent=2, ensure_ascii=False))
