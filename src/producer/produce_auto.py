@@ -68,7 +68,7 @@ def run_step(label: str, module: str, args: list[str] | None = None) -> None:
 
 
 def main() -> int:
-    plan_path = os.getenv("PRODUCE_PLAN", "producer/produce_plan.yaml")
+    plan_path = os.getenv("PRODUCE_PLAN", "src/producer/produce_plan.yaml")
     if not Path(plan_path).exists():
         print(f"[produce_auto] ERROR: plan saknas: {plan_path}", file=sys.stderr)
         return 2
