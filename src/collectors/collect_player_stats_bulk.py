@@ -24,22 +24,30 @@ def run_collect_stats(player_id: str, league_id: str, season: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", help="Optional limit on number of players (for testing)")
+    parser.add_argument("--player-id", help="Optional single player ID to process")
     args = parser.parse_args()
 
-    # ✅ omvandla till int om värde finns, annars None
+    # ✅ limit som int om värde finns
     limit = int(args.limit) if args.limit else None
 
     container = CONTAINER
     history_all = load_history(container)
-    players = list(history_all.keys())
 
-    print(f"[collect_player_stats_bulk] Starting bulk collect for {len(players)} players", flush=True)
+    if args.player_id:
+        # Bearbeta bara en specifik spelare
+        players = [args.player_id] if args.player_id in history_all else []
+        print(f"[collect_player_stats_bulk] Running for single player {args.player_id}", flush=True)
+    else:
+        # Bearbeta alla spelare
+        players = list(history_all.keys())
+        print(f"[collect_player_stats_bulk] Starting bulk collect for {len(players)} players", flush=True)
 
     processed = 0
     missing = 0
     created_files = 0
 
-    for pid, pdata in history_all.items():
+    for pid in players:
+        pdata = history_all.get(pid, {})
         player_history = pdata.get("history", [])
         if not player_history:
             print(f"[collect_player_stats_bulk] ⚠️ Skipping {pid}, no history", flush=True)
