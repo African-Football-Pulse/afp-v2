@@ -39,6 +39,29 @@ HEADERS = {
     )
 }
 
+def normalize(text: str) -> str:
+    """Normalisera headertext till bara bokstäver (lowercase)."""
+    return re.sub(r"[^a-z]", "", text.lower())
+
+def find_squad_table(soup):
+    """Hitta tabellen som innehåller truppen baserat på rubrikerna."""
+    tables = soup.find_all("table", {"class": "wikitable"})
+    candidate_tables = []
+
+    for t in tables:
+        header_row = t.find("tr")
+        if not header_row:
+            continue
+        headers = [normalize(h.get_text(strip=True)) for h in header_row.find_all(["th", "td"])]
+        if "no" in headers and "player" in headers:
+            candidate_tables.append(t)
+
+    if not candidate_tables:
+        return None
+
+    # Välj tabellen med flest rader (brukar vara first-team squad)
+    return max(candidate_tables, key=lambda t: len(t.find_all("tr")))
+
 def scrape_club_squad(club, url):
     print(f"🔎 Scraping {club}...")
     resp = requests.get(url, headers=HEADERS)
@@ -46,26 +69,10 @@ def scrape_club_squad(club, url):
     soup = BeautifulSoup(resp.text, "html.parser")
 
     squads = []
-
-    # Försök hitta rubrik som pekar på truppen
-    header = soup.find(["span", "h2", "h3"], id=re.compile("squad", re.I))
-    if not header:
-        header = soup.find(["span", "h2", "h3"], string=re.compile("First-team squad", re.I))
-    if not header:
-        header = soup.find(["span", "h2", "h3"], string=re.compile("Players", re.I))
-
-    if not header:
-        print(f"⚠️ No squad header found for {club}")
+    table = find_squad_table(soup)
+    if not table:
+        print(f"⚠️ No valid squad table found for {club}")
         return squads
-
-    # Hämta ALLA tabeller efter rubriken
-    tables = header.find_all_next("table", {"class": "wikitable"})
-    if not tables:
-        print(f"⚠️ No squad tables found for {club}")
-        return squads
-
-    # Välj den tabell med flest rader (den brukar vara first-team)
-    table = max(tables, key=lambda t: len(t.find_all("tr")))
 
     for row in table.find_all("tr")[1:]:
         cols = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
