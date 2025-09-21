@@ -16,7 +16,7 @@ def load_json(container: str, path: str):
 
 
 def build_master_lookup(container: str):
-    """Bygg en lookup {player_id: {name, country, club}} från masterfilen"""
+    """Bygg en lookup {player_id: {name, country}} från masterfilen"""
     data = load_json(container, MASTER_PATH)
     players = data.get("players", [])
     lookup = {}
@@ -25,7 +25,6 @@ def build_master_lookup(container: str):
         lookup[pid] = {
             "name": player.get("name"),
             "country": player.get("country"),
-            "club": player.get("club")
         }
     return lookup
 
@@ -53,13 +52,12 @@ def collect_teams(container: str, season: str):
 
             league_teams.setdefault(club_id, {"club_name": club_name, "players": []})
 
-            info = master_lookup.get(pid, {"name": "Unknown", "country": None, "club": None})
+            info = master_lookup.get(pid, {"name": "Unknown", "country": None})
 
             league_teams[club_id]["players"].append({
                 "id": pid,
                 "name": info["name"],
-                "country": info["country"],
-                "club": info["club"]
+                "country": info["country"]
             })
             processed += 1
 
