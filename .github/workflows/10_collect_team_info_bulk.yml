@@ -1,0 +1,35 @@
+name: 10 Collect Team Info Bulk
+
+on:
+  workflow_dispatch:   # manuell start
+  schedule:
+    - cron: "0 6 * * *"   # kör varje dag kl 06:00 UTC
+
+jobs:
+  collect-team-info:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_team_info_bulk
+        env:
+          SOCCERDATA_AUTH_KEY:     ${{ secrets.SOCCERDATA_AUTH_KEY }}
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Collecting team info..."
+          python -m src.collectors.collect_team_info_bulk | tee team_info_log.txt
+          echo "✅ Done. See summary below:"
+          echo "---- SUMMARY (last 20 lines) ----"
+          tail -n 20 team_info_log.txt
