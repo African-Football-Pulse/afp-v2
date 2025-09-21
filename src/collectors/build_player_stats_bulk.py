@@ -42,7 +42,7 @@ def main():
 
     processed = 0
     missing = 0
-    built_files = 0
+    totals_created = 0
 
     for pid in players:
         history = data.get(pid, {}).get("history", [])
@@ -53,7 +53,8 @@ def main():
 
         ok = run_build_player(pid)
         if ok:
-            built_files += 1
+            # ✔️ här vet vi att build_player försökt skriva totals.json
+            totals_created += 1
         processed += 1
 
         if limit and processed >= limit:
@@ -63,7 +64,7 @@ def main():
     print("=== Summary ===", flush=True)
     print(f"Processed players: {processed}", flush=True)
     print(f"Missing players: {missing}", flush=True)
-    print(f"Built player totals: {built_files}", flush=True)
+    print(f"Totals.json created: {totals_created}", flush=True)
     print("[build_player_stats_bulk] DONE", flush=True)
 
 
