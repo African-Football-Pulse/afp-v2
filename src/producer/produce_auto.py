@@ -1,3 +1,4 @@
+# src/producer/produce_auto.py
 from __future__ import annotations
 
 import os
@@ -6,26 +7,22 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict
 from datetime import datetime, UTC
+import json
 
 import yaml
 
-try:
-    from azure.storage.blob import BlobServiceClient  # type: ignore
-except Exception:
-    BlobServiceClient = None
+from src.storage import azure_blob
 
-
-# -----------------------------
-# Hjälpfunktioner
-# -----------------------------
 
 def _now_utc() -> datetime:
     return datetime.now(UTC)
+
 
 def _to_bool(val: str | None) -> bool:
     if val is None:
         return False
     return val.strip().lower() in ("1", "true", "t", "yes", "y", "on")
+
 
 def resolve_date(plan_defaults: Dict[str, Any]) -> str:
     env_date = os.getenv("DATE")
@@ -43,6 +40,7 @@ def resolve_date(plan_defaults: Dict[str, Any]) -> str:
 
     return _now_utc().strftime("%Y-%m-%d")
 
+
 def replace_today(obj: Any, date_str: str) -> Any:
     if isinstance(obj, str):
         return obj.replace("{{today}}", date_str)
@@ -52,14 +50,12 @@ def replace_today(obj: Any, date_str: str) -> Any:
         return {k: replace_today(v, date_str) for k, v in obj.items()}
     return obj
 
+
 def load_plan(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
-# -----------------------------
-# Extra: helper to run sub-steps
-# -----------------------------
 def run_step(label: str, module: str, args: list[str] | None = None) -> None:
     cmd = [sys.executable, "-m", module]
     if args:
@@ -71,9 +67,6 @@ def run_step(label: str, module: str, args: list[str] | None = None) -> None:
         raise SystemExit(r.returncode)
 
 
-# -----------------------------
-# Huvudflöde
-# -----------------------------
 def main() -> int:
     plan_path = os.getenv("PRODUCE_PLAN", "producer/produce_plan.yaml")
     if not Path(plan_path).exists():
@@ -98,6 +91,13 @@ def main() -> int:
     child_env.setdefault("WRITE_PREFIX", "producer/")
     child_env.setdefault("READ_PREFIX", "collector/")
 
+    stats_summary = {
+        "candidates": 0,
+        "unique_players": 0,
+        "unique_clubs": 0,
+        "sections": 0,
+    }
+
     # -----------------------------
     # STEG 1: Bygg kandidater
     # -----------------------------
@@ -109,6 +109,19 @@ def main() -> int:
     # -----------------------------
     if not dry_run:
         run_step("scoring", "src.producer.produce_scoring")
+
+        # Läs scored.jsonl för summering
+        in_path = f"producer/candidates/{date_str}/scored.jsonl"
+        try:
+            text = azure_blob.get_text(os.getenv("BLOB_CONTAINER", "afp"), in_path)
+            scored = [json.loads(line) for line in text.splitlines() if line.strip()]
+            stats_summary["candidates"] = len(scored)
+            players = {c["player"]["name"] for c in scored if c.get("player")}
+            clubs = {c["player"].get("club") for c in scored if c.get("player")}
+            stats_summary["unique_players"] = len(players)
+            stats_summary["unique_clubs"] = len(clubs)
+        except Exception as e:
+            print(f"[produce_auto] WARN: kunde inte läsa scored.jsonl för summering: {e}")
 
     # -----------------------------
     # STEG 3: Kör tasks (som tidigare)
@@ -127,7 +140,7 @@ def main() -> int:
             extra_args = []
 
         cmd = [
-            sys.executable, "-m", "src.produce_section",
+            sys.executable, "-m", "src.producer.produce_section",
             "--section-code", section_code,
             "--date", date_str,
             "--path-scope", "blob",
@@ -143,7 +156,18 @@ def main() -> int:
             print(f"[produce_auto] FEL: {section_code} returnerade {r.returncode}", file=sys.stderr)
             continue
 
-    print("[produce_auto] Klart – alla steg körda.")
+        stats_summary["sections"] += 1
+
+    # -----------------------------
+    # SLUTSUMMERING
+    # -----------------------------
+    print("[produce_auto] === SUMMARY ===")
+    print(f"[produce_auto] Candidates: {stats_summary['candidates']}")
+    print(f"[produce_auto] Unique players: {stats_summary['unique_players']}")
+    print(f"[produce_auto] Unique clubs: {stats_summary['unique_clubs']}")
+    print(f"[produce_auto] Sections generated: {stats_summary['sections']}")
+    print("[produce_auto] DONE")
+
     return 0
 
 
