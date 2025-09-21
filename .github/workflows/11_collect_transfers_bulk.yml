@@ -4,12 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season to collect transfers for"
+        description: "Season to collect (e.g. 2025-2026)"
         required: true
-        default: "2025-2026"
 
 jobs:
-  collect-transfers-bulk:
+  collect-transfers:
     runs-on: ubuntu-latest
 
     steps:
@@ -26,11 +25,11 @@ jobs:
 
       - name: Run collect_transfers_bulk
         env:
+          SEASON: ${{ github.event.inputs.season }}
           SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
           AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
           BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
-          SEASON: ${{ github.event.inputs.season }}
         run: |
           echo "🔄 Collecting transfers..."
           python -m src.collectors.collect_transfers_bulk | tee transfers_log.txt
