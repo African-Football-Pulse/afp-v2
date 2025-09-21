@@ -18,12 +18,14 @@ def load_json(container: str, path: str):
 def build_master_lookup(container: str):
     """Bygg en lookup {player_id: {name, country, club}} från masterfilen"""
     data = load_json(container, MASTER_PATH)
+    players = data.get("players", [])
     lookup = {}
-    for pid, info in data.items():
-        lookup[str(pid)] = {
-            "name": info.get("name"),
-            "country": info.get("country"),
-            "club": info.get("club")
+    for player in players:
+        pid = str(player.get("id"))
+        lookup[pid] = {
+            "name": player.get("name"),
+            "country": player.get("country"),
+            "club": player.get("club")
         }
     return lookup
 
