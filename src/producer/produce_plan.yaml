@@ -1,10 +1,21 @@
-
 defaults:
   date: "{{today}}"
   league: premier_league
   write_latest: true
 
 tasks:
+  # Nyhetssektioner direkt från scored candidates
+  - section_code: S.NEWS.TOP3
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - producer/candidates/{{today}}/scored.jsonl
+
+  # Stats-topplista över afrikanska spelare (kommer funka när vi kopplar in stats)
   - section_code: S.STATS.TOP_AFRICAN_PLAYERS
     args:
       - --league
@@ -13,8 +24,9 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+      - producer/candidates/{{today}}/scored.jsonl
 
+  # Expertkommentar – tar en av kandidaterna som underlag
   - section_code: S.OPINION.EXPERT_COMMENT
     args:
       - --league
@@ -23,16 +35,9 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+      - producer/candidates/{{today}}/scored.jsonl
 
-  - section_code: S.GENERIC.INTRO_POSTMATCH
-    args:
-      - --league
-      - premier_league
-      - --outdir
-      - sections
-      - --write-latest
-
+  # Duo-experter, bygger dialog utifrån kandidaterna
   - section_code: S.OPINION.DUO_EXPERTS
     args:
       - --league
@@ -41,7 +46,16 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+      - producer/candidates/{{today}}/scored.jsonl
+
+  # Intros kan köras utan news (men får ändå datum/league)
+  - section_code: S.GENERIC.INTRO_POSTMATCH
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
 
   - section_code: S.GENERIC.INTRO_DAILY
     args:
