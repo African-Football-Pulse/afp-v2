@@ -1,65 +1,30 @@
-aliases:
-  S1: S.STATS.TOP_AFRICAN_PLAYERS
-  S2: S.NEWS.CLUB_HIGHLIGHT
-  S3: S.OPINION.EXPERT_COMMENT
-  S4: S.NEWS.TOP3
-  S5: S.OPINION.DUO_EXPERTS
-  S6: S.GENERIC.INTRO_DAILY
-  S7: S.GENERIC.INTRO_POSTMATCH
-  S.NEWS.TOPN: S.NEWS.TOP3     # <-- lägg till denna för bakåtkompatibilitet
-  TOPN: S.NEWS.TOP3            # <-- valfritt kortalias om ni använt ”TOPN” någonstans
-  TOP3: S.NEWS.TOP3            # <-- valfritt
-
 sections:
-  S.GENERIC.INTRO_DAILY:
-    type: generic
-    module: s_generic_intro_daily        # src/sections/s_generic_intro_daily/__init__.py
-    runner: build_section
-    layout: alias-first
-    path_scope: single
-    write_latest: true
-    model: gpt-4o-mini
-
-  S.GENERIC.INTRO_POSTMATCH:
-    type: generic
-    module: s_generic_intro_postmatch    # src/sections/s_generic_intro_postmatch/__init__.py
-    runner: build_section
-    layout: alias-first
-    path_scope: single
-    write_latest: true
-    model: gpt-4o-mini
-  
   S.NEWS.TOP3:
-    type: news
     module: s_news_top3_generic
     runner: build_section
-    layout: alias-first
-    path_scope: single
-    write_latest: true
-    model: gpt-4o-mini
+    description: Top 3 news items about African players
 
-  S.STATS.TOP_AFRICAN_PLAYERS:
-    module: "s_top_african_players"   # src/sections/s_top_african_players/__init__.py
-    runner: "build_section"
-    type: "generic"
-    layout: "alias-first"
+  S.NEWS.TOP_AFRICAN_PLAYERS:
+    module: s_news_top_african_players
+    runner: build_section
+    description: Top African players based on news candidates
 
   S.OPINION.EXPERT_COMMENT:
-    type: opinion
     module: s_opinion_expert_comment
     runner: build_section
-    default_speaker: JJK          # anchor AK remains the host elsewhere
-    personas_path: config/personas.json
-    layout: alias-first
-    path_scope: single            # set to "speaker" if you ever want AK+JJK side-by-side
-    write_latest: true
-    model: gpt-4o-mini
+    description: Expert comment on recent events
 
   S.OPINION.DUO_EXPERTS:
-    type: opinion
     module: s_opinion_duo_experts
     runner: build_section
-    personas_path: config/personas.json
-    layout: alias-first
-    write_latest: true
-    model: gpt-4o-mini
+    description: Two experts discussing African football news
+
+  S.GENERIC.INTRO_POSTMATCH:
+    module: s_generic_intro_postmatch
+    runner: build_section
+    description: Generic intro after a matchday
+
+  S.GENERIC.INTRO_DAILY:
+    module: s_generic_intro_daily
+    runner: build_section
+    description: Generic daily intro section
