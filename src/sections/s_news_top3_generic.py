@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 
 from src.storage import azure_blob
 
-USE_LOCAL = os.getenv("USE_LOCAL", "0") == "1"
 CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
 
 
@@ -13,11 +12,7 @@ def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def _blob_container():
-    return azure_blob.get_container_client()
-
-
-def _load_items_for_feed(container_client, feed: str, league: str, day: str) -> List[Dict[str, Any]]:
+def _load_items_for_feed(feed: str, league: str, day: str) -> List[Dict[str, Any]]:
     path = f"curated/news/{feed}/{league}/{day}/items.json"
     try:
         return azure_blob.get_json(CONTAINER, path)
@@ -66,12 +61,10 @@ def build_section(args=None):
     lang = getattr(args, "lang", "en")
     section_id = getattr(args, "section_code", "S.NEWS.TOP3")
 
-    cc = None if USE_LOCAL else _blob_container()
-
     all_items: List[Dict[str, Any]] = []
     feeds = [f.strip() for f in feeds_csv.split(",") if f.strip()]
     for feed in feeds:
-        all_items.extend(_load_items_for_feed(cc, feed, league, day))
+        all_items.extend(_load_items_for_feed(feed, league, day))
 
     if not all_items:
         return {
