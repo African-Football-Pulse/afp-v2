@@ -1,0 +1,30 @@
+name: 12 Propose Transfers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt || true
+
+      - name: Run propose_transfers
+        run: python src/tools/propose_transfers.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: transfer-proposals
+          path: |
+            players_africa_master_draft.json
+            transfers/diff_*.json
