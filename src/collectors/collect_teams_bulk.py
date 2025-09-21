@@ -1,7 +1,6 @@
 import os
 import argparse
 from src.storage import azure_blob
-import json
 
 CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER") or "afp"
 HISTORY_PATH = "players/africa/players_africa_history.json"
@@ -20,12 +19,11 @@ def build_master_lookup(container: str):
     """Bygg en lookup {player_id: {name, country, club}} från masterfilen"""
     data = load_json(container, MASTER_PATH)
     lookup = {}
-    for player in data:
-        pid = str(player.get("id"))
-        lookup[pid] = {
-            "name": player.get("name"),
-            "country": player.get("country"),
-            "club": player.get("club")
+    for pid, info in data.items():
+        lookup[str(pid)] = {
+            "name": info.get("name"),
+            "country": info.get("country"),
+            "club": info.get("club")
         }
     return lookup
 
