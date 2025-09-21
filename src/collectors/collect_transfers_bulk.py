@@ -1,84 +1,84 @@
 import os
+import json
 import argparse
 import requests
-import yaml
+from collections import defaultdict
 from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
-API_URL = "https://api.soccerdataapi.com/transfers/"
-AUTH_TOKEN = os.getenv("SOCCERDATA_AUTH_TOKEN")
+API_BASE = "https://api.soccerdataapi.com"
 
-def load_leagues_from_config():
-    """Load leagues from config/leagues.yaml"""
-    path = "config/leagues.yaml"
-    try:
-        with open(path, "r") as f:
-            cfg = yaml.safe_load(f)
-        return [lid for lid, active in cfg.get("leagues", {}).items() if active]
-    except Exception as e:
-        print(f"[collect_transfers_bulk] ⚠️ Could not load leagues from {path}: {e}")
-        return []
-
-def fetch_transfers(team_id):
-    params = {"team_id": team_id, "auth_token": AUTH_TOKEN}
+def fetch_transfers(team_id, token):
+    url = f"{API_BASE}/transfers/"
+    params = {"team_id": team_id, "auth_token": token}
     headers = {"Accept-Encoding": "gzip", "Content-Type": "application/json"}
-    r = requests.get(API_URL, headers=headers, params=params, timeout=30)
+    r = requests.get(url, headers=headers, params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
-def collect_transfers(container, league_id, season):
-    manifest_path = f"teams/{league_id}/manifest.json"
-    teams_manifest = azure_blob.get_json(container, manifest_path)
-    if not teams_manifest:
-        print(f"[collect_transfers_bulk] ⚠️ No team manifest for league {league_id}")
+def collect_transfers_for_league(container, league_id, season, token, limit=None):
+    manifest_path = f"meta/{season}/league_{league_id}.json"
+    manifest = azure_blob.get_json(container, manifest_path)
+
+    if not manifest or "stage" not in manifest[0]:
+        print(f"[collect_transfers_bulk] ⚠️ No manifest found for league {league_id}, season {season}")
         return 0
 
-    exported = 0
-    all_entries = []
+    stage = manifest[0]["stage"][0]
+    teams = set()
+    for m in stage.get("matches", []):
+        for side in ["home", "away"]:
+            tid = m["teams"][side]["id"]
+            teams.add(tid)
 
-    for team in teams_manifest.get("teams", []):
-        team_id = team.get("id")
+    teams = list(teams)
+    if limit:
+        teams = teams[:limit]
+
+    league_dir = f"transfers/{season}/{league_id}"
+    collected = 0
+    manifest_out = []
+
+    for tid in teams:
         try:
-            transfers = fetch_transfers(team_id)
-            if transfers:
-                out_path = f"transfers/{season}/{league_id}/{team_id}.json"
-                azure_blob.upload_json(container, out_path, transfers)
-                print(f"[collect_transfers_bulk] Uploaded transfers → {out_path}")
-                all_entries.append({"team_id": team_id, "file": out_path})
-                exported += 1
+            data = fetch_transfers(tid, token)
+            out_path = f"{league_dir}/{tid}.json"
+            azure_blob.upload_json(container, out_path, data)
+            manifest_out.append({"team_id": tid, "file": out_path})
+            collected += 1
+            print(f"[collect_transfers_bulk] Uploaded → {out_path}")
         except Exception as e:
-            print(f"[collect_transfers_bulk] ⚠️ Could not fetch transfers for team {team_id}: {e}")
+            print(f"[collect_transfers_bulk] ⚠️ Could not fetch transfers for team {tid}: {e}")
 
-    manifest_out = {
-        "league_id": league_id,
-        "season": season,
-        "teams": all_entries
-    }
-    out_manifest_path = f"transfers/{season}/{league_id}/manifest.json"
+    # skriv manifest för ligan
+    out_manifest_path = f"{league_dir}/manifest.json"
     azure_blob.upload_json(container, out_manifest_path, manifest_out)
-    print(f"[collect_transfers_bulk] Uploaded manifest → {out_manifest_path}")
-    return exported
+    print(f"[collect_transfers_bulk] Uploaded → {out_manifest_path}")
+
+    return collected
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--season", required=True, help="Season, e.g. 2025-2026")
-    parser.add_argument("--limit", type=int, default=None, help="Limit number of teams to process")
+    parser.add_argument("--season", required=True, help="Season to process, e.g. 2024-2025")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of teams (for testing)")
     args = parser.parse_args()
 
-    leagues = load_leagues_from_config()
+    token = os.getenv("SOCCERDATA_API_KEY")
+    if not token:
+        raise RuntimeError("[collect_transfers_bulk] Missing SOCCERDATA_API_KEY")
+
+    leagues = [
+        228, 229, 230, 310, 326, 198, 235, 241, 253, 268, 297
+    ]  # samma som övriga collectors
+
+    print(f"[collect_transfers_bulk] Starting transfer collection for season {args.season}")
     total = 0
-
     for league_id in leagues:
-        print(f"[collect_transfers_bulk] league_id={league_id}, season={args.season}")
-        exported = collect_transfers(CONTAINER, league_id, args.season)
-        print(f"[collect_transfers_bulk] Exported {exported} teams for league {league_id}, season {args.season}")
-        total += exported
+        count = collect_transfers_for_league(CONTAINER, league_id, args.season, token, args.limit)
+        print(f"[collect_transfers_bulk] league_id={league_id}, collected={count}")
+        total += count
 
-        if args.limit and total >= args.limit:
-            print("[collect_transfers_bulk] Limit reached, stopping.")
-            break
-
-    print(f"[collect_transfers_bulk] DONE. Total teams processed: {total}")
+    print(f"[collect_transfers_bulk] DONE. Total transfers collected: {total}")
 
 if __name__ == "__main__":
     main()
