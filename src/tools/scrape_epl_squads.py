@@ -47,12 +47,15 @@ def scrape_club_squad(club, url):
 
     squads = []
 
-    # Leta efter rubrik "First-team squad"
-    header = soup.find(["span", "h2", "h3"], string=re.compile("First-team squad", re.I))
+    # Försök hitta rubrik som pekar på truppen
+    header = soup.find(["span", "h2", "h3"], id=re.compile("squad", re.I))
     if not header:
-        header = soup.find(id=re.compile("First-team_squad", re.I))
+        header = soup.find(["span", "h2", "h3"], string=re.compile("First-team squad", re.I))
     if not header:
-        print(f"⚠️ No First-team squad header found for {club}")
+        header = soup.find(["span", "h2", "h3"], string=re.compile("Players", re.I))
+
+    if not header:
+        print(f"⚠️ No squad header found for {club}")
         return squads
 
     # Hämta ALLA tabeller efter rubriken
@@ -61,7 +64,7 @@ def scrape_club_squad(club, url):
         print(f"⚠️ No squad tables found for {club}")
         return squads
 
-    # Välj den tabell med flest rader (första är ibland korta listor)
+    # Välj den tabell med flest rader (den brukar vara first-team)
     table = max(tables, key=lambda t: len(t.find_all("tr")))
 
     for row in table.find_all("tr")[1:]:
