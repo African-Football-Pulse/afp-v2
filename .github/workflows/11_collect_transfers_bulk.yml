@@ -1,0 +1,27 @@
+name: 11 Collect Transfers Bulk
+
+on:
+  workflow_dispatch:
+
+jobs:
+  collect-transfers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_transfers_bulk
+        run: |
+          python -m src.collectors.collect_transfers_bulk --limit 5
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+          SOCCERDATA_AUTH_TOKEN: ${{ secrets.SOCCERDATA_AUTH_TOKEN }}
