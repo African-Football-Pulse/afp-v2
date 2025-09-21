@@ -2,29 +2,35 @@ name: 12 Propose Transfers
 
 on:
   workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season, e.g. 2024-2025'
+        required: true
 
 jobs:
-  propose:
+  propose-transfers:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt || true
+        run: pip install -r requirements.txt
 
       - name: Run propose_transfers
-        run: python src/tools/propose_transfers.py
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: transfer-proposals
-          path: |
-            players/africa/players_africa_master_draft.json
-            players/africa/diff_*.json
+        env:
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Proposing transfers for season ${{ github.event.inputs.season }}..."
+          python -m src.tools.propose_transfers | tee propose_transfers_log.txt
+          echo "✅ Done. See summary below:"
+          echo "---- SUMMARY (last 20 lines) ----"
+          tail -n 20 propose_transfers_log.txt
