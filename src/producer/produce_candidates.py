@@ -8,7 +8,6 @@ CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
 
 
 def today_str():
-    """Returnera dagens datum i UTC (YYYY-MM-DD)."""
     return datetime.now(timezone.utc).date().isoformat()
 
 
@@ -19,7 +18,6 @@ def load_master_players():
 
 
 def load_curated_news():
-    """Ladda alla curated news items från Azure."""
     blob_paths = azure_blob.list_prefix(CONTAINER, "curated/news/")
     items = []
     for bp in blob_paths:
@@ -33,28 +31,6 @@ def load_curated_news():
         except Exception as e:
             print(f"[WARN] Failed to load {bp}: {e}")
     return items
-
-
-# ---- scoring helpers ---------------------------------------------------
-SOURCE_AUTHORITY = {
-    "bbc_football": 0.85,
-    "guardian_football": 0.85,
-    "sky_sports_premier_league": 0.85,
-    "independent_football": 0.7,
-    # klubbfeeds kan sättas till 0.9
-}
-
-def compute_score(c):
-    return round(
-        0.35 * c.get("direct_player_mention", 0)
-        + 0.25 * c.get("event_importance", 0)
-        + 0.15 * c.get("source", {}).get("authority", 0.5)
-        + 0.15 * c.get("recency_score", 0)
-        + 0.05 * c.get("novelty_24h", 0)
-        + 0.05 * c.get("language_match", 1.0),
-        3,
-    )
-# ------------------------------------------------------------------------
 
 
 def candidate_from_news(item, master_players):
@@ -72,7 +48,6 @@ def candidate_from_news(item, master_players):
             break
 
     if not player:
-        # fallback: check if club appears in source/feed name
         for mp in master_players:
             if mp.get("club", "").lower() in src.lower():
                 player = mp
@@ -82,36 +57,32 @@ def candidate_from_news(item, master_players):
     if not player:
         return None
 
-    # recency (i timmar, relativt UTC)
     published = item.get("published_iso")
-    recency_score = 0
+    published_utc = None
     if published:
         try:
             dt = datetime.fromisoformat(published)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            hours = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
-            recency_score = max(0, 1 - hours / 48)
+            published_utc = dt.isoformat()
         except Exception:
             pass
 
-    cand = {
+    return {
         "id": str(uuid.uuid4()),
         "player": player,
         "event": {"type": "news"},
         "source": {
             "name": src,
             "url": item.get("link"),
-            "authority": SOURCE_AUTHORITY.get(src, 0.5),
         },
         "direct_player_mention": direct_mention,
         "event_importance": 0.0,
-        "recency_score": recency_score,
-        "novelty_24h": 1,  # TODO: implementera riktig dedupe/novelty
-        "language_match": 1.0,
+        "published_iso": published_utc,
+        "recency_score": None,   # fylls i scoring-steget
+        "novelty_24h": None,     # fylls i scoring-steget
+        "language_match": None,  # fylls i scoring-steget
     }
-    cand["score"] = compute_score(cand)
-    return cand
 
 
 def main():
@@ -124,30 +95,14 @@ def main():
     news_items = load_curated_news()
     print(f"[produce_candidates] Loaded {len(news_items)} news items from Azure")
 
-    # logga antal items per källa
-    per_source = {}
-    for item in news_items:
-        src = item.get("source", "unknown")
-        per_source[src] = per_source.get(src, 0) + 1
-    for src, count in per_source.items():
-        print(f"  - {src}: {count} items")
-
-    # skapa kandidater
     candidates = []
     for item in news_items:
         cand = candidate_from_news(item, master_players)
         if cand:
             candidates.append(cand)
 
-    print(f"[produce_candidates] Built {len(candidates)} candidates")
-    if candidates:
-        scores = [c["score"] for c in candidates]
-        print(
-            f"[produce_candidates] Score stats: "
-            f"min={min(scores):.2f} max={max(scores):.2f} avg={sum(scores)/len(scores):.2f}"
-        )
+    print(f"[produce_candidates] Built {len(candidates)} raw candidates")
 
-    # spara JSONL
     out_path = f"producer/candidates/{day}/candidates.jsonl"
     text = "\n".join(json.dumps(c, ensure_ascii=False) for c in candidates)
     azure_blob.put_text(CONTAINER, out_path, text, content_type="application/jsonl")
@@ -158,4 +113,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
