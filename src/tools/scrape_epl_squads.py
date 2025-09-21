@@ -40,11 +40,10 @@ HEADERS = {
 }
 
 def normalize(text: str) -> str:
-    """Normalisera headertext till bara bokstäver (lowercase)."""
     return re.sub(r"[^a-z]", "", text.lower())
 
 def find_squad_table(soup):
-    """Hitta tabellen som innehåller truppen baserat på rubrikerna."""
+    """Hitta tabellen som innehåller truppen baserat på headers."""
     tables = soup.find_all("table", {"class": "wikitable"})
     candidate_tables = []
 
@@ -59,7 +58,6 @@ def find_squad_table(soup):
     if not candidate_tables:
         return None
 
-    # Välj tabellen med flest rader (brukar vara first-team squad)
     return max(candidate_tables, key=lambda t: len(t.find_all("tr")))
 
 def scrape_club_squad(club, url):
@@ -78,20 +76,19 @@ def scrape_club_squad(club, url):
         cols = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
         if len(cols) < 4:
             continue
-        try:
-            number = cols[0]
-            pos = cols[1]
-            nation = cols[2]
-            name = cols[3]
-        except Exception:
-            continue
 
-        squads.append({
-            "no": number,
-            "pos": pos,
-            "nation": nation,
-            "name": name
-        })
+        # Hantera två spelare per rad (8 kolumner = 2 blocks à 4)
+        for i in range(0, len(cols), 4):
+            block = cols[i:i+4]
+            if len(block) < 4:
+                continue
+            number, pos, nation, name = block
+            squads.append({
+                "no": number,
+                "pos": pos,
+                "nation": nation,
+                "name": name
+            })
 
     print(f"   ➡️ Found {len(squads)} players for {club}")
     return squads
