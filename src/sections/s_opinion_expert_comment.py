@@ -75,7 +75,7 @@ def _build_section(
         f"{SYSTEM_RULES}\n\n"
         f"Persona:\n{json.dumps(persona_block, indent=2)}\n\n"
         f"News fact:\nTitle: {title}\nPlayer: {player}\nSource: {top_item.get('source')}\n\n"
-        "Now write the expert comment monologue."
+        "Generate the monologue in English."
     )
 
     script_text = gpt.run(prompt)
