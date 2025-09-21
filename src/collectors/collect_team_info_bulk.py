@@ -114,11 +114,16 @@ def main():
     print("[collect_team_info_bulk] Starting team info collection...", flush=True)
 
     for league in leagues:
+        if league.get("is_cup"):
+            print(f"[collect_team_info_bulk] ⏭️ Skipping cup {league['id']} ({league['name']})", flush=True)
+            continue
+
         league_id = league["id"]
         season = get_active_season(container, league_id)
         if not season:
             print(f"[collect_team_info_bulk] ⚠️ No active season found for league {league_id}", flush=True)
             continue
+
         print(f"[collect_team_info_bulk] league_id={league_id}, active season={season}", flush=True)
         n = collect_team_info(container, league_id, season)
         total += n
