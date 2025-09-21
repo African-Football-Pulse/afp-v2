@@ -16,15 +16,28 @@ def load_json(container: str, path: str):
         return {}
 
 
+def build_master_lookup(container: str):
+    """Bygg en lookup {player_id: {name, country, club}} från masterfilen"""
+    data = load_json(container, MASTER_PATH)
+    lookup = {}
+    for player in data:
+        pid = str(player.get("id"))
+        lookup[pid] = {
+            "name": player.get("name"),
+            "country": player.get("country"),
+            "club": player.get("club")
+        }
+    return lookup
+
+
 def collect_teams(container: str, season: str):
-    master = load_json(container, MASTER_PATH)
+    master_lookup = build_master_lookup(container)
     history_all = load_json(container, HISTORY_PATH)
 
     teams_by_league = {}
     processed = 0
 
     for pid, pdata in history_all.items():
-        player = master.get(pid, {"id": pid, "name": "Unknown"})
         for entry in pdata.get("history", []):
             if entry["season"] != season:
                 continue
@@ -39,10 +52,14 @@ def collect_teams(container: str, season: str):
             league_teams = teams_by_league[league_id]
 
             league_teams.setdefault(club_id, {"club_name": club_name, "players": []})
+
+            info = master_lookup.get(pid, {"name": "Unknown", "country": None, "club": None})
+
             league_teams[club_id]["players"].append({
                 "id": pid,
-                "name": player.get("name"),
-                "country": player.get("country")
+                "name": info["name"],
+                "country": info["country"],
+                "club": info["club"]
             })
             processed += 1
 
