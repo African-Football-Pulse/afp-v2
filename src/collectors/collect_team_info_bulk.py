@@ -50,9 +50,17 @@ def load_matches(manifest):
 
 
 def fetch_team_info(team_id: int):
-    url = f"{API_BASE}/team/{team_id}"
-    headers = {"Authorization": f"Bearer {AUTH_KEY}"}
-    r = requests.get(url, headers=headers, timeout=30)
+    """Hämta lagdetaljer från SoccerData API med rätt query-parametrar"""
+    url = f"{API_BASE}/team/"
+    params = {
+        "team_id": team_id,
+        "auth_token": AUTH_KEY
+    }
+    headers = {
+        "Accept-Encoding": "gzip",
+        "Content-Type": "application/json"
+    }
+    r = requests.get(url, headers=headers, params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
