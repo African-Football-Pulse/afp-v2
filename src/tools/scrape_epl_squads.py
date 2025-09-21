@@ -39,26 +39,16 @@ HEADERS = {
     )
 }
 
-def normalize(text: str) -> str:
-    return re.sub(r"[^a-z]", "", text.lower())
 
-def find_squad_table(soup):
-    """Hitta tabellen som innehåller truppen baserat på headers."""
-    tables = soup.find_all("table", {"class": "wikitable"})
-    candidate_tables = []
+def find_squad_tables(soup):
+    """Hitta alla tabeller som innehåller spelartrupper."""
+    # Vanlig struktur på Wikipedia: football-squad nogrid (två tabeller per klubb)
+    tables = soup.find_all("table", {"class": re.compile("football-squad nogrid")})
+    if not tables:
+        # Fallback: gamla enklare variant
+        tables = soup.find_all("table", {"class": "wikitable"})
+    return tables
 
-    for t in tables:
-        header_row = t.find("tr")
-        if not header_row:
-            continue
-        headers = [normalize(h.get_text(strip=True)) for h in header_row.find_all(["th", "td"])]
-        if "no" in headers and "player" in headers:
-            candidate_tables.append(t)
-
-    if not candidate_tables:
-        return None
-
-    return max(candidate_tables, key=lambda t: len(t.find_all("tr")))
 
 def scrape_club_squad(club, url):
     print(f"🔎 Scraping {club}...")
@@ -67,22 +57,20 @@ def scrape_club_squad(club, url):
     soup = BeautifulSoup(resp.text, "html.parser")
 
     squads = []
-    table = find_squad_table(soup)
-    if not table:
-        print(f"⚠️ No valid squad table found for {club}")
+    tables = find_squad_tables(soup)
+    if not tables:
+        print(f"⚠️ No valid squad tables found for {club}")
         return squads
 
-    for row in table.find_all("tr")[1:]:
-        cols = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
-        if len(cols) < 4:
-            continue
-
-        # Hantera två spelare per rad (8 kolumner = 2 blocks à 4)
-        for i in range(0, len(cols), 4):
-            block = cols[i:i+4]
-            if len(block) < 4:
+    for table in tables:
+        for row in table.find_all("tr")[1:]:
+            cols = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
+            if len(cols) < 4:
                 continue
-            number, pos, nation, name = block
+            # Ta bara de första 4 kolumnerna (No, Pos, Nation, Player)
+            number, pos, nation, name = cols[:4]
+            if not name:
+                continue
             squads.append({
                 "no": number,
                 "pos": pos,
@@ -92,6 +80,7 @@ def scrape_club_squad(club, url):
 
     print(f"   ➡️ Found {len(squads)} players for {club}")
     return squads
+
 
 def main():
     all_squads = {}
@@ -119,6 +108,7 @@ def main():
         with open(LOCAL_FALLBACK, "w", encoding="utf-8") as f:
             f.write(data)
         print(f"💾 Saved EPL squads locally as fallback: {LOCAL_FALLBACK}")
+
 
 if __name__ == "__main__":
     main()
