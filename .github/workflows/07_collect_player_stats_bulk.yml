@@ -6,6 +6,9 @@ on:
       limit:
         description: 'Optional limit on number of players (for testing)'
         required: false
+      player_id:
+        description: 'Optional single player ID to process'
+        required: false
 
 jobs:
   collect-player-stats-bulk:
@@ -30,7 +33,11 @@ jobs:
           BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
           echo "🔄 Collecting player stats (bulk)..."
-          python -m src.collectors.collect_player_stats_bulk --limit "${{ github.event.inputs.limit }}" | tee collect_stats_bulk_log.txt
+          python -m src.collectors.collect_player_stats_bulk \
+            $([ -n "${{ github.event.inputs.limit }}" ] && echo "--limit ${{ github.event.inputs.limit }}") \
+            $([ -n "${{ github.event.inputs.player_id }}" ] && echo "--player-id ${{ github.event.inputs.player_id }}") \
+            | tee collect_stats_bulk_log.txt
           echo "✅ Done. See summary below:"
           echo "---- SUMMARY (last 20 lines) ----"
           tail -n 20 collect_stats_bulk_log.txt
+
