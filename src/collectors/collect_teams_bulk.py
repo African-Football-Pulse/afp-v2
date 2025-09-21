@@ -2,10 +2,16 @@ import os
 import json
 import argparse
 import requests
+import yaml
 from src.storage import azure_blob
-from src.utils.config_loader import load_leagues
 
 BASE_URL = "https://api.soccerdataapi.com/team/"
+
+
+def load_leagues():
+    with open("config/leagues.yaml", "r") as f:
+        data = yaml.safe_load(f)
+    return data.get("leagues", [])
 
 
 def collect_teams_for_league(container: str, league_id: int, season: str, token: str):
