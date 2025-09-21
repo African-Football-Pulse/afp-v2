@@ -18,7 +18,10 @@ def load_master_players():
         "players/africa/players_africa_master.json"
     )
     print(f"[produce_candidates] Loading master players from blob: {blob_path}")
-    return azure_blob.get_json(CONTAINER, blob_path)
+    data = azure_blob.get_json(CONTAINER, blob_path)
+    if isinstance(data, dict) and "players" in data:
+        return data["players"]
+    raise RuntimeError(f"Masterfilen {blob_path} har oväntat format")
 
 
 def load_curated_news():
@@ -46,17 +49,18 @@ def candidate_from_news(item, master_players):
     player = None
     direct_mention = 0
     for mp in master_players:
-        if mp["name"].lower() in text.lower():
+        name = mp.get("name")
+        club = mp.get("club")
+
+        if name and name.lower() in text.lower():
             player = mp
             direct_mention = 1
             break
 
-    if not player:
-        for mp in master_players:
-            if mp.get("club", "").lower() in src.lower():
-                player = mp
-                direct_mention = 0.4
-                break
+        if not player and club and club.lower() in src.lower():
+            player = mp
+            direct_mention = 0.4
+            break
 
     if not player:
         return None
