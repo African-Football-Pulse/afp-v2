@@ -1,4 +1,4 @@
-name: 08 Build Player Stats Vulk
+name: 08 Build Player Stats Bulk
 
 on:
   workflow_dispatch:
