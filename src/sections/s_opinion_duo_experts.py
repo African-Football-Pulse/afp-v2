@@ -1,250 +1,108 @@
-import os, json, re, time
-from datetime import datetime, UTC
-from pathlib import Path
-import urllib.parse as up
-import requests
-from openai import OpenAI
+# src/sections/s_opinion_duo_experts.py
+import os
+import json
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
-SYSTEM_RULES = """You are scripting a two-expert football podcast segment.
-Goal: a lively, authentic AK ↔ JJK dialogue grounded ONLY in the news input.
-Constraints:
+from src.storage import azure_blob
+from src.sections import gpt
+
+CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
+
+SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
+You must produce a short dialogue between two pundits (~45–60 seconds, 6–8 exchanges).
+Hard constraints:
 - Output MUST be in English.
-- Stay strictly in character for each persona (AK = anchor/journalist; JJK = veteran coach-analyst).
-- No invented facts beyond the NEWS_INPUT.
-- Natural, broadcast-ready speech. No bullet lists. Keep it flowing, with brief pauses (…) used sparingly.
-- AK opens, JJK replies. 2–3 total turns (AK→JJK or AK→JJK→AK). Prefer 2 turns for ~90 seconds total.
-- Length target: ~90 seconds total (≈230–280 words across both speakers).
-- Close with a crisp takeaway from JJK if only 2 turns, or from AK if 3 turns.
-
-Return JSON ONLY with this structure:
-{
-  "dialogue": [
-    {"speaker": "AK",  "text": "<AK line>"},
-    {"speaker": "JJK", "text": "<JJK line>"},
-    {"speaker": "AK",  "text": "<optional AK close>"}
-  ]
-}
+- Stay strictly in character based on the provided persona blocks.
+- Fold in news facts without inventing specifics.
+- No placeholders like [TEAM]; use only info present in the news input.
+- Keep it conversational, natural pacing, a couple of short pauses (…).
+- Each speaker’s line should be 1–3 sentences.
+- End with a crisp, shared takeaway.
 """
 
-USER_TEMPLATE = """PERSONA A (AK):
-{name_ak} — {role_ak}
-Voice: {voice_ak}
-Tone: primary={tone_ak_primary}; secondary={tone_ak_secondary}; micro={tone_ak_micro}
-Style: {style_ak}
-Catchphrases: {catch_ak}
-Traits: {traits_ak}
 
-PERSONA B (JJK):
-{name_jjk} — {role_jjk}
-Voice: {voice_jjk}
-Tone: primary={tone_jjk_primary}; secondary={tone_jjk_secondary}; micro={tone_jjk_micro}
-Style: {style_jjk}
-Catchphrases: {catch_jjk}
-Traits: {traits_jjk}
+def today_str():
+    return datetime.now(timezone.utc).date().isoformat()
 
-NEWS_INPUT:
-{news}
 
-Guidance:
-- AK asks sharp, data-aware questions; frames stakes. Use at most one subtle catchphrase.
-- JJK answers with anecdotes, tactical insight, mild provocation; may use one catchphrase.
-- Aim for 2 turns (AK→JJK). If the topic benefits from a short anchor wrap, add AK close as a 3rd turn.
-- Keep total ≈230–280 words.
-"""
+def _load_json(path: str):
+    if not path:
+        return {}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return azure_blob.get_json(CONTAINER, path)
 
-def _read_text(p: Path) -> str:
-    """
-    Load input text. If JSON, extract headlines/summary fields.
-    If plain text, return as-is.
-    """
-    if p.suffix.lower() == ".json":
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            if isinstance(data, dict) and "items" in data:
-                items = data["items"]
-            else:
-                items = data
-            if isinstance(items, list):
-                texts = []
-                for item in items[:5]:
-                    if isinstance(item, dict):
-                        if "title" in item:
-                            texts.append(item["title"])
-                        elif "summary" in item:
-                            texts.append(item["summary"])
-                return "\n".join(texts)
-        except Exception as e:
-            print(f"[s_opinion_duo_experts] WARN: Failed to parse JSON {p}: {e}")
-            return ""
-    return p.read_text(encoding="utf-8").strip()
 
-def _load_personas(p: Path):
-    data = json.loads(p.read_text(encoding="utf-8"))
-    assert "AK" in data and "JJK" in data, "personas.json must contain AK and JJK"
-    return data
+def _load_news(path: str) -> List[Dict[str, Any]]:
+    try:
+        return _load_json(path)
+    except Exception:
+        return []
 
-def _clamp_words(text: str, max_w=180):
-    words = text.split()
-    if len(words) > max_w:
-        text = " ".join(words[:max_w])
-        text = re.sub(r"[,;:–-]\s*\S*$", ".", text)
-        if not text.endswith((".", "!", "?")):
-            text += "."
-    return text
 
-def _words(s: str) -> int:
-    return len(s.split())
-
-def _approx_duration(words: int) -> int:
-    return max(30, min(120, int(round(words / 2.6))))
-
-# ---- Azure Blob via SAS (no SDK) ----
-def _make_blob_url(container_sas_url: str, blob_path: str) -> str:
-    p = up.urlparse(container_sas_url)
-    base = f"{p.scheme}://{p.netloc}{p.path.rstrip('/')}"
-    return f"{base}/{blob_path.lstrip('/')}?{p.query}"
-
-def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
-                  content_type="application/octet-stream", retries=3, backoff=0.8) -> str:
-    url = _make_blob_url(container_sas_url, blob_path)
-    headers = {"x-ms-blob-type": "BlockBlob", "x-ms-version": "2020-10-02", "Content-Type": content_type}
-    for attempt in range(1, retries+1):
-        r = requests.put(url, headers=headers, data=data, timeout=60)
-        if r.status_code in (201, 202):
-            return url
-        if attempt == retries:
-            raise RuntimeError(f"Blob upload failed ({r.status_code}): {r.text[:500]}")
-        time.sleep(backoff * attempt)
-
-def build_section(
-    *,
+def _build_section(
     section_code: str,
     news_path: str,
     personas_path: str,
+    persona_ids: List[str],
     date: str,
-    league: str = "_",
-    topic: str = "_",
-    layout: str = "alias-first",
-    write_latest: bool = True,
-    dry_run: bool = False,
-    outdir: str = "outputs/sections",
-    model: str = "gpt-4o-mini",
-    type: str = "opinion",
-) -> dict:
-    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    league: str,
+    topic: str,
+) -> Dict[str, Any]:
+    news_items = _load_news(news_path)
+    if not news_items:
+        return {
+            "section_id": section_code,
+            "date": date,
+            "league": league,
+            "status": "no_news",
+            "text": "",
+        }
 
-    personas = _load_personas(Path(personas_path))
-    ak = personas["AK"]
-    jjk = personas["JJK"]
-    news_input = _read_text(Path(news_path))
+    # Välj topp-2 items
+    sorted_items = sorted(news_items, key=lambda x: x.get("score", 0), reverse=True)
+    top_items = sorted_items[:2]
+    players = [i.get("player") or ", ".join(i.get("entities", {}).get("players", [])) for i in top_items]
+    titles = [i.get("title", "") for i in top_items]
 
-    user_prompt = USER_TEMPLATE.format(
-        name_ak=ak["name"], role_ak=ak["role"], voice_ak=ak.get("voice",""),
-        tone_ak_primary=ak.get("tone",{}).get("primary",""),
-        tone_ak_secondary=ak.get("tone",{}).get("secondary",""),
-        tone_ak_micro=ak.get("tone",{}).get("micro",""),
-        style_ak=ak.get("style",""),
-        catch_ak=", ".join(ak.get("catchphrases", [])[:3]),
-        traits_ak=", ".join(ak.get("traits", [])[:6]),
+    # Slå upp personas
+    personas = _load_json(personas_path)
+    duo_blocks = [personas.get(pid.strip()) for pid in persona_ids if pid.strip() in personas]
 
-        name_jjk=jjk["name"], role_jjk=jjk["role"], voice_jjk=jjk.get("voice",""),
-        tone_jjk_primary=jjk.get("tone",{}).get("primary",""),
-        tone_jjk_secondary=jjk.get("tone",{}).get("secondary",""),
-        tone_jjk_micro=jjk.get("tone",{}).get("micro",""),
-        style_jjk=jjk.get("style",""),
-        catch_jjk=", ".join(jjk.get("catchphrases", [])[:3]),
-        traits_jjk=", ".join(jjk.get("traits", [])[:6]),
-
-        news=news_input
+    # GPT prompt
+    prompt = (
+        f"{SYSTEM_RULES}\n\n"
+        f"Personas:\n{json.dumps(duo_blocks, indent=2)}\n\n"
+        f"News facts:\n"
+        + "\n".join([f"- {p}: {t}" for p, t in zip(players, titles)]) +
+        "\n\nNow write the pundit dialogue."
     )
 
-    api_key = os.getenv("AFP_OPENAI_SECRETKEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise SystemExit("Missing API key. Set AFP_OPENAI_SECRETKEY or OPENAI_API_KEY.")
-    client = OpenAI(api_key=api_key)
+    script_text = gpt.run(prompt)
 
-    resp = client.chat.completions.create(
-        model=model, temperature=0.6, response_format={"type": "json_object"},
-        messages=[{"role":"system","content": SYSTEM_RULES},
-                  {"role":"user","content": user_prompt}]
-    )
-    raw = json.loads(resp.choices[0].message.content)
-    dialogue = raw.get("dialogue", [])
-
-    out = []
-    total_words = 0
-    for turn in dialogue[:3]:
-        spk = turn.get("speaker","").strip()
-        txt = _clamp_words(turn.get("text","").strip(), max_w=180)
-        if spk not in ("AK","JJK") or not txt:
-            continue
-        w = _words(txt)
-        total_words += w
-        out.append({"speaker": spk, "text": txt, "words": w, "duration_sec": _approx_duration(w)})
-
-    if len(out) < 2:
-        raise SystemExit("Dialogue too short. Expected at least two turns: AK then JJK.")
-
-    duration_total = sum(t["duration_sec"] for t in out)
-
-    if layout == "alias-first":
-        base = f"sections/{section_code}/{date}/{league}/{topic}"
-    else:
-        base = f"sections/{date}/{league}/{topic}/{section_code}"
-
-    json_rel = f"{base}/section.json"
-    md_rel   = f"{base}/section.md"
-    man_rel  = f"{base}/section_manifest.json"
-
-    data = {
-        "dialogue": [{"speaker": t["speaker"], "text": t["text"]} for t in out],
-        "segments": [{"speaker": t["speaker"], "words": t["words"], "duration_sec": t["duration_sec"]} for t in out],
-        "words_total": total_words,
-        "duration_sec_total": duration_total,
-        "speakers": ["AK","JJK"]
-    }
-    json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
-
-    lines = [f"### Duo Opinion — AK ↔ JJK ({duration_total}s / {total_words} words)", ""]
-    for t in out:
-        lines.append(f"**{t['speaker']}:** {t['text']}")
-        lines.append("")
-    md_bytes = ("\n".join(lines)).encode("utf-8")
-
-    manifest = {
-        "section_code": section_code,
-        "type": type,
-        "model": model,
-        "created_utc": ts,
-        "league": league,
-        "topic": topic,
+    return {
+        "section_id": section_code,
         "date": date,
-        "blobs": { "json": json_rel, "md": md_rel },
-        "metrics": {
-            "words_total": total_words,
-            "duration_sec_total": duration_total,
-            "segments": [{"speaker": t["speaker"], "words": t["words"], "duration_sec": t["duration_sec"]} for t in out]
-        },
-        "sources": { "news_input_path": str(news_path), "personas_path": str(personas_path) }
+        "league": league,
+        "status": "ok",
+        "personas": duo_blocks,
+        "players": players,
+        "topics": titles,
+        "items": top_items,
+        "text": script_text,
     }
-    man_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
 
-    sas = os.getenv("BLOB_CONTAINER_SAS_URL") or os.getenv("AFP_AZURE_SAS_URL")
-    if sas:
-        if dry_run:
-            print("=== DRY RUN ===")
-            print("Would upload JSON →", _make_blob_url(sas, json_rel))
-            print("Would upload MD   →", _make_blob_url(sas, md_rel))
-            print("Would upload MAN  →", _make_blob_url(sas, man_rel))
-        else:
-            _upload_bytes(sas, json_rel, json_bytes, "application/json")
-            _upload_bytes(sas, md_rel, md_bytes, "text/markdown")
-            _upload_bytes(sas, man_rel, man_bytes, "application/json")
-    else:
-        outdirp = Path(outdir) / base
-        outdirp.mkdir(parents=True, exist_ok=True)
-        (outdirp / "section.json").write_text(json_bytes.decode("utf-8"), encoding="utf-8")
-        (outdirp / "section.md").write_text(md_bytes.decode("utf-8"), encoding="utf-8")
-        (outdirp / "section_manifest.json").write_text(man_bytes.decode("utf-8"), encoding="utf-8")
 
-    return manifest
+def build_section(args):
+    persona_ids = getattr(args, "persona_ids", "AK,JJK").split(",")  # default Ama K & Coach JJ
+    return _build_section(
+        section_code=args.section_code,
+        news_path=args.news,
+        personas_path=getattr(args, "personas", "config/personas.json"),
+        persona_ids=persona_ids,
+        date=getattr(args, "date", today_str()),
+        league=getattr(args, "league", "premier_league"),
+        topic=getattr(args, "topic", "_"),
+    )
