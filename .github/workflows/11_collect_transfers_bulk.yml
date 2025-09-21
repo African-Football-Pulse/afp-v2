@@ -2,26 +2,37 @@ name: 11 Collect Transfers Bulk
 
 on:
   workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to collect transfers for (e.g. 2024-2025)"
+        required: true
+        default: "2025-2026"
+      limit:
+        description: "Limit number of teams (for testing)"
+        required: false
+        default: ""
 
 jobs:
-  collect-transfers:
+  collect_transfers_bulk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: "3.11"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run collect_transfers_bulk
+      - name: 🔄 Collecting transfers (bulk)
         run: |
-          python -m src.collectors.collect_transfers_bulk --limit 5
+          python -m src.collectors.collect_transfers_bulk \
+            --season "${{ github.event.inputs.season }}" \
+            ${ if github.event.inputs.limit != '' then format('--limit {0}', github.event.inputs.limit) else '' }
         env:
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
           AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
-          SOCCERDATA_AUTH_TOKEN: ${{ secrets.SOCCERDATA_AUTH_TOKEN }}
+          SOCCERDATA_API_KEY: ${{ secrets.SOCCERDATA_API_KEY }}
