@@ -26,5 +26,5 @@ jobs:
         with:
           name: transfer-proposals
           path: |
-            players_africa_master_draft.json
-            transfers/diff_*.json
+            players/africa/players_africa_master_draft.json
+            players/africa/diff_*.json
