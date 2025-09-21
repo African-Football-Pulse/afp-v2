@@ -41,13 +41,13 @@ HEADERS = {
 
 
 def find_squad_tables(soup):
-    """Hitta alla tabeller som innehåller spelartrupper."""
-    # Vanlig struktur på Wikipedia: football-squad nogrid (två tabeller per klubb)
+    """Hitta tabeller för first-team squad (vänster + höger)."""
     tables = soup.find_all("table", {"class": re.compile("football-squad nogrid")})
-    if not tables:
-        # Fallback: gamla enklare variant
-        tables = soup.find_all("table", {"class": "wikitable"})
-    return tables
+    if tables:
+        # Ta bara de två första (vänster + höger kolumn)
+        return tables[:2]
+    # fallback: enklare variant
+    return soup.find_all("table", {"class": "wikitable"})
 
 
 def scrape_club_squad(club, url):
@@ -67,7 +67,6 @@ def scrape_club_squad(club, url):
             cols = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
             if len(cols) < 4:
                 continue
-            # Ta bara de första 4 kolumnerna (No, Pos, Nation, Player)
             number, pos, nation, name = cols[:4]
             if not name:
                 continue
