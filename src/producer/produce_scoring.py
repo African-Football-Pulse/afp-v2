@@ -1,6 +1,7 @@
 # src/producer/produce_scoring.py
 import os, json
 from datetime import datetime, timezone
+from collections import Counter
 
 from src.storage import azure_blob
 
@@ -44,6 +45,7 @@ def main():
 
     now = datetime.now(timezone.utc)
     scored = []
+
     for c in candidates:
         # recency
         recency_score = 0
@@ -58,14 +60,29 @@ def main():
                 pass
 
         c["recency_score"] = recency_score
-        c["novelty_24h"] = 1   # TODO
+        c["novelty_24h"] = 1   # TODO: riktig dedupe/novelty
         c["language_match"] = 1.0
         c["source"]["authority"] = SOURCE_AUTHORITY.get(c["source"]["name"], 0.5)
 
         c["score"] = compute_score(c)
         scored.append(c)
 
-    print(f"[produce_scoring] Scored {len(scored)} candidates")
+    # statistik
+    if scored:
+        scores = [c["score"] for c in scored]
+        players = [c["player"]["name"] for c in scored if c.get("player")]
+        clubs = [c["player"].get("club") for c in scored if c.get("player")]
+
+        print(
+            f"[produce_scoring] Stats → "
+            f"candidates={len(scored)}, "
+            f"unique_players={len(set(players))}, "
+            f"unique_clubs={len(set(clubs))}"
+        )
+        print(
+            f"[produce_scoring] Score distribution → "
+            f"min={min(scores):.2f}, max={max(scores):.2f}, avg={sum(scores)/len(scores):.2f}"
+        )
 
     text_out = "\n".join(json.dumps(s, ensure_ascii=False) for s in scored)
     azure_blob.put_text(CONTAINER, out_path, text_out, content_type="application/jsonl")
@@ -76,4 +93,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
