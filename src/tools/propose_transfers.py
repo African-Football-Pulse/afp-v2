@@ -5,29 +5,26 @@ from src.storage import azure_blob
 
 MASTER_PATH = "players/africa/players_africa_master.json"
 DRAFT_PATH = "players/africa/players_africa_master_draft.json"
+DIFF_PATH = "players/africa/diff_transfers.json"
 
 def parse_date(date_str):
-    """Convert SoccerData date (dd-mm-yyyy) to ISO string."""
     try:
         d = datetime.strptime(date_str, "%d-%m-%Y")
         return d.date().isoformat()
     except Exception:
         return None
 
-def propose_transfers(season="2024-2025", league_id=228):
+def propose_transfers():
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Läs master från Azure
+    # Läs master
     master = azure_blob.get_json(container, MASTER_PATH)
     players = master.get("players", [])
     master_by_id = {str(p["id"]): p for p in players}
 
-    # Läs manifest för att få team_ids
-    manifest_path = f"meta/{season}/teams_{league_id}.json"
-    manifest = azure_blob.get_json(container, manifest_path)
-
-    # Bygg paths till alla transferfiler
-    team_files = [f"transfers/{season}/team_{team_id}.json" for team_id in manifest.keys()]
+    # Lista alla teamfiler oavsett säsong/ligamapp
+    blobs = azure_blob.list_blobs(container, "transfers/")
+    team_files = [b["name"] for b in blobs if "team_" in b["name"] and b["name"].endswith(".json")]
 
     updates = 0
     changes = []
@@ -49,14 +46,12 @@ def propose_transfers(season="2024-2025", league_id=228):
 
             player = master_by_id[pid]
 
-            # sortera transfers efter datum
             parsed = []
             for t in t_list:
                 d = parse_date(t.get("transfer_date"))
                 if d:
                     parsed.append((d, t))
             parsed.sort(key=lambda x: x[0], reverse=True)
-
             if not parsed:
                 continue
 
@@ -76,18 +71,11 @@ def propose_transfers(season="2024-2025", league_id=228):
                 "transfer_source": "SoccerData"
             }
 
-            diff = {}
-            for k, v in proposed.items():
-                if player.get(k) != v:
-                    diff[k] = {"old": player.get(k), "new": v}
+            diff = {k: {"old": player.get(k), "new": v}
+                    for k, v in proposed.items() if player.get(k) != v}
 
             if diff:
-                changes.append({
-                    "id": pid,
-                    "name": player.get("name"),
-                    "diff": diff
-                })
-
+                changes.append({"id": pid, "name": player.get("name"), "diff": diff})
                 player.update(proposed)
 
                 if "transfer_history" not in player:
@@ -105,18 +93,12 @@ def propose_transfers(season="2024-2025", league_id=228):
 
                 updates += 1
 
-    # spara draft i Azure
+    # Spara draft och diff
     master["players"] = players
     azure_blob.put_text(container, DRAFT_PATH, json.dumps(master, indent=2, ensure_ascii=False))
+    azure_blob.put_text(container, DIFF_PATH, json.dumps(changes, indent=2, ensure_ascii=False))
 
-    # spara diff i Azure
-    if changes:
-        diff_path = f"players/africa/diff_{season}.json"
-        azure_blob.put_text(container, diff_path, json.dumps(changes, indent=2, ensure_ascii=False))
-        print(f"[propose_transfers] {updates} players updated. Draft: {DRAFT_PATH}, Diff: {diff_path}")
-    else:
-        print("[propose_transfers] No updates proposed.")
+    print(f"[propose_transfers] {updates} players updated. Draft: {DRAFT_PATH}, Diff: {DIFF_PATH}")
 
 if __name__ == "__main__":
-    # standardvärden – kan bytas i workflow
-    propose_transfers(season="2024-2025", league_id=228)
+    propose_transfers()
