@@ -3,6 +3,7 @@ import argparse
 import importlib
 import json
 import os
+import yaml
 from src.storage import azure_blob
 
 def build_section(section_code, args, library):
@@ -48,8 +49,8 @@ def main():
 
     args = parser.parse_args()
 
-    library_path = os.getenv("SECTIONS_LIBRARY", "config/sections_library.yaml")
-    import yaml
+    # FIX: rätt sökväg
+    library_path = os.getenv("SECTIONS_LIBRARY", "src/producer/sections_library.yaml")
     with open(library_path, "r", encoding="utf-8") as f:
         library = yaml.safe_load(f)
 
