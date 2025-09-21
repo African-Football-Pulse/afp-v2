@@ -7,10 +7,6 @@ on:
         description: "Season to collect transfers for (e.g. 2024-2025)"
         required: true
         default: "2025-2026"
-      limit:
-        description: "Limit number of teams (for testing)"
-        required: false
-        default: ""
 
 jobs:
   collect_transfers_bulk:
@@ -28,9 +24,7 @@ jobs:
 
       - name: 🔄 Collecting transfers (bulk)
         run: |
-          python -m src.collectors.collect_transfers_bulk \
-            --season "${{ github.event.inputs.season }}" \
-            ${ if github.event.inputs.limit != '' then format('--limit {0}', github.event.inputs.limit) else '' }
+          python -m src.collectors.collect_transfers_bulk --season '${{ github.event.inputs.season }}'
         env:
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
