@@ -5,10 +5,6 @@ import json
 import os
 from src.storage import azure_blob
 
-def load_library(path: str):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f) if path.endswith(".json") else None
-
 def build_section(section_code, args, library):
     entry = library.get(section_code)
     if not entry:
@@ -25,6 +21,12 @@ def build_section(section_code, args, library):
     fn = getattr(mod, runner, None)
     if fn is None:
         raise RuntimeError(f"Modulen {mod_path} saknar funktionen {runner}")
+
+    print(f"[produce_section] Running {section_code} via {mod_path}.{runner}")
+    if args.persona_id:
+        print(f"[produce_section] Persona-ID: {args.persona_id}")
+    if args.persona_ids:
+        print(f"[produce_section] Persona-IDs: {args.persona_ids}")
 
     return fn(args)
 
@@ -58,6 +60,7 @@ def main():
     outpath = os.path.join(outdir, f"{args.section_code}_{args.date}.json")
     with open(outpath, "w", encoding="utf-8") as f:
         json.dump(section_obj, f, ensure_ascii=False, indent=2)
+
     print(f"[produce_section] Wrote {outpath}")
 
 if __name__ == "__main__":
