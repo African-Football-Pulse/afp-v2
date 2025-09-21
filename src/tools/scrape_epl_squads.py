@@ -46,12 +46,19 @@ def scrape_club_squad(club, url):
     soup = BeautifulSoup(resp.text, "html.parser")
 
     squads = []
-    players_header = soup.find(id=re.compile("Players", re.I))
-    if not players_header:
+
+    # Först försök hitta "First-team squad"
+    header = soup.find(id=re.compile("First-team_squad", re.I))
+    if not header:
+        # fallback: "Players"
+        header = soup.find(id=re.compile("Players", re.I))
+    if not header:
+        print(f"⚠️ No squad header found for {club}")
         return squads
 
-    table = players_header.find_next("table", {"class": "wikitable"})
+    table = header.find_next("table", {"class": "wikitable"})
     if not table:
+        print(f"⚠️ No squad table found for {club}")
         return squads
 
     for row in table.find_all("tr")[1:]:
