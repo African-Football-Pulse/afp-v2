@@ -2,12 +2,19 @@
 import os
 import json
 import requests
+import yaml
 from src.storage import azure_blob
-from src.utils.config_loader import load_leagues
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 API_URL = "https://api.soccerdataapi.com/transfers/"
 AUTH_KEY = os.getenv("SOCCERDATA_AUTH_KEY")
+
+CONFIG_PATH = "config/leagues.yaml"
+
+def load_leagues():
+    with open(CONFIG_PATH, "r") as f:
+        data = yaml.safe_load(f)
+    return data.get("leagues", [])
 
 def fetch_transfers_for_team(team_id):
     params = {"team_id": team_id, "auth_token": AUTH_KEY}
