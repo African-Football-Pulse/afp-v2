@@ -1,8 +1,10 @@
+import os
 import json
 from datetime import datetime
-from pathlib import Path
+from src.storage import azure_blob
 
 MASTER_PATH = "players/africa/players_africa_master.json"
+DRAFT_PATH = "players/africa/players_africa_master_draft.json"
 TRANSFERS_DIR = "transfers"
 
 def parse_date(date_str):
@@ -13,44 +15,42 @@ def parse_date(date_str):
     except Exception:
         return None
 
-def load_json(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_json(path, data):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-def get_latest_season():
+def get_latest_season(container):
     """Hitta senaste säsongskatalogen i transfers/ baserat på namn YYYY-YYYY."""
-    base_dir = Path(TRANSFERS_DIR)
-    seasons = [p for p in base_dir.iterdir() if p.is_dir()]
+    blobs = azure_blob.list_blobs(container, TRANSFERS_DIR)
+    # plocka ut första nivån under transfers/
+    seasons = set()
+    for b in blobs:
+        rel = b["name"].replace(TRANSFERS_DIR + "/", "")
+        parts = rel.split("/")
+        if len(parts) > 1 and parts[0]:
+            seasons.add(parts[0])
     if not seasons:
         raise FileNotFoundError("No season directories found in transfers/")
-    seasons_sorted = sorted(seasons, key=lambda p: int(p.name.split("-")[0]))
+    seasons_sorted = sorted(seasons, key=lambda s: int(s.split("-")[0]))
     return seasons_sorted[-1]
 
 def propose_transfers():
+    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
+
     # Läs master
-    if not Path(MASTER_PATH).exists():
-        raise FileNotFoundError(f"Master file not found: {MASTER_PATH}")
-    master = load_json(MASTER_PATH)
+    master = azure_blob.get_json(container, MASTER_PATH)
     players = master.get("players", [])
     master_by_id = {str(p["id"]): p for p in players}
 
     # Hitta senaste säsong
-    season_dir = get_latest_season()
-    season_name = season_dir.name
+    season_name = get_latest_season(container)
     print(f"[propose_transfers] Using season {season_name}")
 
-    team_files = list(season_dir.glob("*.json"))
+    # Läs alla teamfiler
+    blobs = azure_blob.list_blobs(container, f"{TRANSFERS_DIR}/{season_name}")
+    team_files = [b["name"] for b in blobs if b["name"].endswith(".json")]
 
     updates = 0
     changes = []
 
-    for team_file in team_files:
-        team_data = load_json(team_file)
+    for team_path in team_files:
+        team_data = azure_blob.get_json(container, team_path)
         transfers_out = team_data.get("transfers", {}).get("transfers_out", [])
 
         # Grupp per player_id
@@ -123,16 +123,15 @@ def propose_transfers():
 
                 updates += 1
 
-    # Spara draft
-    draft_path = "players/africa/players_africa_master_draft.json"
+    # Spara draft i Azure
     master["players"] = players
-    save_json(draft_path, master)
+    azure_blob.put_text(container, DRAFT_PATH, json.dumps(master, indent=2, ensure_ascii=False))
 
-    # Spara diff
+    # Spara diff i Azure
     if changes:
         diff_path = f"players/africa/diff_{season_name}.json"
-        save_json(diff_path, changes)
-        print(f"[propose_transfers] {updates} players updated. Draft: {draft_path}, Diff: {diff_path}")
+        azure_blob.put_text(container, diff_path, json.dumps(changes, indent=2, ensure_ascii=False))
+        print(f"[propose_transfers] {updates} players updated. Draft: {DRAFT_PATH}, Diff: {diff_path}")
     else:
         print("[propose_transfers] No updates proposed.")
 
