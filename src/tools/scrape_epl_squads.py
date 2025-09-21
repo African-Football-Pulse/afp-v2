@@ -65,6 +65,7 @@ def scrape_club_squad(club, url):
             "name": name
         })
 
+    print(f"   ➡️ Found {len(squads)} players for {club}")
     return squads
 
 def main():
@@ -84,7 +85,6 @@ def main():
         print(f"✅ Saved EPL squads to Azure: {AZURE_PATH}")
     except Exception as e:
         print(f"⚠️ Azure upload failed: {e}")
-        # fallback: save locally (so workflow can upload as artifact)
         with open(LOCAL_FALLBACK, "w", encoding="utf-8") as f:
             f.write(data)
         print(f"💾 Saved EPL squads locally as fallback: {LOCAL_FALLBACK}")
