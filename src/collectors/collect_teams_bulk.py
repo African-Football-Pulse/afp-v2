@@ -1,50 +1,51 @@
 import os
 import argparse
 from src.storage import azure_blob
+import json
 
 CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER") or "afp"
+HISTORY_PATH = "players/africa/players_africa_history.json"
 MASTER_PATH = "players/africa/players_africa_master.json"
+
 
 def load_json(container: str, path: str):
     try:
         return azure_blob.get_json(container, path)
-    except Exception:
-        return None
+    except Exception as e:
+        print(f"[collect_teams_bulk] ⚠️ Could not load {path}: {e}", flush=True)
+        return {}
+
 
 def collect_teams(container: str, season: str):
     master = load_json(container, MASTER_PATH)
-    if not master:
-        print(f"[collect_teams_bulk] ⚠️ Could not load master file", flush=True)
-        return 0
+    history_all = load_json(container, HISTORY_PATH)
 
     teams_by_league = {}
     processed = 0
 
-    for pid, pdata in master.items():
-        stats_path = f"stats/players/{pid}/{season}.json"
-        stats = load_json(container, stats_path)
-        if not stats:
-            continue
+    for pid, pdata in history_all.items():
+        player = master.get(pid, {"id": pid, "name": "Unknown"})
+        for entry in pdata.get("history", []):
+            if entry["season"] != season:
+                continue
 
-        league_id = stats.get("league_id")
-        team_id = stats.get("team_id")
-        team_name = stats.get("team_name")
+            league_id = entry["league_id"]
+            club_id = entry.get("club_id")
+            club_name = entry.get("club_name")
+            if not club_id:
+                continue
 
-        if not league_id or not team_id:
-            continue
+            teams_by_league.setdefault(league_id, {})
+            league_teams = teams_by_league[league_id]
 
-        teams_by_league.setdefault(league_id, {})
-        league_teams = teams_by_league[league_id]
+            league_teams.setdefault(club_id, {"club_name": club_name, "players": []})
+            league_teams[club_id]["players"].append({
+                "id": pid,
+                "name": player.get("name"),
+                "country": player.get("country")
+            })
+            processed += 1
 
-        league_teams.setdefault(team_id, {"team_name": team_name, "players": []})
-        league_teams[team_id]["players"].append({
-            "id": pid,
-            "name": pdata.get("name"),
-            "country": pdata.get("country")
-        })
-        processed += 1
-
-    # Ladda upp en fil per liga
     total_teams = 0
     for league_id, teams in teams_by_league.items():
         out_path = f"meta/{season}/teams_{league_id}.json"
@@ -52,8 +53,9 @@ def collect_teams(container: str, season: str):
         print(f"[collect_teams_bulk] Uploaded → {out_path} ({len(teams)} teams)", flush=True)
         total_teams += len(teams)
 
-    print(f"[collect_teams_bulk] Processed players with stats: {processed}", flush=True)
+    print(f"[collect_teams_bulk] Processed players with history: {processed}", flush=True)
     return total_teams
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -63,6 +65,7 @@ def main():
     print(f"[collect_teams_bulk] Starting team grouping for season {args.season}", flush=True)
     total = collect_teams(CONTAINER, args.season)
     print(f"[collect_teams_bulk] DONE. Total teams with African players this season: {total}", flush=True)
+
 
 if __name__ == "__main__":
     main()
