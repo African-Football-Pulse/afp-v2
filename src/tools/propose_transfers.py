@@ -17,15 +17,17 @@ def parse_date(date_str):
 def propose_transfers(season="2024-2025", league_id=228):
     container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Läs master
+    # Läs master från Azure
     master = azure_blob.get_json(container, MASTER_PATH)
     players = master.get("players", [])
     master_by_id = {str(p["id"]): p for p in players}
 
-    # Läs manifest
+    # Läs manifest för att få team_ids
     manifest_path = f"meta/{season}/teams_{league_id}.json"
     manifest = azure_blob.get_json(container, manifest_path)
-    team_files = [t["path"] for t in manifest["teams"]]
+
+    # Bygg paths till alla transferfiler
+    team_files = [f"transfers/{season}/team_{team_id}.json" for team_id in manifest.keys()]
 
     updates = 0
     changes = []
@@ -103,11 +105,11 @@ def propose_transfers(season="2024-2025", league_id=228):
 
                 updates += 1
 
-    # spara draft
+    # spara draft i Azure
     master["players"] = players
     azure_blob.put_text(container, DRAFT_PATH, json.dumps(master, indent=2, ensure_ascii=False))
 
-    # spara diff
+    # spara diff i Azure
     if changes:
         diff_path = f"players/africa/diff_{season}.json"
         azure_blob.put_text(container, diff_path, json.dumps(changes, indent=2, ensure_ascii=False))
@@ -116,5 +118,5 @@ def propose_transfers(season="2024-2025", league_id=228):
         print("[propose_transfers] No updates proposed.")
 
 if __name__ == "__main__":
-    # Hårdkodat standard just nu
+    # standardvärden – kan bytas i workflow
     propose_transfers(season="2024-2025", league_id=228)
