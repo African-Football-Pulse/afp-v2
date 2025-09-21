@@ -1,4 +1,4 @@
-name: 11 Collect Teams Current Bulk
+name: 12 Collect Teams Current Bulk
 
 on:
   workflow_dispatch:    # manuell start
