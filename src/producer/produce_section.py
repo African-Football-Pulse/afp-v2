@@ -1,68 +1,62 @@
-# src/producer/produce_section.py
 import argparse
 import importlib
-import json
-import os
 import yaml
-from src.storage import azure_blob
+import json
+import sys
+from pathlib import Path
 
-def build_section(section_code, args, library):
-    entry = library.get(section_code)
-    if not entry:
-        raise RuntimeError(f"Sektionskod {section_code} saknas i library")
+def build_section(section_name, args, library):
+    if "sections" not in library or section_name not in library["sections"]:
+        raise RuntimeError(f"Section {section_name} not found in library")
 
-    mod_path = entry.get("module")
-    runner = entry.get("runner", "build_section")
+    cfg = library["sections"][section_name]
+    mod_name = cfg["module"]
+    runner = cfg.get("runner", "build_section")
 
+    mod_path = f"src.sections.{mod_name}"
     try:
         mod = importlib.import_module(mod_path)
     except Exception as e:
-        raise RuntimeError(f"Kunde inte importera modul {mod_path}: {e}")
+        raise RuntimeError(f"Failed to import module {mod_path}: {e}")
 
     fn = getattr(mod, runner, None)
     if fn is None:
-        raise RuntimeError(f"Modulen {mod_path} saknar funktionen {runner}")
-
-    print(f"[produce_section] Running {section_code} via {mod_path}.{runner}")
-    if args.persona_id:
-        print(f"[produce_section] Persona-ID: {args.persona_id}")
-    if args.persona_ids:
-        print(f"[produce_section] Persona-IDs: {args.persona_ids}")
+        raise RuntimeError(f"Module {mod_path} missing function {runner}")
 
     return fn(args)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--section-code", required=True)
-    parser.add_argument("--date", required=True)
-    parser.add_argument("--path-scope", default="blob")
+    parser.add_argument("--section", required=True, help="Section name (e.g. NEWS.TOP3)")
+    parser.add_argument("--date", required=True, help="Date for the section")
+    parser.add_argument("--path-scope", default="local")
     parser.add_argument("--league", default="premier_league")
     parser.add_argument("--outdir", default="sections")
     parser.add_argument("--write-latest", action="store_true")
     parser.add_argument("--news", nargs="*")
+    parser.add_argument("--personas")
+    parser.add_argument("--persona-id")
+    parser.add_argument("--persona-ids")
     parser.add_argument("--dry-run", action="store_true")
-
-    # Nya argument för opinion-sektioner
-    parser.add_argument("--personas", default="config/personas.json")
-    parser.add_argument("--persona-id", default=None)
-    parser.add_argument("--persona-ids", default=None)
-
     args = parser.parse_args()
 
-    # FIX: rätt sökväg
-    library_path = os.getenv("SECTIONS_LIBRARY", "src/producer/sections_library.yaml")
+    library_path = "config/sections_library.yaml"
     with open(library_path, "r", encoding="utf-8") as f:
         library = yaml.safe_load(f)
 
-    section_obj = build_section(args.section_code, args, library)
+    section_obj = build_section(args.section, args, library)
 
-    outdir = args.outdir
-    os.makedirs(outdir, exist_ok=True)
-    outpath = os.path.join(outdir, f"{args.section_code}_{args.date}.json")
-    with open(outpath, "w", encoding="utf-8") as f:
-        json.dump(section_obj, f, ensure_ascii=False, indent=2)
+    # Output path
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    outfile = outdir / f"{args.section}_{args.date}.json"
 
-    print(f"[produce_section] Wrote {outpath}")
+    if not args.dry_run:
+        with open(outfile, "w", encoding="utf-8") as f:
+            json.dump(section_obj, f, ensure_ascii=False, indent=2)
+        print(f"[produce_section] Wrote {outfile}")
+    else:
+        print(json.dumps(section_obj, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
     main()
