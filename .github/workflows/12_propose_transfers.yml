@@ -2,7 +2,7 @@ name: 12 Propose Transfers
 
 on:
   workflow_dispatch:
-  
+
 jobs:
   propose-transfers:
     runs-on: ubuntu-latest
@@ -25,7 +25,7 @@ jobs:
           AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
           BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
-          echo "🔄 Proposing transfers for season ${{ github.event.inputs.season }}..."
+          echo "🔄 Proposing transfers across all leagues/seasons..."
           python -m src.tools.propose_transfers | tee propose_transfers_log.txt
           echo "✅ Done. See summary below:"
           echo "---- SUMMARY (last 20 lines) ----"
