@@ -17,12 +17,15 @@ def load_leagues():
 def get_active_season(container: str, league_id: int) -> str | None:
     """Läs meta/seasons_{league_id}.json och returnera year för aktiv säsong."""
     try:
-        seasons = azure_blob.get_json(container, f"meta/seasons_{league_id}.json")
+        data = azure_blob.get_json(container, f"meta/seasons_{league_id}.json")
     except Exception:
         return None
-    for s in seasons:
-        if s.get("is_active"):
-            return s.get("year")
+
+    results = data.get("results", [])
+    for entry in results:
+        season = entry.get("season", {})
+        if season.get("is_active"):
+            return season.get("year")
     return None
 
 
@@ -108,6 +111,7 @@ def main():
         if not season:
             print(f"[collect_team_info_bulk] ⚠️ No active season found for league {league_id}", flush=True)
             continue
+        print(f"[collect_team_info_bulk] league_id={league_id}, active season={season}", flush=True)
         n = collect_team_info(container, league_id, season)
         total += n
 
