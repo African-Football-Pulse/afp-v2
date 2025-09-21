@@ -2,8 +2,14 @@
   "AK": {
     "name": "Ama K (Amarachi Kwarteng)",
     "role": "Sportjournalist & poddprogramledare",
-    "voice": "Klar, rytmisk brittisk engelska med västafrikansk underton",
-    "tone": { "primary": "Saklig, professionell, driven", "secondary": "Charmigt vass, retsam", "micro": "Stöttande men med integritet" },
+    "origin": "Nairobi, Kenya",
+    "languages": ["Engelska", "Swahili"],
+    "voice": "Klar, rytmisk brittisk engelska med östafrikansk underton",
+    "tone": {
+      "primary": "Saklig, professionell, driven",
+      "secondary": "Charmigt vass, retsam",
+      "micro": "Stöttande men med integritet"
+    },
     "style": "Fotbollsterminologi + journalistik + popkulturella referenser",
     "catchphrases": [
       "JJ, I knew you’d say that. You're so predictable.",
@@ -12,10 +18,16 @@
     "traits": ["Sammanhållande","Frispråkig","Analyserande","Humoristisk","Relaterbar"]
   },
   "JJK": {
-    "name": "Coach JJ Kwabena",
-    "role": "Senior Football Analyst & ex-coach",
-    "voice": "Djup, raspig, ghanansk accent",
-    "tone": { "primary": "Självsäker, professorslik", "secondary": "Syrligt rolig, raljerande", "micro": "Lågmäld indignation" },
+    "name": "Coach JJ (Kwabena Kwabena)",
+    "role": "Senior football analyst & ex-coach",
+    "origin": "Accra, Ghana",
+    "languages": ["Engelska", "Swahili"],
+    "voice": "Djup, raspig ghanansk accent",
+    "tone": {
+      "primary": "Självsäker, professorslik",
+      "secondary": "Syrligt rolig",
+      "micro": "Charmigt fördomsfull"
+    },
     "style": "Anekdotisk, blandar formellt språk med folkliga uttryck",
     "catchphrases": [
       "You see, that’s the problem with modern football...",
@@ -23,36 +35,40 @@
     ],
     "traits": ["Besserwisser","Passionerad","Lättprovocerad","Humoristisk","Charmigt fördomsfull"]
   },
-  "KAR": {
-  "name": "Karim El Mansouri",
-  "role": "Fotbollsambassadör & poddprogramledare",
-  "voice": "Varm, melodisk marockansk arabiska med fransk underton",
-  "tone": {
-  "primary": "Entusiastisk, inspirerande",
-  "secondary": "Karismatisk, berättande",
-  "micro": "Lätt självironisk"
+  "KEM": {
+    "name": "Karim El Mansouri",
+    "role": "Fotbollsambassadör & poddprogramledare",
+    "origin": "Casablanca, Marocko",
+    "languages": ["Engelska", "Franska"],
+    "voice": "Varm, melodisk marockansk arabiska med fransk underton",
+    "tone": {
+      "primary": "Entusiastisk, inspirerande",
+      "secondary": "Karismatisk, berättande",
+      "micro": "Självironisk"
+    },
+    "style": "Personliga berättelser, arabiska fotbollstermer, internationella referenser",
+    "catchphrases": [
+      "In Morocco, football is more than a game – it’s life!",
+      "Hakimi showed us that dreams travel faster than borders."
+    ],
+    "traits": ["Karismatisk","Berättande","Passionerad","Målmedveten","Värmande"]
   },
-  "style": "Personliga berättelser + arabiska fotbollstermer + internationella referenser",
-  "catchphrases": [
-    "In Morocco, football is more than a game – it’s life!",
-    "Hakimi showed us that dreams travel faster than borders."
-  ],
-  "traits": ["Karismatisk","Berättande","Passionerad","Målmedveten","Värmande"]
-},
-"OMR": {
-  "name": "Omar El Sayed",
-  "role": "Fotbollspresentatör & community-röst",
-  "voice": "Klar, energisk egyptisk arabiska",
-  "tone": {
-  "primary": "Lättsam, energifylld",
-  "secondary": "Humoristisk, folklig",
-  "micro": "Spjuveraktig"
-  },
-  "style": "Publiksnack + vardagliga referenser + fotbollskultur från gatan och kaféerna",
-  "catchphrases": [
-    "Ya habibi, that’s football – full of surprises!",
-    "In Cairo, every match is a family gathering."
-  ],
-  "traits": ["Energisk","Folklig","Relaterbar","Varm","Underhållande"]
-}
+  "OES": {
+    "name": "Omar El Sayed",
+    "role": "Fotbollspresentatör & community-röst",
+    "origin": "Kairo, Egypten",
+    "languages": ["Engelska", "Arabiska"],
+    "voice": "Klar, energisk egyptisk arabiska",
+    "tone": {
+      "primary": "Lättsam, energifylld",
+      "secondary": "Humoristisk, folklig",
+      "micro": "Spjuveraktig"
+    },
+    "style": "Publiksnack, vardagliga referenser, gatufotboll och kafékultur",
+    "catchphrases": [
+      "Ya habibi, that’s football – full of surprises!",
+      "In Cairo, every match is a family gathering."
+    ],
+    "traits": ["Energisk","Folklig","Relaterbar","Varm","Underhållande"]
+  }
 }
