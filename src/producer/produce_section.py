@@ -5,6 +5,7 @@ import argparse
 import importlib
 import traceback
 import json
+import inspect
 from pathlib import Path
 
 import yaml
@@ -42,7 +43,13 @@ def build_section(section_code: str, args: argparse.Namespace, library: dict):
         raise RuntimeError(f"Modulen {mod_path} saknar funktionen {runner}")
 
     fn = getattr(mod, runner)
-    return fn(args)
+
+    # Flexibelt: stöd för både 0 och 1 argument
+    sig = inspect.signature(fn)
+    if len(sig.parameters) == 0:
+        return fn()
+    else:
+        return fn(args)
 
 
 def main():
