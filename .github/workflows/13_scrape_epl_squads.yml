@@ -1,0 +1,38 @@
+name: 13 Scrape EPL Squads
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scrape-epl-squads:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scrape_epl_squads
+        env:
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Scraping EPL squads from Wikipedia..."
+          python -m src.tools.scrape_epl_squads | tee scrape_epl_squads_log.txt
+          echo "✅ Done. See summary below:"
+          tail -n 20 scrape_epl_squads_log.txt
+
+      - name: Upload fallback artifact if present
+        uses: actions/upload-artifact@v3
+        with:
+          name: epl_squads_fallback
+          path: epl_squads.json
+          if-no-files-found: ignore
