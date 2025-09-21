@@ -1,8 +1,8 @@
 import os
 import argparse
 import json
-from src.storage import azure_blob
 import yaml
+from src.storage import azure_blob
 
 CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER") or "afp"
 MASTER_PATH = "players/africa/players_africa_master.json"
@@ -58,7 +58,7 @@ def load_matches(container: str, season: str, league: dict):
 
 def collect_player_history(container: str, season: str, master_ids: set, master: dict):
     leagues = load_leagues()
-    players_history = {}
+    total_players = 0
 
     for league in leagues:
         league_id = league["id"]
@@ -66,7 +66,10 @@ def collect_player_history(container: str, season: str, master_ids: set, master:
         if not matches:
             continue
 
+        players_history = {}
+
         for m in matches:
+            # home/away team
             for side in ["home_team", "away_team"]:
                 team = m.get(side) or m.get("teams", {}).get("home" if side == "home_team" else "away", {})
                 team_id = team.get("id")
@@ -84,16 +87,15 @@ def collect_player_history(container: str, season: str, master_ids: set, master:
                     }
 
                     players_history.setdefault(pid, {"history": []})
-                    # undvik duplicat (samma säsong/lag flera gånger)
                     if entry not in players_history[pid]["history"]:
                         players_history[pid]["history"].append(entry)
 
-    # ladda upp en fil per liga
-    out_path = f"meta/{season}/player_history_{league_id}.json"
-    azure_blob.upload_json(container, out_path, players_history)
-    print(f"[player_history_bulk] Uploaded → {out_path} ({len(players_history)} players)", flush=True)
+        out_path = f"meta/{season}/player_history_{league_id}.json"
+        azure_blob.upload_json(container, out_path, players_history)
+        print(f"[player_history_bulk] Uploaded → {out_path} ({len(players_history)} players)", flush=True)
+        total_players += len(players_history)
 
-    return players_history
+    return total_players
 
 
 def main():
@@ -107,9 +109,9 @@ def main():
 
     print(f"[player_history_bulk] Starting player history collection for season {season}", flush=True)
 
-    history = collect_player_history(container, season, master_ids, master)
+    total = collect_player_history(container, season, master_ids, master)
 
-    print(f"[player_history_bulk] DONE. Total players with history this season: {len(history)}", flush=True)
+    print(f"[player_history_bulk] DONE. Total players with history this season: {total}", flush=True)
 
 
 if __name__ == "__main__":
