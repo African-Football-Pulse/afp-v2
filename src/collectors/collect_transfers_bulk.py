@@ -1,13 +1,23 @@
 import os
 import argparse
 import requests
+import yaml
 from src.storage import azure_blob
-from src.utils.league_loader import load_leagues
-from src.utils.season_loader import get_active_season
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 API_URL = "https://api.soccerdataapi.com/transfers/"
 AUTH_TOKEN = os.getenv("SOCCERDATA_AUTH_TOKEN")
+
+def load_leagues_from_config():
+    """Load leagues from config/leagues.yaml"""
+    path = "config/leagues.yaml"
+    try:
+        with open(path, "r") as f:
+            cfg = yaml.safe_load(f)
+        return [lid for lid, active in cfg.get("leagues", {}).items() if active]
+    except Exception as e:
+        print(f"[collect_transfers_bulk] ⚠️ Could not load leagues from {path}: {e}")
+        return []
 
 def fetch_transfers(team_id):
     params = {"team_id": team_id, "auth_token": AUTH_TOKEN}
@@ -39,7 +49,6 @@ def collect_transfers(container, league_id, season):
         except Exception as e:
             print(f"[collect_transfers_bulk] ⚠️ Could not fetch transfers for team {team_id}: {e}")
 
-    # manifest för ligan
     manifest_out = {
         "league_id": league_id,
         "season": season,
@@ -52,21 +61,17 @@ def collect_transfers(container, league_id, season):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--season", required=True, help="Season, e.g. 2025-2026")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of teams to process")
     args = parser.parse_args()
 
-    leagues = load_leagues()
+    leagues = load_leagues_from_config()
     total = 0
 
     for league_id in leagues:
-        season = get_active_season(CONTAINER, league_id)
-        if not season:
-            print(f"[collect_transfers_bulk] ⚠️ No active season for league {league_id}")
-            continue
-
-        print(f"[collect_transfers_bulk] league_id={league_id}, active season={season}")
-        exported = collect_transfers(CONTAINER, league_id, season)
-        print(f"[collect_transfers_bulk] Exported {exported} teams for league {league_id}, season {season}")
+        print(f"[collect_transfers_bulk] league_id={league_id}, season={args.season}")
+        exported = collect_transfers(CONTAINER, league_id, args.season)
+        print(f"[collect_transfers_bulk] Exported {exported} teams for league {league_id}, season {args.season}")
         total += exported
 
         if args.limit and total >= args.limit:
