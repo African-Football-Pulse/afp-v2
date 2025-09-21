@@ -2,6 +2,7 @@ defaults:
   date: "{{today}}"
   league: premier_league
   write_latest: true
+  personas: config/personas.json   # gemensam default
 
 tasks:
   - section_code: S.NEWS.TOP3
@@ -23,3 +24,45 @@ tasks:
       - --write-latest
       - --news
       - producer/candidates/{{today}}/scored.jsonl
+
+  - section_code: S.OPINION.EXPERT_COMMENT
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - producer/candidates/{{today}}/scored.jsonl
+      - --personas
+      - config/personas.json
+      - --persona-id
+      - AK         # Ama K solo (English)
+
+  - section_code: S.OPINION.DUO_EXPERTS
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - producer/candidates/{{today}}/scored.jsonl
+      - --personas
+      - config/personas.json
+      - --persona-ids
+      - AK,JJK     # Ama K + Coach JJ (English)
+
+  - section_code: S.OPINION.DUO_EXPERTS
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - producer/candidates/{{today}}/scored.jsonl
+      - --personas
+      - config/personas.json
+      - --persona-ids
+      - OM,KR      # Omar + Karim (English)
