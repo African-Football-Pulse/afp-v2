@@ -77,7 +77,7 @@ def _build_section(
         f"Personas:\n{json.dumps(duo_blocks, indent=2)}\n\n"
         f"News facts:\n"
         + "\n".join([f"- {p}: {t}" for p, t in zip(players, titles)]) +
-        "\n\nNow write the pundit dialogue."
+        "\n\nGenerate the dialogue in English."
     )
 
     script_text = gpt.run(prompt)
