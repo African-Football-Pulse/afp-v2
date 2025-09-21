@@ -1,4 +1,4 @@
-# config/produce_plan.yaml
+
 defaults:
   date: "{{today}}"
   league: premier_league
