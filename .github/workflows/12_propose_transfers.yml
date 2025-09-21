@@ -2,11 +2,7 @@ name: 12 Propose Transfers
 
 on:
   workflow_dispatch:
-    inputs:
-      season:
-        description: 'Season, e.g. 2024-2025'
-        required: true
-
+  
 jobs:
   propose-transfers:
     runs-on: ubuntu-latest
