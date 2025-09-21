@@ -1,5 +1,4 @@
 import os
-import json
 import argparse
 import requests
 import yaml
@@ -12,6 +11,19 @@ def load_leagues():
     with open("config/leagues.yaml", "r") as f:
         data = yaml.safe_load(f)
     return data.get("leagues", [])
+
+
+def extract_matches(manifest):
+    """Normalize manifest format for league or cup"""
+    if isinstance(manifest, dict):
+        return manifest.get("matches", [])
+    elif isinstance(manifest, list):
+        matches = []
+        for stage in manifest:
+            if "stage" in stage and "matches" in stage["stage"]:
+                matches.extend(stage["stage"]["matches"])
+        return matches
+    return []
 
 
 def collect_teams_for_league(container: str, league_id: int, season: str, token: str):
@@ -27,7 +39,7 @@ def collect_teams_for_league(container: str, league_id: int, season: str, token:
 
     # Extrahera unika team_id
     team_ids = set()
-    matches = match_manifest.get("matches", [])
+    matches = extract_matches(match_manifest)
     for m in matches:
         if "home_team" in m and "id" in m["home_team"]:
             team_ids.add(m["home_team"]["id"])
