@@ -1,66 +1,63 @@
 # src/sections/s_news_club_highlight.py
 from datetime import datetime, timezone
 from collections import Counter
-from typing import Any, Dict, List
-import os
+import os, json
 
-from src.sections.utils import write_outputs, load_news_items
+from src.sections.utils import write_outputs, load_candidates
 from src.gpt import run_gpt
+from src.storage import azure_blob
 
 CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
-
 
 def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
-
-def load_all_items(league: str, day: str) -> List[Dict[str, Any]]:
-    """Hämta alla nyhetsitems för en liga/dag från curated/news/"""
-    feeds = [
-        "guardian_football",
-        "bbc_football",
-        "sky_sports_premier_league",
-        "independent_football",
-        "football_london_all",
-    ]
-    items: List[Dict[str, Any]] = []
-    for feed in feeds:
-        feed_items = load_news_items(feed, league, day)
-        items.extend(feed_items)
-    return items
-
-
-def pick_best_club(items: List[Dict[str, Any]]):
-    """Räkna klubbomnämnanden och välj den med flest träffar."""
+def pick_best_club(candidates, exclude_club=None):
+    """Räkna klubbomnämnanden och välj den mest omnämnda (ej exclude_club)."""
     counts = Counter()
     clubs = {}
-    for it in items:
-        for club in it.get("entities", {}).get("clubs", []):
-            counts[club] += 1
-            clubs.setdefault(club, []).append(it)
+    for c in candidates:
+        club = c.get("player", {}).get("club")
+        if not club:
+            continue
+        counts[club] += 1
+        clubs.setdefault(club, []).append(c)
     if not counts:
         return None, []
-    best = counts.most_common(1)[0][0]
-    return best, clubs[best]
-
+    for club, _ in counts.most_common():
+        if club != exclude_club:
+            return club, clubs[club]
+    return None, []
 
 def estimate_length(text: str, target: int) -> int:
-    """Enkel approx av längd i sekunder."""
     return min(max(int(len(text.split()) / 2.6), target - 10), target + 10)
 
+def load_last_club(day: str):
+    """Hämta senast spotlightade klubb från Azure."""
+    path = "sections/state/last_club.json"
+    try:
+        data = azure_blob.get_json(CONTAINER, path)
+        if data and data.get("date") != day:
+            return data.get("club")
+    except Exception:
+        pass
+    return None
+
+def save_last_club(day: str, club: str):
+    """Spara spotlight-klubb för att undvika repetition."""
+    path = "sections/state/last_club.json"
+    azure_blob.upload_json(CONTAINER, path, {"date": day, "club": club})
 
 def build_section(args=None):
-    """Bygg en GPT-driven klubbhighlight-sektion."""
+    """Bygg en GPT-driven klubbhighlight baserat på scored candidates."""
     league = getattr(args, "league", "premier_league")
     day = getattr(args, "date", today_str())
     lang = getattr(args, "lang", "en")
     section_id = getattr(args, "section_code", "S.NEWS.CLUB_HIGHLIGHT")
     target = int(getattr(args, "target_length_s", 50))
 
-    items = load_all_items(league, day)
-    club, picked = pick_best_club(items)
-
-    if not club:
+    candidates, blob_path = load_candidates(day, args.news[0] if hasattr(args, "news") and args.news else None)
+    if not candidates:
         payload = {
             "slug": "club_highlight",
             "title": "Club Spotlight",
@@ -72,19 +69,37 @@ def build_section(args=None):
             "model": "gpt-4o-mini",
             "items": [],
         }
+        return write_outputs(section_id, day, league, payload, status="no_candidates", lang=lang)
+
+    last_club = load_last_club(day)
+    club, picked = pick_best_club(candidates, exclude_club=last_club)
+
+    if not club:
+        text = "No club highlights available."
+        payload = {
+            "slug": "club_highlight",
+            "title": "Club Spotlight",
+            "text": text,
+            "length_s": 2,
+            "sources": [],
+            "meta": {"persona": "Ama K"},
+            "type": "news",
+            "model": "gpt-4o-mini",
+            "items": [],
+        }
         return write_outputs(section_id, day, league, payload, status="no_items", lang=lang)
 
     # GPT-setup
-    titles = "\n".join([f"- {it.get('title')} ({it.get('source')})" for it in picked[:3]])
+    headlines = "\n".join([f"- {c['source']['name']}: {c['source']['url']}" for c in picked[:3]])
     prompt_config = {
         "persona": "African football news anchor",
-        "instructions": f"""Give a lively spoken-style club spotlight (~150 words, about 45–60s) for {club}.
-Base it on these headlines:
-{titles}
+        "instructions": f"""Give a lively spoken-style club spotlight (~150 words, ~45–60s) for {club}.
+Base it on these sources:
+{headlines}
 
 Make it conversational, engaging, and record-ready."""
     }
-    ctx = {"club": club, "items": picked}
+    ctx = {"club": club, "candidates": picked}
     system_rules = "You are an assistant generating natural spoken-style football commentary."
 
     gpt_output = run_gpt(prompt_config, ctx, system_rules)
@@ -95,10 +110,14 @@ Make it conversational, engaging, and record-ready."""
         "title": f"{club} spotlight",
         "text": gpt_output,
         "length_s": length_s,
-        "sources": [i.get("id") for i in picked],
+        "sources": [c["source"]["url"] for c in picked],
         "meta": {"persona": "Ama K"},
         "type": "news",
         "model": "gpt-4o-mini",
         "items": picked,
     }
+
+    # Spara klubb för att undvika repetition nästa dag
+    save_last_club(day, club)
+
     return write_outputs(section_id, day, league, payload, status="ok", lang=lang)
