@@ -3,23 +3,26 @@ import os
 import json
 from src.gpt import run_gpt
 from src.sections.utils import write_outputs
+from src.storage import azure_blob
+
+CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
 
 
 def build_section(args):
     """Produce a single-expert opinion section with GPT commentary."""
-    raw_path = args.news[0] if args.news else None
-    if not raw_path:
-        raw_path = f"producer/candidates/{args.date}/scored.jsonl"
-    news_path = os.path.abspath(raw_path)
+    blob_path = args.news[0] if args.news else f"producer/candidates/{args.date}/scored.jsonl"
 
-    if not os.path.exists(news_path):
-        print(f"[opinion_expert] WARN: candidates file missing → {news_path}")
+    try:
+        text = azure_blob.get_text(CONTAINER, blob_path)
+        candidates = [json.loads(line) for line in text.splitlines() if line.strip()]
+    except Exception as e:
+        print(f"[opinion_expert] WARN: could not load {blob_path} from Azure → {e}")
         payload = {
             "slug": "opinion_expert_comment",
             "title": "Expert Comment",
             "text": "No candidates available.",
             "length_s": 2,
-            "sources": {"news_input_path": news_path},
+            "sources": {"news_input_path": blob_path},
             "meta": {"persona": "Expert"},
             "type": "opinion",
             "model": "gpt-4o-mini",
@@ -27,17 +30,14 @@ def build_section(args):
         }
         return write_outputs(args.section, args.date, args.league or "_", payload, status="no_candidates")
 
-    with open(news_path, "r", encoding="utf-8") as f:
-        candidates = [json.loads(line) for line in f]
-
     if not candidates:
-        print("[opinion_expert] WARN: No candidates found inside file")
+        print("[opinion_expert] WARN: No candidates found in blob file")
         payload = {
             "slug": "opinion_expert_comment",
             "title": "Expert Comment",
             "text": "No candidates available.",
             "length_s": 2,
-            "sources": {"news_input_path": news_path},
+            "sources": {"news_input_path": blob_path},
             "meta": {"persona": "Expert"},
             "type": "opinion",
             "model": "gpt-4o-mini",
@@ -63,7 +63,7 @@ Stay natural, insightful, and record-ready."""
         "title": "Expert Comment",
         "text": gpt_output,
         "length_s": int(round(len(gpt_output.split()) / 2.6)),
-        "sources": {"news_input_path": news_path},
+        "sources": {"news_input_path": blob_path},
         "meta": {"persona": "Expert"},
         "type": "opinion",
         "model": "gpt-4o-mini",
