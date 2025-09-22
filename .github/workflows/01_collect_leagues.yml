@@ -1,4 +1,4 @@
-name: Collect League & Season Metadata
+name: 01 Collect League & Season Metadata
 
 on:
   workflow_dispatch:

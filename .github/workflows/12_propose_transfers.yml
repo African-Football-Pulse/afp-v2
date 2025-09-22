@@ -1,10 +1,10 @@
-name: Merge Africa Player History
+name: 12 Propose Transfers
 
 on:
   workflow_dispatch:
 
 jobs:
-  merge-history:
+  propose-transfers:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,14 +19,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run merge_africa_player_history
+      - name: Run propose_transfers
         env:
           AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
           AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
           BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
         run: |
-          echo "🔄 Merging Africa player history..."
-          python -m src.tools.merge_africa_player_history | tee merge_log.txt
-          echo "✅ Done merging. See summary below:"
+          echo "🔄 Proposing transfers across all leagues/seasons..."
+          python -m src.tools.propose_transfers | tee propose_transfers_log.txt
+          echo "✅ Done. See summary below:"
           echo "---- SUMMARY (last 20 lines) ----"
-          tail -n 20 merge_log.txt
+          tail -n 20 propose_transfers_log.txt

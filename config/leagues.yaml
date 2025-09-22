@@ -13,7 +13,7 @@ leagues:
     country: "ENG"
     is_cup: false
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: fa_cup
     id: 230
@@ -21,7 +21,7 @@ leagues:
     country: "ENG"
     is_cup: true
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: champions_league
     id: 310
@@ -29,7 +29,7 @@ leagues:
     country: "EUR"
     is_cup: true
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: europa_league
     id: 326
@@ -37,7 +37,7 @@ leagues:
     country: "EUR"
     is_cup: true
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: europa_conference_league
     id: 198
@@ -45,7 +45,7 @@ leagues:
     country: "EUR"
     is_cup: true
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: ligue_1
     id: 235
@@ -77,7 +77,7 @@ leagues:
     country: "NED"
     is_cup: false
     season: "2024-2025"
-    enabled: false
+    enabled: true
 
   - key: primeira_liga
     id: 280

@@ -1,0 +1,46 @@
+name: 08 Build Player Stats Bulk
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Optional limit on number of players (for testing)'
+        required: false
+      player_id:
+        description: 'Optional single player ID to process'
+        required: false
+
+jobs:
+  build-player-stats-bulk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run build_player_stats_bulk
+        env:
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Building aggregated stats..."
+          python -m src.collectors.build_player_stats_bulk \
+            $([ -n "${{ github.event.inputs.limit }}" ] && echo "--limit ${{ github.event.inputs.limit }}") \
+            $([ -n "${{ github.event.inputs.player_id }}" ] && echo "--player-id ${{ github.event.inputs.player_id }}") \
+            | tee build_stats_bulk_log.txt
+          
+          echo "✅ Done. See summary below:"
+          echo "---- SUMMARY (last 20 lines) ----"
+          tail -n 20 build_stats_bulk_log.txt
+          
+          echo "---- HIGHLIGHT ----"
+          grep "Totals.json created:" build_stats_bulk_log.txt || echo "⚠️ No totals.json created"

@@ -1,0 +1,37 @@
+name: 09 Collect Teams Bulk
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season, e.g. 2024-2025'
+        required: true
+
+jobs:
+  collect-teams-bulk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_teams_bulk
+        env:
+          SOCCERDATA_AUTH_KEY:     ${{ secrets.SOCCERDATA_AUTH_KEY }}
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Collecting teams..."
+          python -m src.collectors.collect_teams_bulk --season "${{ github.event.inputs.season }}" | tee collect_teams_bulk_log.txt
+          echo "✅ Done. See summary below:"
+          echo "---- SUMMARY (last 20 lines) ----"
+          tail -n 20 collect_teams_bulk_log.txt

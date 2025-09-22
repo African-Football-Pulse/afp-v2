@@ -1,0 +1,36 @@
+name: 05 Collect Player History
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season (e.g., 2024-2025)'
+        required: true
+
+jobs:
+  collect-player-history:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_player_history_bulk
+        env:
+          AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Collecting player history..."
+          python -m src.collectors.collect_player_history_bulk --season "${{ github.event.inputs.season }}" | tee history_log.txt
+          echo "✅ Done. See summary below:"
+          echo "---- SUMMARY (last 20 lines) ----"
+          tail -n 20 history_log.txt

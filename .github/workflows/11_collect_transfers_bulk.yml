@@ -1,0 +1,37 @@
+name: 11 Collect Transfers Bulk
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to collect (e.g. 2025-2026)"
+        required: true
+
+jobs:
+  collect-transfers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collect_transfers_bulk
+        env:
+          SEASON: ${{ github.event.inputs.season }}
+          SOCCERDATA_AUTH_KEY: ${{ secrets.SOCCERDATA_AUTH_KEY }}
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔄 Collecting transfers..."
+          python -m src.collectors.collect_transfers_bulk | tee transfers_log.txt
+          echo "✅ Done. See summary below:"
+          tail -n 20 transfers_log.txt

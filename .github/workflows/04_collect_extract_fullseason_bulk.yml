@@ -1,0 +1,31 @@
+name: 04 Collect Extract Fullseason Bulk
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season string (e.g. 2024-2025)"
+        required: true
+        default: "2024-2025"
+      mode:
+        description: "Choose what to collect (league, cup, all)"
+        required: true
+        default: "all"
+
+jobs:
+  extract-fullseason:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      - name: Run collect_extract_bulk
+        env:
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          python -u -m src.collectors.collect_extract_bulk \
+            --season "${{ github.event.inputs.season }}" \
+            --mode "${{ github.event.inputs.mode }}"
