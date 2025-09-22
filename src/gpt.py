@@ -1,4 +1,4 @@
-# src/sections/s_top_african_players/renderers/gpt.py
+# src/gpt.py
 from typing import Dict, List, Tuple
 import os, json
 
