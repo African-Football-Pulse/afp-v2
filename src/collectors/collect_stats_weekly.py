@@ -6,7 +6,7 @@ def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
 def run_all():
-    """Loopar över alla aktiva ligor och kör collect_stats i weekly-läge."""
+    """Loopar över alla ligor som har enabled=true i leagues.yaml och kör collect_stats i weekly-läge."""
     date_str = today_str()
 
     with open("config/leagues.yaml", "r", encoding="utf-8") as f:
@@ -16,7 +16,7 @@ def run_all():
     print(f"[collect_stats_weekly] Found {len(leagues)} leagues in config.")
 
     for league in leagues:
-        if not league.get("active", False):
+        if not league.get("enabled", False):  # <-- fix: vi kollar enabled istället för active
             continue
 
         league_id = league["id"]
