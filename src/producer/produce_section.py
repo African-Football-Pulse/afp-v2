@@ -40,7 +40,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    library_path = "config/sections_library.yaml"
+    # Här pekar vi alltid på producer-versionen
+    library_path = "src/producer/sections_library.yaml"
     with open(library_path, "r", encoding="utf-8") as f:
         library = yaml.safe_load(f)
 
