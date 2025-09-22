@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 import yaml
-from src.collectors import collect_stats
+from src.collectors import collect_stats   # ✅ rätt import
 
 CONFIG_PATH = "config/leagues.yaml"
 
@@ -18,7 +18,7 @@ def today_str():
 
 def run_all():
     leagues = load_leagues()
-    print(f"[collect_extract_weekly] Found {len(leagues)} leagues in config.")
+    print(f"[collect_stats_weekly] Found {len(leagues)} leagues in config.")
 
     for league in leagues:
         if not league.get("enabled", False):
@@ -27,13 +27,13 @@ def run_all():
             league_id = league["id"]
             name = league.get("name", league["key"])
             season = league.get("season")
-            print(f"[collect_extract_weekly] Processing {name} ({league_id}) for {today_str()}...")
+            print(f"[collect_stats_weekly] Processing {name} ({league_id}) for {today_str()}...")
 
-            # kör extract i weekly-mode, skicka med season om det finns
-            collect_extract.run(league_id, mode="weekly", season=season)
+            # ✅ kör collect_stats i weekly-mode, skicka med season
+            collect_stats.run(league_id, mode="weekly", season=season)
 
         except Exception as e:
-            print(f"[collect_extract_weekly] ❌ Failed for {league.get('name', league.get('key'))} "
+            print(f"[collect_stats_weekly] ❌ Failed for {league.get('name', league.get('key'))} "
                   f"({league.get('id')}): {e}")
 
 
