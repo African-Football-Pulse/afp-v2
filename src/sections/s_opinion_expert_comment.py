@@ -1,3 +1,4 @@
+import os
 import json
 from src.gpt import run_gpt
 
@@ -14,35 +15,43 @@ Hard constraints:
 """
 
 def build_section(args):
-    # use path directly
-    news_path = args.news[0]
+    raw_path = args.news[0] if args.news else None
+    if not raw_path:
+        raise FileNotFoundError("No --news file provided")
+
+    news_path = os.path.join("/app", raw_path.lstrip("/"))
+    if not os.path.exists(news_path):
+        raise FileNotFoundError(f"Could not find candidates file: {news_path}")
 
     with open(news_path, "r", encoding="utf-8") as f:
-        news_items = [json.loads(line) for line in f]
+        candidates = [json.loads(line) for line in f]
 
-    if not news_items:
-        return {
-            "section": args.section,
-            "content": "No news items available for expert comment."
-        }
+    if not candidates:
+        return {"section": "S.OPINION.EXPERT_COMMENT", "content": "No candidates available."}
 
-    # take top 1–2 news items
-    top_items = news_items[:2]
+    # Ta topprankad kandidat
+    top_item = candidates[0]
 
-    news_text = "\n".join([item.get("title", "") for item in top_items])
+    # Hämta persona-info
+    persona_id = getattr(args, "persona_id", "AK")
+    with open("config/personas.json", "r", encoding="utf-8") as pf:
+        personas = json.load(pf)
+    persona = personas.get(persona_id, {})
 
-    prompt = f"""Persona:
-{args.persona}
+    prompt = f"""
+Persona:
+{json.dumps(persona, indent=2)}
 
-News input:
-{news_text}
+News facts:
+{json.dumps(top_item, indent=2)}
 
-Write the expert monologue now:"""
+Write an expert comment monologue (~120-160 words).
+"""
 
-    output = run_gpt(SYSTEM_RULES, prompt)
+    script = run_gpt(SYSTEM_RULES, prompt)
 
     return {
-        "section": args.section,
-        "persona": args.persona_id,
-        "content": output.strip(),
+        "section": "S.OPINION.EXPERT_COMMENT",
+        "persona_id": persona_id,
+        "content": script.strip(),
     }
