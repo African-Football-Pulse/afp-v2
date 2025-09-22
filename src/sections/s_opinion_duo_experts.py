@@ -1,12 +1,10 @@
 # src/sections/s_opinion_duo_experts.py
-import os
-import json
+import os, json
 from src.gpt import run_gpt
 from src.sections.utils import write_outputs
 from src.storage import azure_blob
 
 CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
-
 
 def build_section(args):
     """Produce a duo-expert opinion section with GPT commentary."""
@@ -16,7 +14,7 @@ def build_section(args):
         text = azure_blob.get_text(CONTAINER, blob_path)
         candidates = [json.loads(line) for line in text.splitlines() if line.strip()]
     except Exception as e:
-        print(f"[opinion_duo] WARN: could not load {blob_path} from Azure → {e}")
+        print(f"[opinion_duo] WARN: could not load from Azure → {blob_path} ({e})")
         payload = {
             "slug": "opinion_duo_experts",
             "title": "Duo Expert Opinion",
@@ -31,7 +29,7 @@ def build_section(args):
         return write_outputs(args.section, args.date, args.league or "_", payload, status="no_candidates")
 
     if not candidates:
-        print("[opinion_duo] WARN: No candidates found in blob file")
+        print(f"[opinion_duo] WARN: empty candidates in {blob_path}")
         payload = {
             "slug": "opinion_duo_experts",
             "title": "Duo Expert Opinion",
@@ -45,12 +43,10 @@ def build_section(args):
         }
         return write_outputs(args.section, args.date, args.league or "_", payload, status="no_candidates")
 
-    # Använd de två främsta kandidaterna
     first_item = candidates[0]
     second_item = candidates[1] if len(candidates) > 1 else candidates[0]
     news_text = f"- {first_item.get('text','')}\n- {second_item.get('text','')}"
 
-    # GPT prompt för dialog
     prompt = f"""You are two African football experts debating recent news.
 Have a lively, 2-voice exchange (~140 words total) based on these stories:
 
