@@ -1,15 +1,26 @@
 import os
 import argparse
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from src.collectors import utils
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 API_URL = "https://api.soccerdataapi.com/matches/"
 AUTH_KEY = os.getenv("SOCCERDATA_AUTH_KEY")
 
+
 def today_str():
     return datetime.now(timezone.utc).date().isoformat()
+
+
+def last_sunday_str():
+    """Returnera datumsträng för senaste söndag (gameday)."""
+    today = datetime.now(timezone.utc).date()
+    # Python: Monday=0 ... Sunday=6
+    offset = (today.weekday() - 6) % 7
+    last_sunday = today - timedelta(days=offset)
+    return last_sunday.isoformat()
+
 
 def run(league_id: int, mode: str = "weekly", date: str = None, season: str = None):
     """
@@ -19,8 +30,10 @@ def run(league_id: int, mode: str = "weekly", date: str = None, season: str = No
         raise RuntimeError("Missing SOCCERDATA_AUTH_KEY in environment")
 
     params = {"league_id": league_id, "auth_token": AUTH_KEY}
+
     if mode == "weekly":
-        params["date"] = date or today_str()
+        # Om inget datum anges → välj senaste söndag
+        params["date"] = date or last_sunday_str()
     elif mode == "fullseason" and season:
         params["season"] = season
 
@@ -43,18 +56,19 @@ def run(league_id: int, mode: str = "weekly", date: str = None, season: str = No
             raise ValueError("Season must be provided in fullseason mode")
         blob_path = f"stats/{season}/{league_id}/manifest.json"
     else:
-        date_str = date or today_str()
+        date_str = params["date"]
         blob_path = f"stats/weekly/{date_str}/{league_id}/manifest.json"
 
     manifest = {
         "league_id": league_id,
         "mode": mode,
-        "date": date or today_str(),
-        "matches": matches
+        "date": params.get("date", today_str()),
+        "matches": matches,
     }
 
     utils.upload_json_debug(blob_path, manifest)
     print(f"[collect_stats] ✅ Uploaded manifest with {len(matches)} matches → {blob_path}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
