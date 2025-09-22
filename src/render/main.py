@@ -1,5 +1,5 @@
 # src/render/main.py
-from render import tts_elevenlabs
+from render.run_render import main
 
 if __name__ == "__main__":
-    tts_elevenlabs.main()
+    main()
