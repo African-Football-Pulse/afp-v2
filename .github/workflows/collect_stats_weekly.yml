@@ -22,20 +22,28 @@ jobs:
       - name: Build collector image
         run: docker build -t afp-collector:latest .
 
-      - name: Run collect_stats (weekly manifest)
+      - name: Run collect_stats_weekly (create manifests)
         run: |
           docker run --rm \
-            -e JOB_TYPE=collect \
+            -e JOB_TYPE=src.collectors.collect_stats_weekly \
             -e SECRETS_FILE=/app/secrets/secret.json \
             -v ${{ github.workspace }}/secrets/secret.json:/app/secrets/secret.json \
-            afp-collector:latest \
-            python -m src.collectors.collect_stats --weekly
+            afp-collector:latest
 
-      - name: Run collect_extract_weekly (match details)
+      - name: Run collect_extract_weekly (create match files)
         run: |
           docker run --rm \
-            -e JOB_TYPE=collect \
+            -e JOB_TYPE=src.collectors.collect_extract_weekly \
             -e SECRETS_FILE=/app/secrets/secret.json \
             -v ${{ github.workspace }}/secrets/secret.json:/app/secrets/secret.json \
-            afp-collector:latest \
-            python -m src.collectors.collect_extract_weekly --with_api
+            afp-collector:latest
+
+      - name: List uploaded manifests and matches
+        run: |
+          echo "Listing manifests and matches for today:"
+          DATE=$(date -u +"%Y-%m-%d")
+          az storage blob list \
+            --account-name $AZURE_STORAGE_ACCOUNT \
+            --container-name $AZURE_STORAGE_CONTAINER \
+            --prefix stats/weekly/$DATE/ \
+            --output table
