@@ -3,11 +3,12 @@ name: Build and Deploy Render
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 7 * * *"   # ex. kör varje morgon kl 07:00
+    - cron: "0 7 * * *"   # kör varje dag kl 07:00, justera om ni vill
 
 jobs:
   render:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -24,7 +25,9 @@ jobs:
 
       - name: Run render
         env:
+          PYTHONPATH: src
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_IDS: ${{ secrets.ELEVENLABS_VOICE_IDS }}
         run: |
-          python -m render.main
+          python -m render.run_render
