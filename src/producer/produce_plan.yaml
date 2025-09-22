@@ -4,7 +4,7 @@ defaults:
   write_latest: true
 
 tasks:
-  - section: NEWS.TOP3
+  - section: S.NEWS.TOP3
     args:
       - --league
       - premier_league
@@ -14,7 +14,7 @@ tasks:
       - --news
       - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
 
-  - section: NEWS.TOP_AFRICAN_PLAYERS
+  - section: S.NEWS.TOP_AFRICAN_PLAYERS
     args:
       - --league
       - premier_league
@@ -24,7 +24,7 @@ tasks:
       - --news
       - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
 
-  - section: GENERIC.INTRO_POSTMATCH
+  - section: S.GENERIC.INTRO_POSTMATCH
     args:
       - --league
       - premier_league
@@ -32,17 +32,7 @@ tasks:
       - sections
       - --write-latest
 
-  - section: OPINION.EXPERT_COMMENT
-    args:
-      - --league
-      - premier_league
-      - --outdir
-      - sections
-      - --write-latest
-      - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
-
-  - section: OPINION.DUO_EXPERTS
+  - section: S.OPINION.EXPERT_COMMENT
     args:
       - --league
       - premier_league
@@ -52,7 +42,17 @@ tasks:
       - --news
       - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
 
-  - section: GENERIC.INTRO_DAILY
+  - section: S.OPINION.DUO_EXPERTS
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+      - --news
+      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+
+  - section: S.GENERIC.INTRO_DAILY
     args:
       - --league
       - premier_league
