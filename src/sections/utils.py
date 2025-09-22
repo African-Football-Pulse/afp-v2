@@ -75,3 +75,17 @@ def load_candidates(day: str, news_arg: str = None):
     except Exception as e:
         print(f"[utils] WARN: could not load candidates from {blob_path} ({e})")
         return [], blob_path
+
+
+def load_news_items(feed: str, league: str, day: str):
+    """
+    Ladda nyhets-items från curated/news/<feed>/<league>/<day>/items.json
+    Returnerar en lista med items eller [] om inget hittas.
+    """
+    path = f"curated/news/{feed}/{league}/{day}/items.json"
+    try:
+        return azure_blob.get_json(CONTAINER, path)
+    except Exception as e:
+        print(f"[utils] WARN: could not load news items from {path} ({e})")
+        return []
+
