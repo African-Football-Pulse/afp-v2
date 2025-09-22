@@ -17,15 +17,17 @@ def today_str():
 def run(league_id: int, mode: str = "weekly", season: str = None):
     """
     Hämtar matcher från SoccerData API och sparar manifest i Azure.
-    - weekly: hämtar hela säsongen, plockar senaste datum med finished-matcher.
-    - fullseason: sparar alla matcher.
+    - weekly: hämtar ALLA matcher för aktiv säsong (ingen season i params),
+              plockar senaste datum med finished-matcher.
+    - fullseason: hämtar ALLA matcher för given season och sparar allt.
     """
     if not AUTH_KEY:
         raise RuntimeError("Missing SOCCERDATA_AUTH_KEY in environment")
 
-
     params = {"league_id": league_id, "auth_token": AUTH_KEY}
-    if season and mode == "fullseason":
+
+    # ⚡ Season endast i fullseason-läge
+    if mode == "fullseason" and season:
         params["season"] = season
 
     headers = {"Accept-Encoding": "gzip", "Content-Type": "application/json"}
@@ -46,15 +48,22 @@ def run(league_id: int, mode: str = "weekly", season: str = None):
         # Gruppér matcher per datum där status == finished
         finished_by_date = defaultdict(list)
         for m in matches:
-            if m.get("status") == "finished":
+            status = (m.get("status") or "").lower()
+            if status in ("finished", "ft", "ended", "full time"):
                 finished_by_date[m.get("date")].append(m)
 
         if not finished_by_date:
             raise RuntimeError(f"No finished matches found for league {league_id}")
 
-        # Hitta senaste datum (datum är i format DD/MM/YYYY)
-        parsed = [(datetime.strptime(d, "%d/%m/%Y").date(), d, ms)
-                  for d, ms in finished_by_date.items()]
+        # Hitta senaste datum (API ger oftast DD/MM/YYYY)
+        parsed = []
+        for d, ms in finished_by_date.items():
+            try:
+                dt = datetime.strptime(d, "%d/%m/%Y").date()
+            except ValueError:
+                dt = datetime.strptime(d, "%Y-%m-%d").date()
+            parsed.append((dt, d, ms))
+
         parsed.sort(key=lambda x: x[0], reverse=True)
         latest_date, latest_date_str, latest_matches = parsed[0]
 
