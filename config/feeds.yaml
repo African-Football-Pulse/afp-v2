@@ -51,18 +51,3 @@ sources:
   - name: eyefootball_transfers
     url: https://www.eyefootball.com/rss_news_transfers.xml
     active: true
-    	
-league: bundesliga
-sources:
-  
-
-league: ligue_1
-sources:
-  
-league: la_liga
-sources:
- 
-
-league: eredivisie
-sources:
-  
