@@ -1,39 +1,34 @@
 import os
 import json
+import requests
 from datetime import datetime, timezone
 from src.storage import azure_blob
 from src.collectors import utils
 
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+API_URL = "https://api.soccerdataapi.com/matches/"
+AUTH_KEY = os.getenv("SOCCERDATA_AUTH_KEY")
 
 def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
-
 def run(league_id: int, manifest_path: str, with_api: bool = False, mode: str = "weekly", season: str = None):
     """
     Läser manifest (från Azure Blob) och sparar matcher som separata filer.
-    - league_id: numeric league_id
-    - manifest_path: blob path till manifest.json
-    - with_api: om True → hämta detaljer per match via API
-    - mode: 'weekly' eller 'fullseason'
-    - season: krävs om mode='fullseason'
+    Om with_api=True → hämtar detaljer för varje match från SoccerData API.
     """
-    container = os.environ.get("AZURE_STORAGE_CONTAINER", "afp")
+    if not AUTH_KEY and with_api:
+        raise RuntimeError("Missing SOCCERDATA_AUTH_KEY in environment")
 
-    manifest_text = azure_blob.get_text(container, manifest_path)
+    manifest_text = azure_blob.get_text(CONTAINER, manifest_path)
     manifest = json.loads(manifest_text)
 
-    matches = []
-    for league in manifest:
-        for stage in league.get("stage", []):
-            matches.extend(stage.get("matches", []))
-
-    print(f"[collect_match_details] Found {len(matches)} matches in manifest.")
+    matches = manifest.get("matches", [])
+    print(f"[collect_match_details] Found {len(matches)} matches in manifest (league {league_id}).")
 
     for match in matches:
         match_id = match["id"]
 
-        # Sätt rätt path beroende på mode
         if mode == "fullseason":
             if not season:
                 raise ValueError("Season must be provided in fullseason mode")
@@ -42,4 +37,18 @@ def run(league_id: int, manifest_path: str, with_api: bool = False, mode: str = 
             date_str = today_str()
             blob_path = f"stats/weekly/{date_str}/{league_id}/{match_id}.json"
 
-        utils.upload_json_debug(blob_path, match)
+        if with_api:
+            # Fetch detailed data for match
+            params = {"match_id": match_id, "auth_token": AUTH_KEY}
+            headers = {"Accept-Encoding": "gzip", "Content-Type": "application/json"}
+            print(f"[collect_match_details] Fetching details for match {match_id} (league {league_id})...")
+            resp = requests.get(API_URL, headers=headers, params=params, timeout=30)
+            resp.raise_for_status()
+            match_data = resp.json()
+        else:
+            # Just use the summary match object from manifest
+            match_data = match
+
+        utils.upload_json_debug(blob_path, match_data)
+
+    print(f"[collect_match_details] ✅ Done. Uploaded {len(matches)} matches for league {league_id}.")
