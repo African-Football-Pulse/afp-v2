@@ -1,6 +1,5 @@
 # src/sections/s_news_top3_generic.py
-import os
-import json
+import os, json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from pathlib import Path
@@ -77,7 +76,7 @@ def build_section(args=None):
             "title": "Top 3 African Player News",
             "text": "No news items available.",
             "length_s": 2,
-            "sources": [],
+            "sources": feeds,
             "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
             "items": [],
         }
@@ -93,7 +92,7 @@ def build_section(args=None):
         "slug": "top3_news",
         "title": "Top 3 African Player News",
         "text": body,
-        "length_s": len(picked) * 30,  # anta ~30 sekunder per nyhet
+        "length_s": len(picked) * 30,  # antag 30 sek per nyhet
         "sources": feeds,
         "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
         "items": picked,
