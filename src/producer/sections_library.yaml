@@ -28,3 +28,8 @@ sections:
     module: s_generic_intro_daily
     runner: build_section
     description: Generic daily intro section
+
+  S.NEWS.CLUB_HIGHLIGHT:          # 🔥 ny sektion
+    module: s_news_club_highlight
+    runner: build_section
+    description: Spotlight on one club based on recent news candidates
