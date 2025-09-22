@@ -1,84 +1,64 @@
+# src/producer/produce_auto.py
+import subprocess
+import datetime
+import yaml
 import os
 import sys
-import subprocess
-import yaml
-from datetime import datetime, timezone
 
-def load_plan(path="src/producer/produce_plan.yaml"):
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+LIBRARY_PATH = "config/sections_library.yaml"
 
-def load_library(path="src/producer/sections_library.yaml"):
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def run_step(cmd, desc):
+    print(f"[produce_auto] Kör sektion: {' '.join(cmd)}")
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        print(f"[produce_auto] FEL: {desc} returnerade {result.returncode}")
+    return result.returncode
 
 def main():
-    today = datetime.now(timezone.utc).date().isoformat()
-    plan_path = os.getenv("PRODUCE_PLAN", "src/producer/produce_plan.yaml")
-
-    try:
-        plan = load_plan(plan_path)
-    except Exception as e:
-        print(f"[produce_auto] ERROR: plan saknas: {plan_path}")
-        sys.exit(1)
-
-    defaults = plan.get("defaults", {})
-    league = defaults.get("league", "premier_league")
-
-    # --- Sanity check: lista sektioner i biblioteket ---
-    try:
-        library = load_library()
-        section_keys = list(library.get("sections", {}).keys())
-        print(f"[produce_auto] Sections i library ({len(section_keys)}): {', '.join(section_keys)}")
-    except Exception as e:
-        print(f"[produce_auto] Varning: kunde inte läsa sections_library.yaml → {e}")
-        section_keys = []
-
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     print(f"[produce_auto] Datum: {today} (UTC)")
 
-    # Step 1: kör candidates
-    cmd_candidates = [sys.executable, "-m", "src.producer.produce_candidates"]
-    print(f"[produce_auto] Running step: candidates → {' '.join(cmd_candidates)}")
-    rc = subprocess.call(cmd_candidates)
-    if rc != 0:
-        print(f"[produce_auto] ERROR: candidates failed with code {rc}")
-        sys.exit(rc)
+    # Ladda section library
+    with open(LIBRARY_PATH, "r", encoding="utf-8") as f:
+        library = yaml.safe_load(f)
+    sections = library.get("sections", {})
+    print(f"[produce_auto] Sections i library ({len(sections)}): {', '.join(sections.keys())}")
 
-    # Step 2: kör scoring
-    cmd_scoring = [sys.executable, "-m", "src.producer.produce_scoring"]
-    print(f"[produce_auto] Running step: scoring → {' '.join(cmd_scoring)}")
-    rc = subprocess.call(cmd_scoring)
-    if rc != 0:
-        print(f"[produce_auto] ERROR: scoring failed with code {rc}")
-        sys.exit(rc)
+    # 1. Produce candidates
+    result = subprocess.run(
+        [sys.executable, "-m", "src.producer.produce_candidates"]
+    )
+    if result.returncode != 0:
+        print("[produce_auto] FEL: produce_candidates misslyckades")
+        return
+    # 2. Produce scoring
+    result = subprocess.run(
+        [sys.executable, "-m", "src.producer.produce_scoring"]
+    )
+    if result.returncode != 0:
+        print("[produce_auto] FEL: produce_scoring misslyckades")
+        return
 
-    # Step 3: kör sektioner
-    for task in plan.get("tasks", []):
-        section = task.get("section")
-        if not section:
-            print(f"[produce_auto] SKIP: task saknar 'section'")
-            continue
+    # Path till dagens scored.jsonl
+    news_path = f"producer/candidates/{today}/scored.jsonl"
 
-        if section_keys and section not in section_keys:
-            print(f"[produce_auto] Varning: section {section} finns ej i library")
-
-        args = task.get("args", [])
+    # 3. Kör alla sektioner
+    for section, cfg in sections.items():
         cmd = [
             sys.executable, "-m", "src.producer.produce_section",
             "--section", section,
             "--date", today,
             "--path-scope", "blob",
-            "--league", league,
-            "--outdir", "sections"
-        ] + args
+            "--league", "premier_league",
+            "--outdir", "sections",
+            "--write-latest"
+        ]
 
-        if defaults.get("write_latest", False) and "--write-latest" not in cmd:
-            cmd.append("--write-latest")
+        # NEWS och OPINION behöver kandidater
+        if section.startswith("S.NEWS") or section.startswith("S.OPINION"):
+            cmd.extend(["--news", news_path])
 
-        print(f"[produce_auto] Kör sektion: {' '.join(cmd)}")
-        rc = subprocess.call(cmd)
-        if rc != 0:
-            print(f"[produce_auto] FEL: {section} returnerade {rc}")
+        run_step(cmd, section)
 
     print("[produce_auto] DONE")
 
