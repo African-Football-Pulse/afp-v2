@@ -1,0 +1,30 @@
+sections:
+  S.NEWS.TOP3:
+    module: s_news_top3_generic
+    runner: build_section
+    description: Top 3 news items about African players
+
+  S.NEWS.TOP_AFRICAN_PLAYERS:
+    module: s_news_top_african_players
+    runner: build_section
+    description: Top African players based on news candidates
+
+  S.OPINION.EXPERT_COMMENT:
+    module: s_opinion_expert_comment
+    runner: build_section
+    description: Expert comment on recent events
+
+  S.OPINION.DUO_EXPERTS:
+    module: s_opinion_duo_experts
+    runner: build_section
+    description: Two experts discussing African football news
+
+  S.GENERIC.INTRO_POSTMATCH:
+    module: s_generic_intro_postmatch
+    runner: build_section
+    description: Generic intro after a matchday
+
+  S.GENERIC.INTRO_DAILY:
+    module: s_generic_intro_daily
+    runner: build_section
+    description: Generic daily intro section
