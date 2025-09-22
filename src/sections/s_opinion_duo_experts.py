@@ -1,48 +1,35 @@
+import os
 import json
-import argparse
-from datetime import datetime
-from src.gpt import render_gpt   # <-- ändrad import
-import logging
-
-SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
-You must produce a duo dialogue lasting ~60–70 seconds (≈160–200 words).
-Hard constraints:
-- Output MUST be in English.
-- Stay strictly in character based on the provided persona blocks.
-- Fold in news facts without inventing specifics.
-- Alternate lines naturally between the two personas.
-- Avoid placeholders like [TEAM]; use only info present in the news input.
-- Keep it record-ready: natural back-and-forth, 6–8 short exchanges.
-- End with a joint crisp takeaway line.
-"""
+from src.gpt import run_gpt
 
 def build_section(args):
-    logging.info("[s_opinion_duo_experts] START")
+    news_path = os.path.join(os.getcwd(), args.news[0])
+    if not os.path.exists(news_path):
+        raise FileNotFoundError(f"Could not find candidates file: {news_path}")
 
-    with open(args.news[0], "r", encoding="utf-8") as f:
-        news_items = json.load(f)
+    with open(news_path, "r", encoding="utf-8") as f:
+        candidates = [json.loads(line) for line in f]
 
-    # Personas
-    with open(args.personas, "r", encoding="utf-8") as f:
-        personas = json.load(f)
-    ids = args.persona_ids.split(",")
-    p1, p2 = personas[ids[0]], personas[ids[1]]
-
-    prompt = f"""Personas: {json.dumps([p1, p2])}
-News items: {json.dumps(news_items[:3])}
-
-Write a ~60–70s expert dialogue as if spoken by these two personas.
+    SYSTEM_RULES = """You are writing a dialogue for a football podcast.
+Two personas are debating (~60–80 words each).
+Constraints:
+- Output MUST be in English.
+- Stay in character for both personas.
+- Use only facts from input, no invention.
+- Conversational flow with light tension.
+- Conclude with a short shared reflection.
 """
 
-    output = render_gpt(SYSTEM_RULES, prompt)
-
-    section = {
-        "section": "OPINION.DUO_EXPERTS",
-        "date": args.date,
-        "personas": ids,
-        "script": output,
-        "sources": [n.get("link") for n in news_items[:3]]
+    personas = ["AK", "JJK"]  # hårdkodat nu – styrs via personas.json senare
+    prompt = {
+        "system": SYSTEM_RULES,
+        "personas": personas,
+        "news": candidates
     }
 
-    logging.info("[s_opinion_duo_experts] DONE")
-    return section
+    text = run_gpt(prompt)
+
+    return {
+        "section": args.section,
+        "items": [{"personas": personas, "text": text}]
+    }
