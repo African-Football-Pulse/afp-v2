@@ -2,56 +2,46 @@ import os
 import json
 from src.gpt import run_gpt
 
-SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
-You must produce a single speaker monologue that lasts ~45 seconds (≈120–160 words).
-Hard constraints:
-- Output MUST be in English.
-- Stay strictly in character based on the provided persona block.
-- Fold in news facts without inventing specifics.
-- No placeholders like [TEAM]; use only info present in the news input.
-- Avoid list formats; deliver a flowing, spoken monologue.
-- Keep it record-ready: natural pacing, light rhetorical devices, 1–2 short pauses (…).
-- End with a crisp takeaway line.
-"""
-
 def build_section(args):
+    # Bestäm sökväg för candidates
     raw_path = args.news[0] if args.news else None
     if not raw_path:
-        raise FileNotFoundError("No --news file provided")
+        raw_path = f"producer/candidates/{args.date}/scored.jsonl"
+    news_path = os.path.abspath(raw_path)
 
-    news_path = os.path.join("/app", raw_path.lstrip("/"))
     if not os.path.exists(news_path):
-        raise FileNotFoundError(f"Could not find candidates file: {news_path}")
+        print(f"[opinion_expert] WARN: candidates file missing → {news_path}")
+        return {
+            "section": "S.OPINION.EXPERT_COMMENT",
+            "content": "No candidates available."
+        }
 
+    # Läs in kandidater
     with open(news_path, "r", encoding="utf-8") as f:
         candidates = [json.loads(line) for line in f]
 
     if not candidates:
-        return {"section": "S.OPINION.EXPERT_COMMENT", "content": "No candidates available."}
+        print("[opinion_expert] WARN: No candidates found inside file")
+        return {
+            "section": "S.OPINION.EXPERT_COMMENT",
+            "content": "No candidates available."
+        }
 
-    # Ta topprankad kandidat
+    # Använd top candidate
     top_item = candidates[0]
+    news_text = top_item.get("text", "")
 
-    # Hämta persona-info
-    persona_id = getattr(args, "persona_id", "AK")
-    with open("config/personas.json", "r", encoding="utf-8") as pf:
-        personas = json.load(pf)
-    persona = personas.get(persona_id, {})
+    # GPT prompt
+    prompt = f"""You are an expert commentator for African football.
+Write a short (~120 words) spoken-style comment about this news:
 
-    prompt = f"""
-Persona:
-{json.dumps(persona, indent=2)}
+{news_text}
 
-News facts:
-{json.dumps(top_item, indent=2)}
-
-Write an expert comment monologue (~120-160 words).
-"""
-
-    script = run_gpt(SYSTEM_RULES, prompt)
+Stay natural, insightful, and record-ready."""
+    gpt_output = run_gpt(prompt)
 
     return {
         "section": "S.OPINION.EXPERT_COMMENT",
-        "persona_id": persona_id,
-        "content": script.strip(),
+        "content": gpt_output,
+        "source_news": news_text,
     }
