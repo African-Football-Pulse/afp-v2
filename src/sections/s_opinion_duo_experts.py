@@ -1,51 +1,48 @@
 import json
-from pathlib import Path
-from src.sections.gpt import run_gpt
+import argparse
+from datetime import datetime
+from src.gpt import render_gpt   # <-- ändrad import
+import logging
+
+SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
+You must produce a duo dialogue lasting ~60–70 seconds (≈160–200 words).
+Hard constraints:
+- Output MUST be in English.
+- Stay strictly in character based on the provided persona blocks.
+- Fold in news facts without inventing specifics.
+- Alternate lines naturally between the two personas.
+- Avoid placeholders like [TEAM]; use only info present in the news input.
+- Keep it record-ready: natural back-and-forth, 6–8 short exchanges.
+- End with a joint crisp takeaway line.
+"""
 
 def build_section(args):
-    """
-    Builds a duo expert conversation section based on provided news items and two personas.
-    """
-    news_path = Path(args.news[0])
-    with open(news_path, "r", encoding="utf-8") as f:
-        news_items = [json.loads(line) for line in f]
+    logging.info("[s_opinion_duo_experts] START")
 
-    if not news_items:
-        return {"section": "S.OPINION.DUO_EXPERTS", "content": ""}
+    with open(args.news[0], "r", encoding="utf-8") as f:
+        news_items = json.load(f)
 
-    # Use only the first news item for now
-    item = news_items[0]
+    # Personas
+    with open(args.personas, "r", encoding="utf-8") as f:
+        personas = json.load(f)
+    ids = args.persona_ids.split(",")
+    p1, p2 = personas[ids[0]], personas[ids[1]]
 
-    persona_ids = getattr(args, "persona_ids", "").split(",")
-    persona_data = {}
-    if persona_ids and getattr(args, "personas", None):
-        with open(args.personas, "r", encoding="utf-8") as f:
-            personas = json.load(f)
-        for pid in persona_ids:
-            if pid in personas:
-                persona_data[pid] = personas[pid]
+    prompt = f"""Personas: {json.dumps([p1, p2])}
+News items: {json.dumps(news_items[:3])}
 
-    prompt = f"""
-    SYSTEM_RULES:
-    You are writing a football podcast segment with two expert commentators.
-    Output MUST be in English, ~160–200 words total.
-    Alternate between the two personas naturally (dialogue format).
-    Fold in news facts without inventing specifics.
-    No placeholders like [TEAM].
-    Keep it record-ready and natural.
-    End with a joint takeaway line.
+Write a ~60–70s expert dialogue as if spoken by these two personas.
+"""
 
-    Personas:
-    {json.dumps(persona_data, indent=2)}
+    output = render_gpt(SYSTEM_RULES, prompt)
 
-    News:
-    {json.dumps(item, indent=2)}
-    """
-
-    dialogue = run_gpt(prompt)
-
-    return {
-        "section": "S.OPINION.DUO_EXPERTS",
-        "personas": persona_ids,
-        "content": dialogue.strip(),
+    section = {
+        "section": "OPINION.DUO_EXPERTS",
+        "date": args.date,
+        "personas": ids,
+        "script": output,
+        "sources": [n.get("link") for n in news_items[:3]]
     }
+
+    logging.info("[s_opinion_duo_experts] DONE")
+    return section
