@@ -1,9 +1,11 @@
+# src/producer/produce_section.py
 import argparse
 import importlib
 import yaml
 import json
 import sys
 from pathlib import Path
+
 
 def build_section(section_name, args, library):
     if "sections" not in library or section_name not in library["sections"]:
@@ -25,6 +27,7 @@ def build_section(section_name, args, library):
 
     return fn(args)
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--section", required=True, help="Section name (e.g. NEWS.TOP3)")
@@ -40,24 +43,24 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    # Här pekar vi alltid på producer-versionen
+    # Library
     library_path = "src/producer/sections_library.yaml"
     with open(library_path, "r", encoding="utf-8") as f:
         library = yaml.safe_load(f)
 
     section_obj = build_section(args.section, args, library)
 
-    # Output path
-    outdir = Path(args.outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-    outfile = outdir / f"{args.section}_{args.date}.json"
-
-    if not args.dry_run:
-        with open(outfile, "w", encoding="utf-8") as f:
-            json.dump(section_obj, f, ensure_ascii=False, indent=2)
-        print(f"[produce_section] Wrote {outfile}")
+    # Kontrollera om sektionen returnerade ett manifest
+    if isinstance(section_obj, dict) and "section_code" in section_obj:
+        print(f"[produce_section] Received manifest from {args.section}")
+        if args.dry_run:
+            print(json.dumps(section_obj, ensure_ascii=False, indent=2))
     else:
-        print(json.dumps(section_obj, ensure_ascii=False, indent=2))
+        raise RuntimeError(
+            f"Section {args.section} did not return a manifest. "
+            f"Got: {type(section_obj)}"
+        )
+
 
 if __name__ == "__main__":
     main()
