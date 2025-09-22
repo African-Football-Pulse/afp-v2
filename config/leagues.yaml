@@ -4,7 +4,7 @@ leagues:
     name: "Premier League"
     country: "ENG"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: championship
@@ -12,7 +12,7 @@ leagues:
     name: "Championship"
     country: "ENG"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: fa_cup
@@ -20,7 +20,7 @@ leagues:
     name: "FA Cup"
     country: "ENG"
     is_cup: true
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: champions_league
@@ -28,7 +28,7 @@ leagues:
     name: "UEFA Champions League"
     country: "EUR"
     is_cup: true
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: europa_league
@@ -36,7 +36,7 @@ leagues:
     name: "Europa League"
     country: "EUR"
     is_cup: true
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: europa_conference_league
@@ -44,7 +44,7 @@ leagues:
     name: "Europa Conference League"
     country: "EUR"
     is_cup: true
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: ligue_1
@@ -52,7 +52,7 @@ leagues:
     name: "Ligue 1"
     country: "FRA"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: bundesliga
@@ -60,7 +60,7 @@ leagues:
     name: "Bundesliga"
     country: "GER"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: serie_a
@@ -68,7 +68,7 @@ leagues:
     name: "Serie A"
     country: "ITA"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: eredivisie
@@ -76,7 +76,7 @@ leagues:
     name: "Eredivisie"
     country: "NED"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: primeira_liga
@@ -84,7 +84,7 @@ leagues:
     name: "Primeira Liga"
     country: "POR"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: false
 
   - key: premiership
@@ -92,7 +92,7 @@ leagues:
     name: "Premiership"
     country: "SCO"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: false
 
   - key: la_liga
@@ -100,7 +100,7 @@ leagues:
     name: "La Liga"
     country: "ESP"
     is_cup: false
-    season: "2024-2025"
+    season: "2025-2026"
     enabled: true
 
   - key: mls
@@ -108,7 +108,7 @@ leagues:
     name: "MLS"
     country: "USA"
     is_cup: false
-    season: "2024"
+    season: "2025"
     enabled: false
 
   - key: csl
@@ -116,5 +116,5 @@ leagues:
     name: "CSL"
     country: "CHN"
     is_cup: false
-    season: "2024"
+    season: "2025"
     enabled: false
