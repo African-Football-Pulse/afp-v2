@@ -1,88 +1,56 @@
-#!/usr/bin/env python3
 import os
 import sys
 import json
-import shlex
+from datetime import datetime
 
-def log(msg: str) -> None:
+def log(msg: str):
+    """Standardiserad loggning med timestamp"""
     print(f"[ENTRYPOINT] {msg}", flush=True)
 
-# -------------------------------
-# 1) Läs och exportera hemligheter
-# -------------------------------
-def load_secrets_from_json():
-    secrets_file = os.getenv("SECRETS_FILE")
-    if not secrets_file:
-        return
+def export_secrets(secrets_file: str = "/app/secrets/secret.json"):
+    """Exportera hemligheter från JSON till env"""
     try:
         with open(secrets_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            log(f"Secrets JSON var inte ett objekt: {secrets_file}")
-            return
-        exported = []
-        for k, v in data.items():
-            if k not in os.environ and v is not None:
-                os.environ[k] = str(v)
-                exported.append(k)
-        if exported:
-            log(f"Exporterade {len(exported)} nycklar från {secrets_file}: {', '.join(exported)}")
-        else:
-            log(f"Inga nya env behövde exporteras från {secrets_file}")
+            secrets = json.load(f)
+        for k, v in secrets.items():
+            os.environ[k] = str(v)
+        log(f"Exporterade {len(secrets)} nycklar från {secrets_file}: {', '.join(secrets.keys())}")
     except FileNotFoundError:
-        log(f"SECRETS_FILE satt men hittades ej: {secrets_file}")
+        log(f"⚠️ Hittade inte secrets-filen: {secrets_file}")
     except Exception as e:
-        log(f"Kunde inte läsa SECRETS_FILE ({secrets_file}): {e}")
+        log(f"⚠️ Fel vid export av secrets: {e}")
 
-# -------------------------------
-# 2) Hjälp: exec
-# -------------------------------
-def exec_cmd(argv):
-    if not argv:
-        raise SystemExit("Internal error: tomt argv till exec_cmd.")
-    log(f"Running: {' '.join(shlex.quote(a) for a in argv)}")
-    os.execvp(argv[0], argv)  # ersätter processen
-
-# -------------------------------
-# 3) Välj kommandot baserat på JOB_TYPE/JOB_ARGS
-# -------------------------------
 def build_command():
-    job_type = (os.getenv("JOB_TYPE") or "").strip().lower()
-    job_args = (os.getenv("JOB_ARGS") or "").strip()
-
-    if "USE_LOCAL" in os.environ:
-        v = os.environ["USE_LOCAL"].strip().lower()
-        os.environ["USE_LOCAL"] = "1" if v in ("1", "true", "yes", "y") else "0"
-
+    job_type = os.environ.get("JOB_TYPE", "").strip()
     if not job_type:
-        job_type = "collect"
+        log("❌ JOB_TYPE måste anges")
+        sys.exit(1)
 
+    # Standard collect → rss_multi
     if job_type == "collect":
-        log("Selected job: COLLECT → rss_multi")
+        log("Selected job: COLLECT → rss_multi (default)")
         return ["python", "-m", "src.collectors.rss_multi"]
 
+    # Standard produce → auto
     if job_type == "produce":
-        if job_args:
-            log(f"Selected job: PRODUCE (manual) → section with args: {job_args}")
-            return ["python", "-m", "src.producer.produce_section"] + shlex.split(job_args)
-        else:
-            log("Selected job: PRODUCE (auto) → full pipeline via produce_auto")
-            return ["python", "-m", "src.producer.produce_auto"]
+        log("Selected job: PRODUCE (auto) → full pipeline via produce_auto")
+        return ["python", "-m", "src.producer.produce_auto"]
 
-    if "." in job_type:
+    # Tillåt explicit modulväg, t.ex. src.collectors.collect_extract_weekly
+    if job_type.startswith("src."):
         log(f"Selected job: custom module → {job_type}")
         return ["python", "-m", job_type]
 
-    log(f"Okänt JOB_TYPE: {job_type}. Stöds: collect, produce eller en full modulväg (ex. 'src.assemble').")
-    raise SystemExit(2)
+    # Okänd typ
+    log(f"❌ Okänd JOB_TYPE: {job_type}")
+    sys.exit(1)
 
-# -------------------------------
-# main
-# -------------------------------
 def main():
-    load_secrets_from_json()
-    argv = build_command()
-    exec_cmd(argv)
+    log("Startar job_entrypoint")
+    export_secrets(os.environ.get("SECRETS_FILE", "/app/secrets/secret.json"))
+    cmd = build_command()
+    log(f"Running: {' '.join(cmd)}")
+    os.execvp(cmd[0], cmd)
 
 if __name__ == "__main__":
     main()
