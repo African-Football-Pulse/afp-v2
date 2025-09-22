@@ -1,4 +1,3 @@
-# src/sections/s_opinion_duo_experts.py
 import os, json
 from src.gpt import run_gpt
 from src.sections.utils import write_outputs
@@ -43,17 +42,20 @@ def build_section(args):
         }
         return write_outputs(args.section, args.date, args.league or "_", payload, status="no_candidates")
 
+    # Välj två kandidater
     first_item = candidates[0]
     second_item = candidates[1] if len(candidates) > 1 else candidates[0]
     news_text = f"- {first_item.get('text','')}\n- {second_item.get('text','')}"
 
-    prompt = f"""You are two African football experts debating recent news.
-Have a lively, 2-voice exchange (~140 words total) based on these stories:
+    # GPT setup
+    prompt_config = {
+        "persona": "Two African football experts debating",
+        "instructions": f"Have a lively, 2-voice exchange (~140 words total) based on these stories:\n\n{news_text}\n\nMake it conversational, record-ready, and avoid lists or placeholders."
+    }
+    ctx = {"candidates": [first_item, second_item]}
+    system_rules = "You are an assistant generating a natural spoken-style football dialogue."
 
-{news_text}
-
-Make it conversational, record-ready, and avoid lists or placeholders."""
-    gpt_output = run_gpt(prompt)
+    gpt_output = run_gpt(prompt_config, ctx, system_rules)
 
     payload = {
         "slug": "opinion_duo_experts",
