@@ -2,54 +2,48 @@ import os
 import json
 from src.gpt import run_gpt
 
-SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
-You must produce a short back-and-forth dialogue (~60–90 seconds, ≈160–220 words).
-Hard constraints:
-- Output MUST be in English.
-- Use the provided persona blocks faithfully for tone & style.
-- Base everything on the news input, no inventions.
-- Write in a conversational spoken style, 4–6 turns max.
-- Avoid list formats, keep it natural and fluid.
-- End with a memorable closing line.
-"""
-
 def build_section(args):
+    # Bestäm sökväg för candidates
     raw_path = args.news[0] if args.news else None
     if not raw_path:
-        raise FileNotFoundError("No --news file provided")
+        raw_path = f"producer/candidates/{args.date}/scored.jsonl"
+    news_path = os.path.abspath(raw_path)
 
-    news_path = os.path.join("/app", raw_path.lstrip("/"))
     if not os.path.exists(news_path):
-        raise FileNotFoundError(f"Could not find candidates file: {news_path}")
+        print(f"[opinion_duo] WARN: candidates file missing → {news_path}")
+        return {
+            "section": "S.OPINION.DUO_EXPERTS",
+            "content": "No candidates available."
+        }
 
+    # Läs in kandidater
     with open(news_path, "r", encoding="utf-8") as f:
         candidates = [json.loads(line) for line in f]
 
     if not candidates:
-        return {"section": "S.OPINION.DUO_EXPERTS", "content": "No candidates available."}
+        print("[opinion_duo] WARN: No candidates found inside file")
+        return {
+            "section": "S.OPINION.DUO_EXPERTS",
+            "content": "No candidates available."
+        }
 
-    top_item = candidates[0]
+    # Använd de två främsta
+    first_item = candidates[0]
+    second_item = candidates[1] if len(candidates) > 1 else candidates[0]
 
-    persona_ids = getattr(args, "persona_ids", "AK,JJK").split(",")
-    with open("config/personas.json", "r", encoding="utf-8") as pf:
-        personas = json.load(pf)
+    news_text = f"- {first_item.get('text','')}\n- {second_item.get('text','')}"
 
-    persona_blocks = [personas.get(pid, {}) for pid in persona_ids]
+    # GPT prompt för dialog
+    prompt = f"""You are two African football experts debating recent news.
+Have a lively, 2-voice exchange (~140 words total) based on these stories:
 
-    prompt = f"""
-Personas:
-{json.dumps(persona_blocks, indent=2)}
+{news_text}
 
-News facts:
-{json.dumps(top_item, indent=2)}
-
-Write a duo expert dialogue (~160–220 words, 4–6 exchanges).
-"""
-
-    script = run_gpt(SYSTEM_RULES, prompt)
+Make it conversational, record-ready, and avoid lists or placeholders."""
+    gpt_output = run_gpt(prompt)
 
     return {
         "section": "S.OPINION.DUO_EXPERTS",
-        "persona_ids": persona_ids,
-        "content": script.strip(),
+        "content": gpt_output,
+        "source_news": news_text,
     }
