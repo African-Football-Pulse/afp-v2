@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 import yaml
-from src.collectors import collect_extract
+from src.collectors import collect_stats
 
 CONFIG_PATH = "config/leagues.yaml"
 
