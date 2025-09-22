@@ -1,14 +1,11 @@
 import os
 import json
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 from src.storage import azure_blob
-
-TZ = ZoneInfo("Europe/Stockholm")
 
 
 def today_str():
-    return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
+    return datetime.now(timezone.utc).date().isoformat()
 
 
 def run(league_id: int, manifest_path: str, with_api: bool = False, mode: str = "weekly", season: str = None):
