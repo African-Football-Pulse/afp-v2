@@ -1,11 +1,10 @@
 import yaml
 from datetime import datetime, timezone
 from src.collectors import collect_match_details
-
+from src.storage import azure_blob
 
 def today_str():
     return datetime.now(timezone.utc).date().isoformat()
-
 
 def run_all(with_api=True):
     """Loopar över alla aktiva ligor och hämtar matchdetaljer baserat på veckans manifest."""
@@ -23,16 +22,24 @@ def run_all(with_api=True):
         league_id = league["id"]
         name = league.get("name", str(league_id))
         manifest_path = f"stats/weekly/{date_str}/{league_id}/manifest.json"
+
+        # Kolla om manifest finns i Azure
+        container = "afp"  # eller ta från env om du vill
+        if not azure_blob.exists(container, manifest_path):
+            print(f"[collect_extract_weekly] ⚠️ No manifest for {name} ({league_id}), skipping.")
+            continue
+
         print(f"[collect_extract_weekly] Using manifest for {name} ({league_id}): {manifest_path}")
-
-        collect_match_details.run(
-            league_id=league_id,
-            manifest_path=manifest_path,
-            with_api=with_api,
-            mode="weekly"
-        )
-        print(f"[collect_extract_weekly] Done processing {name} ({league_id})")
-
+        try:
+            collect_match_details.run(
+                league_id=league_id,
+                manifest_path=manifest_path,
+                with_api=with_api,
+                mode="weekly"
+            )
+            print(f"[collect_extract_weekly] ✅ Done processing {name} ({league_id})")
+        except Exception as e:
+            print(f"[collect_extract_weekly] ❌ Failed for {name} ({league_id}): {e}")
 
 if __name__ == "__main__":
     run_all()
