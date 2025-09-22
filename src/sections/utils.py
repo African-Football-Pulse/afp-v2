@@ -61,3 +61,17 @@ def write_outputs(
     print(f"[utils] Uploaded {base}/section_manifest.json")
 
     return manifest
+
+def load_candidates(day: str, news_arg: str = None):
+    """
+    Hämta scored candidates från Azure Blob.
+    Returnerar (candidates, blob_path).
+    """
+    blob_path = news_arg if news_arg else f"producer/candidates/{day}/scored.jsonl"
+    try:
+        text = azure_blob.get_text(CONTAINER, blob_path)
+        candidates = [json.loads(line) for line in text.splitlines() if line.strip()]
+        return candidates, blob_path
+    except Exception as e:
+        print(f"[utils] WARN: could not load candidates from {blob_path} ({e})")
+        return [], blob_path
