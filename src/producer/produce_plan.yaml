@@ -12,7 +12,7 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+      - producer/candidates/{{today}}/scored.jsonl
 
   - section: S.NEWS.TOP_AFRICAN_PLAYERS
     args:
@@ -22,15 +22,7 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
-
-  - section: S.GENERIC.INTRO_POSTMATCH
-    args:
-      - --league
-      - premier_league
-      - --outdir
-      - sections
-      - --write-latest
+      - producer/candidates/{{today}}/scored.jsonl
 
   - section: S.OPINION.EXPERT_COMMENT
     args:
@@ -40,7 +32,7 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+      - producer/candidates/{{today}}/scored.jsonl
 
   - section: S.OPINION.DUO_EXPERTS
     args:
@@ -50,7 +42,15 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - collector/curated/news/sky_sports_premier_league/premier_league/{{today}}/items.json
+      - producer/candidates/{{today}}/scored.jsonl
+
+  - section: S.GENERIC.INTRO_POSTMATCH
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
 
   - section: S.GENERIC.INTRO_DAILY
     args:
