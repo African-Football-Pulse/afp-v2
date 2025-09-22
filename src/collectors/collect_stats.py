@@ -3,17 +3,14 @@ import argparse
 import requests
 import yaml
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 from src.storage import azure_blob
 
-TZ = ZoneInfo("Europe/Stockholm")
 BASE_URL = "https://api.soccerdataapi.com/matches/"
 
 
 def today_str():
-    return datetime.now(timezone.utc).astimezone(TZ).date().isoformat()
-
+    return datetime.now(timezone.utc).date().isoformat()
 
 def collect_stats(league_id: int, season: str = None, date: str = None, smoke: bool = False, mode: str = "weekly"):
     token = os.environ["SOCCERDATA_AUTH_KEY"]
