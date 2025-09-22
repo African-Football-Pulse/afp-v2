@@ -1,47 +1,37 @@
+import os
 import json
-import argparse
-from datetime import datetime
-from src.gpt import render_gpt   # <-- ändrad import
-import logging
+from src.gpt import run_gpt
 
-SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
+def build_section(args):
+    # Normalisera path till projektroten
+    news_path = os.path.join(os.getcwd(), args.news[0])
+    if not os.path.exists(news_path):
+        raise FileNotFoundError(f"Could not find candidates file: {news_path}")
+
+    with open(news_path, "r", encoding="utf-8") as f:
+        candidates = [json.loads(line) for line in f]
+
+    # Bygg GPT-prompt
+    SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
 You must produce a single speaker monologue that lasts ~45 seconds (≈120–160 words).
-Hard constraints:
+Constraints:
 - Output MUST be in English.
-- Stay strictly in character based on the provided persona block.
-- Fold in news facts without inventing specifics.
-- No placeholders like [TEAM]; use only info present in the news input.
-- Avoid list formats; deliver a flowing, spoken monologue.
-- Keep it record-ready: natural pacing, light rhetorical devices, 1–2 short pauses (…).
+- Stay strictly in character based on the provided persona.
+- Use only facts from the input, no invention.
+- Flowing spoken style, not list format.
 - End with a crisp takeaway line.
 """
 
-def build_section(args):
-    logging.info("[s_opinion_expert_comment] START")
-
-    with open(args.news[0], "r", encoding="utf-8") as f:
-        news_items = json.load(f)
-
-    # Persona
-    with open(args.personas, "r", encoding="utf-8") as f:
-        personas = json.load(f)
-    persona = personas[args.persona_id]
-
-    prompt = f"""Persona: {json.dumps(persona)}
-News items: {json.dumps(news_items[:3])}
-
-Write a ~45s expert comment as if spoken by this persona.
-"""
-
-    output = render_gpt(SYSTEM_RULES, prompt)
-
-    section = {
-        "section": "OPINION.EXPERT_COMMENT",
-        "date": args.date,
-        "persona": args.persona_id,
-        "script": output,
-        "sources": [n.get("link") for n in news_items[:3]]
+    persona = "AK"  # hårdkodat nu – styrs via personas.json senare
+    prompt = {
+        "system": SYSTEM_RULES,
+        "persona": persona,
+        "news": candidates
     }
 
-    logging.info("[s_opinion_expert_comment] DONE")
-    return section
+    text = run_gpt(prompt)
+
+    return {
+        "section": args.section,
+        "items": [{"persona": persona, "text": text}]
+    }
