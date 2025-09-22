@@ -8,6 +8,10 @@ def load_plan(path="src/producer/produce_plan.yaml"):
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+def load_library(path="src/producer/sections_library.yaml"):
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
 def main():
     today = datetime.now(timezone.utc).date().isoformat()
     plan_path = os.getenv("PRODUCE_PLAN", "src/producer/produce_plan.yaml")
@@ -20,6 +24,15 @@ def main():
 
     defaults = plan.get("defaults", {})
     league = defaults.get("league", "premier_league")
+
+    # --- Sanity check: lista sektioner i biblioteket ---
+    try:
+        library = load_library()
+        section_keys = list(library.get("sections", {}).keys())
+        print(f"[produce_auto] Sections i library ({len(section_keys)}): {', '.join(section_keys)}")
+    except Exception as e:
+        print(f"[produce_auto] Varning: kunde inte läsa sections_library.yaml → {e}")
+        section_keys = []
 
     print(f"[produce_auto] Datum: {today} (UTC)")
 
@@ -45,6 +58,9 @@ def main():
         if not section:
             print(f"[produce_auto] SKIP: task saknar 'section'")
             continue
+
+        if section_keys and section not in section_keys:
+            print(f"[produce_auto] Varning: section {section} finns ej i library")
 
         args = task.get("args", [])
         cmd = [
