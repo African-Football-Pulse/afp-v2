@@ -8,15 +8,15 @@ from src.gpt import run_gpt
 from src.personas import load_persona
 
 SYSTEM_RULES = """You are an expert scriptwriter for a football podcast.
-You must produce a single speaker monologue that lasts ~45 seconds (≈120–160 words).
+You must produce a two-speaker dialogue that lasts ~60–75 seconds (≈160–200 words).
 Hard constraints:
 - Output MUST be in English.
-- Stay strictly in character based on the provided persona block.
+- Stay strictly in character based on the provided persona blocks.
 - Fold in news facts without inventing specifics.
 - No placeholders like [TEAM]; use only info present in the news input.
-- Avoid list formats; deliver a flowing, spoken monologue.
-- Keep it record-ready: natural pacing, light rhetorical devices, 1–2 short pauses (…).
-- End with a crisp takeaway line.
+- Deliver as a flowing conversation (back-and-forth lines).
+- Keep it record-ready: natural pacing, rhetorical devices, light disagreement/banter.
+- End with a crisp shared takeaway line.
 """
 
 def _make_blob_url(container_sas_url: str, blob_path: str) -> str:
@@ -43,13 +43,15 @@ def _upload_bytes(container_sas_url: str, blob_path: str, data: bytes,
 def build_section(args) -> dict:
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
-    persona = load_persona(args.personas, args.persona_id)
+    persona_ids = args.persona_ids.split(",") if getattr(args, "persona_ids", None) else []
+    personas = [load_persona(args.personas, pid) for pid in persona_ids]
+
     news_path = args.news[0] if args.news else None
     news_items = []
     if news_path and Path(news_path).exists():
         news_items = json.loads(Path(news_path).read_text(encoding="utf-8"))
 
-    prompt = f"Persona:\n{json.dumps(persona, indent=2)}\n\nNews input:\n{json.dumps(news_items[:3], indent=2)}"
+    prompt = f"Personas:\n{json.dumps(personas, indent=2)}\n\nNews input:\n{json.dumps(news_items[:3], indent=2)}"
     output = run_gpt(SYSTEM_RULES, prompt)
 
     base = f"sections/{args.section}/{args.date}/{args.league or '_'}"
@@ -57,9 +59,9 @@ def build_section(args) -> dict:
     md_rel   = f"{base}/section.md"
     man_rel  = f"{base}/section_manifest.json"
 
-    data_payload = {"text": output, "persona": persona.get("id")}
+    data_payload = {"text": output, "personas": persona_ids}
     json_bytes = json.dumps(data_payload, indent=2).encode("utf-8")
-    md_bytes   = f"### Expert Comment ({persona.get('name')})\n\n{output}\n".encode("utf-8")
+    md_bytes   = f"### Duo Experts ({', '.join(p['name'] for p in personas)})\n\n{output}\n".encode("utf-8")
 
     manifest = {
         "section": args.section,
