@@ -1,61 +1,35 @@
-name: render
+name: Build and Deploy Render
+
 on:
   workflow_dispatch:
-    inputs:
-      date:
-        description: 'YYYY-MM-DD'
-        required: false
-      league:
-        description: 'league (e.g., epl)'
-        required: false
-        default: 'epl'
-      lang:
-        description: 'lang (e.g., en)'
-        required: false
-        default: 'en'
-      voice_id:
-        description: 'ElevenLabs voice id (AK/JJK)'
-        required: false
-      title_override:
-        description: 'Optional title override'
-        required: false
+  schedule:
+    - cron: "0 7 * * *"   # kör varje dag kl 07:00, justera om ni vill
 
 jobs:
   render:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Setup Python
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get update && sudo apt-get install -y ffmpeg
 
-
-      - name: Render audio (ElevenLabs)
+      - name: Run render
         env:
+          PYTHONPATH: src
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          ELEVENLABS_VOICE_IDS: ${{ secrets.ELEVENLABS_VOICE_IDS || vars.ELEVENLABS_VOICE_IDS }}
-
-          DATE: ${{ inputs.date }}
-          LEAGUE: ${{ inputs.league }}
-          LANG: ${{ inputs.lang }}
-          TITLE_OVERRIDE: ${{ inputs.title_override }}
-          AUDIO_FORMAT: mp3
-          RATE: '22050'
-          AZURE_SAS_URL: ${{ secrets.AZURE_SAS_URL }}
+          ELEVENLABS_VOICE_IDS: ${{ secrets.ELEVENLABS_VOICE_IDS }}
+          LANG: en
+          LEAGUE: premier_league
         run: |
-          python -m src.render.tts_elevenlabs
-
-      - name: Upload artifact (audio folder)
-        uses: actions/upload-artifact@v4
-        with:
-          name: audio-${{ inputs.date || 'today' }}-${{ inputs.league }}-${{ inputs.lang }}
-          path: audio/episodes/**
+          python -m render.run_render
