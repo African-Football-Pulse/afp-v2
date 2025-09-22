@@ -1,34 +1,13 @@
-import os, json
+import os
 from src.gpt import run_gpt
-from src.sections.utils import write_outputs
-from src.storage import azure_blob
-
-CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
+from src.sections.utils import write_outputs, load_candidates
 
 def build_section(args):
     """Produce a duo-expert opinion section with GPT commentary."""
-    blob_path = args.news[0] if args.news else f"producer/candidates/{args.date}/scored.jsonl"
-
-    try:
-        text = azure_blob.get_text(CONTAINER, blob_path)
-        candidates = [json.loads(line) for line in text.splitlines() if line.strip()]
-    except Exception as e:
-        print(f"[opinion_duo] WARN: could not load from Azure → {blob_path} ({e})")
-        payload = {
-            "slug": "opinion_duo_experts",
-            "title": "Duo Expert Opinion",
-            "text": "No candidates available.",
-            "length_s": 2,
-            "sources": {"news_input_path": blob_path},
-            "meta": {"persona": "Expert Duo"},
-            "type": "opinion",
-            "model": "gpt-4o-mini",
-            "items": [],
-        }
-        return write_outputs(args.section, args.date, args.league or "_", payload, status="no_candidates")
+    candidates, blob_path = load_candidates(args.date, args.news[0] if args.news else None)
 
     if not candidates:
-        print(f"[opinion_duo] WARN: empty candidates in {blob_path}")
+        print(f"[opinion_duo] WARN: No candidates available in {blob_path}")
         payload = {
             "slug": "opinion_duo_experts",
             "title": "Duo Expert Opinion",
