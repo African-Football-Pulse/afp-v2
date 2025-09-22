@@ -24,12 +24,14 @@ def run_all(with_api=True):
         name = league.get("name", str(league_id))
         manifest_path = f"stats/weekly/{date_str}/{league_id}/manifest.json"
         print(f"[collect_extract_weekly] Using manifest for {name} ({league_id}): {manifest_path}")
+
         collect_match_details.run(
             league_id=league_id,
             manifest_path=manifest_path,
             with_api=with_api,
             mode="weekly"
         )
+        print(f"[collect_extract_weekly] Done processing {name} ({league_id})")
 
 
 if __name__ == "__main__":
