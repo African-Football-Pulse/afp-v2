@@ -5,7 +5,7 @@ import yaml
 import os
 import sys
 
-LIBRARY_PATH = "config/sections_library.yaml"
+LIBRARY_PATH = "src/producer/sections_library.yaml"
 
 def run_step(cmd, desc):
     print(f"[produce_auto] Kör sektion: {' '.join(cmd)}")
