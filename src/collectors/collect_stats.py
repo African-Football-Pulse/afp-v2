@@ -1,7 +1,8 @@
 import os
 import argparse
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from collections import defaultdict
 from src.collectors import utils
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
@@ -13,34 +14,23 @@ def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def last_sunday_str():
-    """Returnera datumsträng för senaste söndag (gameday)."""
-    today = datetime.now(timezone.utc).date()
-    # Python: Monday=0 ... Sunday=6
-    offset = (today.weekday() - 6) % 7
-    last_sunday = today - timedelta(days=offset)
-    return last_sunday.isoformat()
-
-
-def run(league_id: int, mode: str = "weekly", date: str = None, season: str = None):
+def run(league_id: int, mode: str = "weekly", season: str = None):
     """
     Hämtar matcher från SoccerData API och sparar manifest i Azure.
+    - weekly: hämtar hela säsongen, plockar senaste datum med finished-matcher.
+    - fullseason: sparar alla matcher.
     """
     if not AUTH_KEY:
         raise RuntimeError("Missing SOCCERDATA_AUTH_KEY in environment")
 
     params = {"league_id": league_id, "auth_token": AUTH_KEY}
-
-    if mode == "weekly":
-        # Om inget datum anges → välj senaste söndag
-        params["date"] = date or last_sunday_str()
-    elif mode == "fullseason" and season:
+    if season:
         params["season"] = season
 
     headers = {"Accept-Encoding": "gzip", "Content-Type": "application/json"}
 
     print(f"[collect_stats] Requesting matches for league={league_id}, mode={mode}, params={params}")
-    resp = requests.get(API_URL, headers=headers, params=params, timeout=30)
+    resp = requests.get(API_URL, headers=headers, params=params, timeout=60)
     resp.raise_for_status()
 
     data = resp.json()
@@ -51,31 +41,55 @@ def run(league_id: int, mode: str = "weekly", date: str = None, season: str = No
     for league in data:
         matches.extend(league.get("matches", []))
 
-    if mode == "fullseason":
+    if mode == "weekly":
+        # Gruppér matcher per datum där status == finished
+        finished_by_date = defaultdict(list)
+        for m in matches:
+            if m.get("status") == "finished":
+                finished_by_date[m.get("date")].append(m)
+
+        if not finished_by_date:
+            raise RuntimeError(f"No finished matches found for league {league_id}")
+
+        # Hitta senaste datum (datum är i format DD/MM/YYYY)
+        parsed = [(datetime.strptime(d, "%d/%m/%Y").date(), d, ms)
+                  for d, ms in finished_by_date.items()]
+        parsed.sort(key=lambda x: x[0], reverse=True)
+        latest_date, latest_date_str, latest_matches = parsed[0]
+
+        blob_path = f"stats/weekly/{latest_date.isoformat()}/{league_id}/manifest.json"
+        manifest = {
+            "league_id": league_id,
+            "mode": "weekly",
+            "date": latest_date.isoformat(),
+            "matches": latest_matches,
+        }
+        utils.upload_json_debug(blob_path, manifest)
+        print(f"[collect_stats] ✅ Uploaded weekly manifest with {len(latest_matches)} matches "
+              f"({latest_date_str}) → {blob_path}")
+
+    elif mode == "fullseason":
         if not season:
             raise ValueError("Season must be provided in fullseason mode")
         blob_path = f"stats/{season}/{league_id}/manifest.json"
+        manifest = {
+            "league_id": league_id,
+            "mode": "fullseason",
+            "season": season,
+            "matches": matches,
+        }
+        utils.upload_json_debug(blob_path, manifest)
+        print(f"[collect_stats] ✅ Uploaded fullseason manifest with {len(matches)} matches → {blob_path}")
+
     else:
-        date_str = params["date"]
-        blob_path = f"stats/weekly/{date_str}/{league_id}/manifest.json"
-
-    manifest = {
-        "league_id": league_id,
-        "mode": mode,
-        "date": params.get("date", today_str()),
-        "matches": matches,
-    }
-
-    utils.upload_json_debug(blob_path, manifest)
-    print(f"[collect_stats] ✅ Uploaded manifest with {len(matches)} matches → {blob_path}")
+        raise ValueError(f"Unsupported mode: {mode}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--league_id", type=int, required=True)
     parser.add_argument("--mode", choices=["weekly", "fullseason"], default="weekly")
-    parser.add_argument("--date", type=str, required=False)
     parser.add_argument("--season", type=str, required=False)
     args = parser.parse_args()
 
-    run(args.league_id, mode=args.mode, date=args.date, season=args.season)
+    run(args.league_id, mode=args.mode, season=args.season)
