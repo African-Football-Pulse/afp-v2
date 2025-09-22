@@ -3,27 +3,13 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from src.storage import azure_blob
-from src.sections.utils import write_outputs
-
-CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
-
+from src.sections.utils import write_outputs, load_news_items
 
 def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
-
-def _load_items_for_feed(feed: str, league: str, day: str) -> List[Dict[str, Any]]:
-    path = f"curated/news/{feed}/{league}/{day}/items.json"
-    try:
-        return azure_blob.get_json(CONTAINER, path)
-    except Exception:
-        return []
-
-
 def _sort_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(items, key=lambda x: x.get("published_iso") or "", reverse=True)
-
 
 def _pick_topn_diverse(items: List[Dict[str, Any]], n: int) -> List[Dict[str, Any]]:
     seen_players, picked = set(), []
@@ -39,7 +25,6 @@ def _pick_topn_diverse(items: List[Dict[str, Any]], n: int) -> List[Dict[str, An
             break
     return picked
 
-
 def _render_section(league: str, day: str, items: List[Dict[str, Any]]) -> str:
     lines = [f"Top {len(items)} African player news for {league} ({day}):"]
     for it in items:
@@ -47,7 +32,6 @@ def _render_section(league: str, day: str, items: List[Dict[str, Any]]) -> str:
         src = it.get("source") or ""
         lines.append(f"- {title} ({src})")
     return "\n".join(lines)
-
 
 def build_section(args=None):
     """Bygg en sektion för topp 3 nyheter, skriver ut mappstruktur via utils."""
@@ -65,7 +49,7 @@ def build_section(args=None):
     all_items: List[Dict[str, Any]] = []
     feeds = [f.strip() for f in feeds_csv.split(",") if f.strip()]
     for feed in feeds:
-        feed_items = _load_items_for_feed(feed, league, day)
+        feed_items = load_news_items(feed, league, day)
         print(f"[s_news_top3_generic] {feed} → {len(feed_items)} items")
         all_items.extend(feed_items)
 
