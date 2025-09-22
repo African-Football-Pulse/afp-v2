@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime, timezone
 from src.storage import azure_blob
+from src.collectors import utils
 
 
 def today_str():
@@ -39,7 +40,6 @@ def run(league_id: int, manifest_path: str, with_api: bool = False, mode: str = 
             blob_path = f"stats/{season}/{league_id}/{match_id}.json"
         else:  # weekly
             date_str = today_str()
-            blob_path = f"stats/{date_str}/{league_id}/{match_id}.json"
+            blob_path = f"stats/weekly/{date_str}/{league_id}/{match_id}.json"
 
-        azure_blob.upload_json(container, blob_path, match)
-        print(f"[collect_match_details] Uploaded to Azure: {blob_path}")
+        utils.upload_json_debug(blob_path, match)
