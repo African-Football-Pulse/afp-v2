@@ -1,4 +1,3 @@
-# src/sections/s_opinion_expert_comment.py
 import os, json
 from src.gpt import run_gpt
 from src.sections.utils import write_outputs
@@ -43,16 +42,19 @@ def build_section(args):
         }
         return write_outputs(args.section, args.date, args.league or "_", payload, status="no_candidates")
 
+    # Ta top candidate
     top_item = candidates[0]
     news_text = top_item.get("text", "")
 
-    prompt = f"""You are an expert commentator for African football.
-Write a short (~120 words) spoken-style comment about this news:
+    # GPT setup
+    prompt_config = {
+        "persona": "Expert commentator for African football",
+        "instructions": f"Write a short (~120 words) spoken-style comment about this news:\n\n{news_text}\n\nStay natural, insightful, and record-ready."
+    }
+    ctx = {"candidates": [top_item]}
+    system_rules = "You are an assistant generating natural spoken-style football commentary."
 
-{news_text}
-
-Stay natural, insightful, and record-ready."""
-    gpt_output = run_gpt(prompt)
+    gpt_output = run_gpt(prompt_config, ctx, system_rules)
 
     payload = {
         "slug": "opinion_expert_comment",
