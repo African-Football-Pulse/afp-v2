@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 import os
 import json
-from pathlib import Path
 
 from src.storage import azure_blob
+from src.sections.utils import write_outputs
 
 CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
 
@@ -70,10 +70,13 @@ def build_section(args=None):
             "title": "Top African Players this week",
             "text": text,
             "length_s": 2,
-            "sources": [],
+            "sources": {"news_input_path": news_path},
             "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+            "type": "news",
+            "model": "gpt-4o-mini",
+            "items": [],
         }
-        return _write_outputs(section_id, day, league, payload, news_path, status="no_candidates")
+        return write_outputs(section_id, day, league, payload, status="no_candidates")
 
     picked = _pick_top_players(candidates, top_n=top_n)
 
@@ -91,43 +94,11 @@ def build_section(args=None):
         "title": "Top African Players this week",
         "text": body,
         "length_s": len(picked) * 30,  # antag ca 30 sekunder per spelare
-        "sources": [news_path] if news_path else [],
+        "sources": {"news_input_path": news_path},
         "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+        "type": "news",
+        "model": "gpt-4o-mini",
         "items": picked,
     }
 
-    return _write_outputs(section_id, day, league, payload, news_path, status="ok")
-
-
-def _write_outputs(section_id: str, day: str, league: str, payload: Dict[str, Any],
-                   news_path: str | None, status: str) -> Dict[str, Any]:
-    """Skriv ut section.json, section.md, section_manifest.json"""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-
-    base = f"sections/{section_id}/{day}/{league}/_"
-    outdir = Path(base)
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    # section.json
-    (outdir / "section.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # section.md
-    (outdir / "section.md").write_text(f"### {payload['title']}\n\n{payload['text']}\n", encoding="utf-8")
-
-    # manifest
-    manifest = {
-        "section_code": section_id,
-        "type": "news",
-        "model": "gpt-4o-mini",
-        "created_utc": ts,
-        "league": league,
-        "topic": "_",
-        "date": day,
-        "blobs": {"json": f"{base}/section.json", "md": f"{base}/section.md"},
-        "metrics": {"length_s": payload.get("length_s", 0)},
-        "sources": {"news_input_path": news_path},
-        "status": status,
-    }
-    (outdir / "section_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    return manifest
+    return write_outputs(section_id, day, league, payload, status="ok")
