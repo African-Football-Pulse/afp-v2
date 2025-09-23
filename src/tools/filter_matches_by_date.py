@@ -5,7 +5,7 @@ from src.storage import azure_blob
 def filter_matches(league_id: int, season: str, date: str, container: str = None):
     container = container or os.getenv("AZURE_STORAGE_CONTAINER", "afp")
     src_path = f"stats/{season}/{league_id}/matches.json"
-    data = azure_blob.download_json(src_path, container=container)
+    data = azure_blob.get_json(container, src_path)   # ✅ rätt metod
 
     if not data:
         print(f"[filter_matches_by_date] ❌ Kunde inte hämta {src_path} från Azure")
@@ -26,7 +26,7 @@ def filter_matches(league_id: int, season: str, date: str, container: str = None
 
     safe_date = date.replace("/", "-")
     out_path = f"stats/{season}/{league_id}/{safe_date}/matches.json"
-    azure_blob.upload_json(out_path, matches, container=container)
+    azure_blob.upload_json(container, out_path, matches)
     print(f"[filter_matches_by_date] ✅ Uploaded {len(matches)} matches to {out_path}")
 
 
