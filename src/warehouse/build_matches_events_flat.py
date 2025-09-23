@@ -1,5 +1,7 @@
+import os
 import json
 import pandas as pd
+from collections import defaultdict
 from src.storage import azure_blob
 
 
@@ -12,22 +14,35 @@ def main():
     container = "afp"
     matches_prefix = "stats/"
 
+    # Optional filters
+    filter_season = os.environ.get("SEASON")
+    filter_league = os.environ.get("LEAGUE")
+
     all_files = azure_blob.list_prefix(container, matches_prefix)
 
-    match_rows = []
-    event_rows = []
-
     # Filtrera fram bara match-filer (inte players eller manifest)
-    match_files = [f for f in all_files if f.endswith(".json") and "/players/" not in f]
+    match_files = [
+        f for f in all_files
+        if f.endswith(".json")
+        and "/players/" not in f
+        and not f.endswith("manifest.json")
+    ]
+
+    if filter_season:
+        match_files = [f for f in match_files if f.split("/")[1] == filter_season]
+    if filter_league:
+        match_files = [f for f in match_files if f.split("/")[2] == filter_league]
 
     total = len(match_files)
-    for i, path in enumerate(match_files, start=1):
-        # hoppa över manifest-filer
-        if path.endswith("manifest.json"):
-            if i % 100 == 0 or i == total:
-                print(f"[build_matches_events_flat] ⏩ Skipping manifest file {path} ({i}/{total})")
-            continue
+    if total == 0:
+        print("[build_matches_events_flat] ⚠️ No match files found with given filters")
+        return
 
+    # Samla rader per (season, league_id)
+    matches_by_group = defaultdict(list)
+    events_by_group = defaultdict(list)
+
+    for i, path in enumerate(match_files, start=1):
         parts = path.split("/")
         if len(parts) < 4:
             continue
@@ -46,7 +61,7 @@ def main():
             print(f"[build_matches_events_flat] Processing {i}/{total} → {path}")
 
         # --- Matchnivå ---
-        match_rows.append({
+        matches_by_group[(season, league_id)].append({
             "match_id": match.get("id"),
             "date": match.get("date"),
             "time": match.get("time"),
@@ -91,32 +106,34 @@ def main():
             row["player_out_id"] = pout.get("id")
             row["player_out_name"] = pout.get("name")
 
-            event_rows.append(row)
+            events_by_group[(season, league_id)].append(row)
 
-    # --- Bygg DataFrames ---
-    df_matches = pd.DataFrame(match_rows)
-    df_events = pd.DataFrame(event_rows)
+    # --- Skriv en parquet per grupp ---
+    for (season, league_id), rows in matches_by_group.items():
+        df_matches = pd.DataFrame(rows)
+        df_events = pd.DataFrame(events_by_group[(season, league_id)])
 
-    # 📦 Spara Parquet
-    parquet_matches = df_matches.to_parquet(index=False, engine="pyarrow")
-    parquet_events = df_events.to_parquet(index=False, engine="pyarrow")
+        path_matches = f"warehouse/base/matches_flat/{season}/{league_id}.parquet"
+        path_events = f"warehouse/base/events_flat/{season}/{league_id}.parquet"
 
-    azure_blob.put_bytes(
-        container=container,
-        blob_path="warehouse/base/matches_flat.parquet",
-        data=parquet_matches,
-        content_type="application/octet-stream"
-    )
+        parquet_matches = df_matches.to_parquet(index=False, engine="pyarrow")
+        parquet_events = df_events.to_parquet(index=False, engine="pyarrow")
 
-    azure_blob.put_bytes(
-        container=container,
-        blob_path="warehouse/base/events_flat.parquet",
-        data=parquet_events,
-        content_type="application/octet-stream"
-    )
+        azure_blob.put_bytes(
+            container=container,
+            blob_path=path_matches,
+            data=parquet_matches,
+            content_type="application/octet-stream"
+        )
 
-    print(f"[build_matches_events_flat] ✅ Uploaded {len(df_matches)} matches → warehouse/base/matches_flat.parquet")
-    print(f"[build_matches_events_flat] ✅ Uploaded {len(df_events)} events → warehouse/base/events_flat.parquet")
+        azure_blob.put_bytes(
+            container=container,
+            blob_path=path_events,
+            data=parquet_events,
+            content_type="application/octet-stream"
+        )
+
+        print(f"[build_matches_events_flat] ✅ Uploaded {len(df_matches)} matches, {len(df_events)} events → {season}/{league_id}")
 
 
 if __name__ == "__main__":
