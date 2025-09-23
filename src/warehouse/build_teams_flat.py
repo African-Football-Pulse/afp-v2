@@ -37,14 +37,16 @@ def main():
             print(f"[build_teams_flat] ⚠️ Skipping {path}: {e}")
             continue
 
+        stadium = team_data.get("stadium") or {}
+
         rows.append({
             "team_id": str(team_data.get("id", team_id)),
             "team_name": team_data.get("name"),
             "league_id": league_id,
-            "country": team_data.get("country", {}).get("name"),
-            "stadium_id": team_data.get("stadium", {}).get("id"),
-            "stadium_name": team_data.get("stadium", {}).get("name"),
-            "stadium_city": team_data.get("stadium", {}).get("city"),
+            "country": (team_data.get("country") or {}).get("name"),
+            "stadium_id": stadium.get("id"),
+            "stadium_name": stadium.get("name"),
+            "stadium_city": stadium.get("city"),
         })
 
     df = pd.DataFrame(rows)
