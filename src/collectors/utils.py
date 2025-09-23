@@ -1,4 +1,3 @@
-# src/collectors/utils.py
 import os
 from datetime import datetime
 from src.storage import azure_blob
