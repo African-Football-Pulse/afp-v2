@@ -4,47 +4,52 @@ import datetime
 from src.storage import azure_blob
 
 
-def filter_yesterday_for_league(league: dict, season: str, container: str):
+def filter_matches_for_league(league: dict, season: str, container: str, target_date: str):
     league_id = league["id"]
     league_name = league["name"]
 
-    # 1. Räkna ut gårdagens datum
-    yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    date_str = yesterday.strftime("%d/%m/%Y")
-    safe_date = yesterday.strftime("%d-%m-%Y")
+    safe_date = target_date.replace("/", "-")
 
-    # 2. Hämta fullseason matches.json
+    # 1. Hämta fullseason matches.json
     src_path = f"stats/{season}/{league_id}/matches.json"
     data = azure_blob.get_json(container, src_path)
     if not data:
-        print(f"[filter_matches_yesterday] ❌ Kunde inte hämta {src_path} från Azure")
+        print(f"[filter_matches_daily] ❌ Kunde inte hämta {src_path} från Azure")
         return
 
-    # 3. Filtrera fram matcherna för gårdagens datum
+    # 2. Filtrera fram matcherna för target_date
     matches = []
     leagues = data if isinstance(data, list) else [data]
 
     for lg in leagues:
         for stage in lg.get("stage", []):
             for m in stage.get("matches", []):
-                if m.get("date") == date_str:
+                if m.get("date") == target_date:
                     matches.append(m)
 
     if not matches:
-        print(f"[filter_matches_yesterday] ⏩ Inga matcher spelades i {league_name} ({league_id}) på {date_str}")
+        print(f"[filter_matches_daily] ⏩ Inga matcher spelades i {league_name} ({league_id}) på {target_date}")
         return
 
-    # 4. Ladda upp filtrerade matcher
+    # 3. Ladda upp filtrerade matcher
     out_path = f"stats/{season}/{league_id}/{safe_date}/matches.json"
     azure_blob.upload_json(container, out_path, matches)
-    print(f"[filter_matches_yesterday] ✅ Uploaded {len(matches)} matches for {league_name} ({league_id}) → {out_path}")
+    print(f"[filter_matches_daily] ✅ Uploaded {len(matches)} matches for {league_name} ({league_id}) → {out_path}")
 
 
 def main():
     season = os.getenv("SEASON", "2025-2026")
     container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-    print(f"Running filter_yesterday for season={season}, container={container}")
+    # Läs in override från MATCH_DATE, annars gårdagen
+    override_date = os.getenv("MATCH_DATE")
+    if override_date:
+        target_date = override_date
+        print(f"[filter_matches_daily] 🔎 Override: kör specifikt datum {target_date}")
+    else:
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        target_date = yesterday.strftime("%d/%m/%Y")
+        print(f"[filter_matches_daily] 📅 Default: kör gårdagen {target_date}")
 
     with open("config/leagues.yaml", "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -52,7 +57,7 @@ def main():
     for league in config.get("leagues", []):
         if not league.get("enabled", False):
             continue
-        filter_yesterday_for_league(league, season, container)
+        filter_matches_for_league(league, season, container, target_date)
 
 
 if __name__ == "__main__":
