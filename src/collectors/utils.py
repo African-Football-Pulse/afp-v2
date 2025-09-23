@@ -27,7 +27,7 @@ def download_json_debug(blob_path: str):
     Ladda ner JSON från Azure Blob + logga pathen.
     """
     try:
-        data = azure_blob.download_json(CONTAINER, blob_path)
+        data = azure_blob.get_json(CONTAINER, blob_path)  # ✅ använder get_json
         print(f"[collectors] Downloaded {blob_path}")
         return data
     except Exception as e:
