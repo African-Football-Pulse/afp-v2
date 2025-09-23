@@ -1,0 +1,37 @@
+name: Filter Matches Daily
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # varje dag 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season string, e.g. 2025-2026"
+        required: true
+        default: "2025-2026"
+      match_date:
+        description: "Optional override date (DD/MM/YYYY)"
+        required: false
+        default: ""
+
+jobs:
+  filter-daily:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install pyyaml azure-storage-blob
+
+      - name: Run filter_matches_daily
+        env:
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          AZURE_STORAGE_CONTAINER: afp
+          SEASON: ${{ github.event.inputs.season }}
+          MATCH_DATE: ${{ github.event.inputs.match_date }}
+        run: |
+          echo "Running filter for season=$SEASON date=${MATCH_DATE:-yesterday}"
+          python -m src.tools.filter_matches_daily
