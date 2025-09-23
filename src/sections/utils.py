@@ -1,91 +1,74 @@
-# src/sections/utils.py
-import json
-from datetime import datetime, timezone
-from typing import Dict, Any
+# src/producer/s_stats_top_performers_round.py
+
 import os
-
+from collections import defaultdict
 from src.storage import azure_blob
+from src.producer import stats_utils
+from src.producer.sections import utils as section_utils
 
-CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
+CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
-
-def write_outputs(
-    section_id: str,
-    day: str,
-    league: str,
-    payload: Dict[str, Any],
-    status: str,
-    topic: str = "_",
-    lang: str = "en",
-) -> Dict[str, Any]:
+def build_section(season: str, league_id: int, round_dates: list, output_prefix: str):
     """
-    Skriv ut section.json, section.md, section_manifest.json
-    direkt till Azure Blob Storage med azure_blob helpers.
-    Returnera manifest.
+    Producerar sektionen 'Top Performers' för en hel ligaomgång.
+    round_dates = t.ex. ["20-09-2025", "21-09-2025"]
     """
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    # Skapa / hämta eventfil (sparas även i Azure)
+    blob_path = stats_utils.save_african_events(
+        season=season, league_id=league_id, round_dates=round_dates, scope="round"
+    )
+    if not blob_path:
+        return None
 
-    base = f"sections/{section_id}/{day}/{league}/{topic}"
+    events = azure_blob.get_json(CONTAINER, blob_path)
+    if not events:
+        return None
 
-    # section.json
-    azure_blob.upload_json(CONTAINER, f"{base}/section.json", payload)
-    print(f"[utils] Uploaded {base}/section.json")
+    # Summera statistik per spelare
+    performers = defaultdict(lambda: {"goals": 0, "assists": 0, "cards": 0, "name": ""})
+    for ev in events:
+        pid = ev["player"]["id"]
+        pname = ev["player"]["name"]
+        performers[pid]["name"] = pname
 
-    # section.md
-    title = payload.get("title", section_id)
-    text = payload.get("text", "")
-    md_content = f"### {title}\n\n{text}\n"
-    azure_blob.put_text(CONTAINER, f"{base}/section.md", md_content)
-    print(f"[utils] Uploaded {base}/section.md")
+        if ev["event_type"] == "goal":
+            performers[pid]["goals"] += 1
+        elif ev["event_type"] == "assist":
+            performers[pid]["assists"] += 1
+        elif ev["event_type"] in ["yellow_card", "red_card"]:
+            performers[pid]["cards"] += 1
 
-    # manifest
+    if not performers:
+        return None
+
+    # Sortera topp 3 (mål + assist → mest betydelse)
+    top_players = sorted(
+        performers.values(),
+        key=lambda x: (x["goals"] + x["assists"]),
+        reverse=True
+    )[:3]
+
+    # Bygg sektionstext
+    lines = []
+    for p in top_players:
+        lines.append(
+            f"- {p['name']} ({p['goals']} mål, {p['assists']} assist, {p['cards']} kort)"
+        )
+    section_text = "Helgens afrikanska topp-prestationer:\n" + "\n".join(lines)
+
     manifest = {
-        "section_code": section_id,
-        "type": payload.get("type", "news"),
-        "model": payload.get("model", "gpt-4o-mini"),
-        "created_utc": ts,
-        "league": league,
-        "topic": topic,
-        "date": day,
-        "blobs": {
-            "json": f"{base}/section.json",
-            "md": f"{base}/section.md",
-            "manifest": f"{base}/section_manifest.json",
-        },
-        "metrics": {"length_s": payload.get("length_s", 0)},
-        "sources": payload.get("sources", {}),
-        "lang": lang,
-        "status": status,
+        "season": season,
+        "league_id": league_id,
+        "round_dates": round_dates,
+        "count": len(top_players),
+        "players": [p["name"] for p in top_players],
     }
-    azure_blob.upload_json(CONTAINER, f"{base}/section_manifest.json", manifest)
-    print(f"[utils] Uploaded {base}/section_manifest.json")
 
-    return manifest
-
-def load_candidates(day: str, news_arg: str = None):
-    """
-    Hämta scored candidates från Azure Blob.
-    Returnerar (candidates, blob_path).
-    """
-    blob_path = news_arg if news_arg else f"producer/candidates/{day}/scored.jsonl"
-    try:
-        text = azure_blob.get_text(CONTAINER, blob_path)
-        candidates = [json.loads(line) for line in text.splitlines() if line.strip()]
-        return candidates, blob_path
-    except Exception as e:
-        print(f"[utils] WARN: could not load candidates from {blob_path} ({e})")
-        return [], blob_path
-
-
-def load_news_items(feed: str, league: str, day: str):
-    """
-    Ladda nyhets-items från curated/news/<feed>/<league>/<day>/items.json
-    Returnerar en lista med items eller [] om inget hittas.
-    """
-    path = f"curated/news/{feed}/{league}/{day}/items.json"
-    try:
-        return azure_blob.get_json(CONTAINER, path)
-    except Exception as e:
-        print(f"[utils] WARN: could not load news items from {path} ({e})")
-        return []
-
+    # Spara output via sections/utils
+    return section_utils.write_outputs(
+        container=CONTAINER,
+        prefix=output_prefix,
+        section_id="S.STATS.TOP_PERFORMERS_ROUND",
+        text=section_text,
+        manifest=manifest,
+    )
