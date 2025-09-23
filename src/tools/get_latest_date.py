@@ -1,6 +1,24 @@
 # src/tools/get_latest_date.py
 import argparse
-from src.collectors.get_latest_match_date import get_latest_match_date_for_league
+import json
+from pathlib import Path
+from src import utils  # här ligger get_latest_finished_date
+
+def get_latest_match_date_for_league(league_id: int, stats_dir: str = "stats") -> str | None:
+    seasons = sorted(Path(stats_dir).iterdir(), key=lambda p: p.name, reverse=True)
+    if not seasons:
+        return None
+
+    latest_season = seasons[0].name
+    manifest_path = Path(stats_dir) / latest_season / str(league_id) / "manifest.json"
+
+    if not manifest_path.exists():
+        return None
+
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    return utils.get_latest_finished_date(manifest)
 
 def main():
     parser = argparse.ArgumentParser(description="Get latest finished match date for a league.")
