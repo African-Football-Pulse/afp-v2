@@ -18,18 +18,26 @@ def get_latest_finished_date(manifest) -> str | None:
     dates = []
 
     for m in matches:
-        if isinstance(m, dict) and "date" in m:
+        if isinstance(m, dict):
+            raw_date = m.get("match_date") or m.get("date")
+            if not raw_date:
+                continue
             try:
-                dt = datetime.strptime(m["date"], "%d/%m/%Y").date()
+                # Hantera både YYYY-MM-DD och DD/MM/YYYY
+                if "-" in raw_date:
+                    dt = datetime.strptime(raw_date, "%Y-%m-%d").date()
+                else:
+                    dt = datetime.strptime(raw_date, "%d/%m/%Y").date()
+
                 if dt < today:
                     dates.append(dt)
             except Exception:
                 continue
 
     if not dates:
-        print("[debug] Inga giltiga datum hittades i manifest")
+        print("[collectors] ⚠️ Inga matchdatum före idag hittades i manifest")
         return None
 
     latest = max(dates)
-    print(f"[debug] Valde senaste matchdatum: {latest}")
+    print(f"[collectors] ✅ Valde senaste matchdatum: {latest}")
     return latest.strftime("%Y-%m-%d")
