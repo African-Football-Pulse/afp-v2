@@ -1,55 +1,26 @@
 import os
 import json
 import pandas as pd
-from collections import defaultdict
 from src.storage import azure_blob
 
-
-def load_json_from_blob(container: str, path: str):
+def load_json_from_blob(container, path):
     text = azure_blob.get_text(container, path)
     return json.loads(text)
 
-
 def main():
-    container = "afp"
-    matches_prefix = "stats/"
+    container = os.environ.get("AZURE_CONTAINER")
+    season = os.environ.get("SEASON")
+    league = os.environ.get("LEAGUE")
 
-    # Optional filters
-    filter_season = os.environ.get("SEASON")
-    filter_league = os.environ.get("LEAGUE")
+    base_path = f"stats/{season}/{league}"
+    files = azure_blob.list_files(container, base_path)
 
-    all_files = azure_blob.list_prefix(container, matches_prefix)
+    rows = []
+    total = len(files)
 
-    # Filtrera fram bara match-filer (inte players eller manifest)
-    match_files = [
-        f for f in all_files
-        if f.endswith(".json")
-        and "/players/" not in f
-        and not f.endswith("manifest.json")
-    ]
-
-    if filter_season:
-        match_files = [f for f in match_files if f.split("/")[1] == filter_season]
-    if filter_league:
-        match_files = [f for f in match_files if f.split("/")[2] == filter_league]
-
-    total = len(match_files)
-    if total == 0:
-        print("[build_matches_events_flat] ⚠️ No match files found with given filters")
-        return
-
-    # Samla rader per (season, league_id)
-    matches_by_group = defaultdict(list)
-    events_by_group = defaultdict(list)
-
-    for i, path in enumerate(match_files, start=1):
-        parts = path.split("/")
-        if len(parts) < 4:
+    for i, path in enumerate(files, start=1):
+        if not path.endswith(".json"):
             continue
-
-        season = parts[1]
-        league_id = parts[2]
-
         try:
             match = load_json_from_blob(container, path)
         except Exception as e:
@@ -57,84 +28,36 @@ def main():
                 print(f"[build_matches_events_flat] ⚠️ Skipping {path}: {e} ({i}/{total})")
             continue
 
+        # hoppa över om filen är en lista (manifest, inte en match)
+        if isinstance(match, list):
+            continue
+
         if i % 100 == 0 or i == total:
             print(f"[build_matches_events_flat] Processing {i}/{total} → {path}")
 
-        # --- Matchnivå ---
-        matches_by_group[(season, league_id)].append({
-            "match_id": match.get("id"),
-            "date": match.get("date"),
-            "time": match.get("time"),
-            "league_id": league_id,
-            "season": season,
-            "home_team_id": (match.get("teams", {}).get("home") or {}).get("id"),
-            "home_team_name": (match.get("teams", {}).get("home") or {}).get("name"),
-            "away_team_id": (match.get("teams", {}).get("away") or {}).get("id"),
-            "away_team_name": (match.get("teams", {}).get("away") or {}).get("name"),
-            "status": match.get("status"),
-            "winner": match.get("winner"),
-            "home_goals": (match.get("goals") or {}).get("home_ft_goals"),
-            "away_goals": (match.get("goals") or {}).get("away_ft_goals"),
-            "has_extra_time": match.get("has_extra_time"),
-            "has_penalties": match.get("has_penalties"),
-        })
+        match_id = match.get("id")
+        events = match.get("events", [])
 
-        # --- Eventnivå ---
-        for ev in match.get("events", []):
+        for ev in events:
             row = {
-                "match_id": match.get("id"),
-                "league_id": league_id,
-                "season": season,
-                "event_type": ev.get("event_type"),
-                "event_minute": ev.get("event_minute"),
-                "team": ev.get("team"),
+                "match_id": match_id,
+                "event_id": ev.get("id"),
+                "type": ev.get("type", {}).get("name"),
+                "minute": ev.get("minute"),
+                "second": ev.get("second"),
+                "team_id": ev.get("team", {}).get("id"),
+                "player_id": ev.get("player", {}).get("id"),
+                "assist_id": (ev.get("assist_player") or {}).get("id"),
+                "x": ev.get("x"),
+                "y": ev.get("y"),
+                "outcome": ev.get("outcome", {}).get("name"),
             }
+            rows.append(row)
 
-            player = ev.get("player") or {}
-            row["player_id"] = player.get("id")
-            row["player_name"] = player.get("name")
-
-            assist = ev.get("assist_player") or {}
-            row["assist_id"] = assist.get("id")
-            row["assist_name"] = assist.get("name")
-
-            pin = ev.get("player_in") or {}
-            row["player_in_id"] = pin.get("id")
-            row["player_in_name"] = pin.get("name")
-
-            pout = ev.get("player_out") or {}
-            row["player_out_id"] = pout.get("id")
-            row["player_out_name"] = pout.get("name")
-
-            events_by_group[(season, league_id)].append(row)
-
-    # --- Skriv en parquet per grupp ---
-    for (season, league_id), rows in matches_by_group.items():
-        df_matches = pd.DataFrame(rows)
-        df_events = pd.DataFrame(events_by_group[(season, league_id)])
-
-        path_matches = f"warehouse/live/matches_flat/{season}/{league_id}.parquet"
-        path_events = f"warehouse/live/events_flat/{season}/{league_id}.parquet"
-
-        parquet_matches = df_matches.to_parquet(index=False, engine="pyarrow")
-        parquet_events = df_events.to_parquet(index=False, engine="pyarrow")
-
-        azure_blob.put_bytes(
-            container=container,
-            blob_path=path_matches,
-            data=parquet_matches,
-            content_type="application/octet-stream"
-        )
-
-        azure_blob.put_bytes(
-            container=container,
-            blob_path=path_events,
-            data=parquet_events,
-            content_type="application/octet-stream"
-        )
-
-        print(f"[build_matches_events_flat] ✅ Uploaded {len(df_matches)} matches, {len(df_events)} events → {season}/{league_id}")
-
+    df = pd.DataFrame(rows)
+    output_path = f"warehouse/live/matches_events_flat.parquet"
+    azure_blob.upload_df(container, output_path, df)
+    print(f"[build_matches_events_flat] ✅ Uploaded {len(rows)} rows → {output_path}")
 
 if __name__ == "__main__":
     main()
