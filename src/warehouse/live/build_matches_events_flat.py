@@ -14,11 +14,9 @@ def main():
     container = "afp"
     matches_prefix = "stats/"
 
-    # Live kräver alltid filter
-    season = os.environ.get("SEASON")
-    league_id = os.environ.get("LEAGUE")
-    if not season or not league_id:
-        raise RuntimeError("SEASON and LEAGUE must be set for live job")
+    # Optional filters
+    filter_season = os.environ.get("SEASON")
+    filter_league = os.environ.get("LEAGUE")
 
     all_files = azure_blob.list_prefix(container, matches_prefix)
 
@@ -28,30 +26,42 @@ def main():
         if f.endswith(".json")
         and "/players/" not in f
         and not f.endswith("manifest.json")
-        and f.split("/")[1] == season
-        and f.split("/")[2] == league_id
     ]
+
+    if filter_season:
+        match_files = [f for f in match_files if f.split("/")[1] == filter_season]
+    if filter_league:
+        match_files = [f for f in match_files if f.split("/")[2] == filter_league]
 
     total = len(match_files)
     if total == 0:
-        print("[build_matches_events_live] ⚠️ No match files found with given filters")
+        print("[build_matches_events_flat] ⚠️ No match files found with given filters")
         return
 
-    matches = []
-    events = []
+    # Samla rader per (season, league_id)
+    matches_by_group = defaultdict(list)
+    events_by_group = defaultdict(list)
 
     for i, path in enumerate(match_files, start=1):
+        parts = path.split("/")
+        if len(parts) < 4:
+            continue
+
+        season = parts[1]
+        league_id = parts[2]
+
         try:
             match = load_json_from_blob(container, path)
         except Exception as e:
-            print(f"[build_matches_events_live] ⚠️ Skipping {path}: {e} ({i}/{total})")
+            if i % 100 == 0 or i == total:
+                print(f"[build_matches_events_flat] ⚠️ Skipping {path}: {e} ({i}/{total})")
             continue
 
-        if i % 50 == 0 or i == total:
-            print(f"[build_matches_events_live] Processing {i}/{total} → {path}")
+        if i % 100 == 0 or i == total:
+            print(f"[build_matches_events_flat] Processing {i}/{total} → {path}")
 
         # --- Matchnivå ---
-        matches.append({
+        matches_by_group[(season, league_id)].append({
             "match_id": match.get("id"),
             "date": match.get("date"),
             "time": match.get("time"),
@@ -96,33 +106,34 @@ def main():
             row["player_out_id"] = pout.get("id")
             row["player_out_name"] = pout.get("name")
 
-            events.append(row)
+            events_by_group[(season, league_id)].append(row)
 
-    # --- Skriv parquet ---
-    df_matches = pd.DataFrame(matches)
-    df_events = pd.DataFrame(events)
+    # --- Skriv en parquet per grupp ---
+    for (season, league_id), rows in matches_by_group.items():
+        df_matches = pd.DataFrame(rows)
+        df_events = pd.DataFrame(events_by_group[(season, league_id)])
 
-    path_matches = f"warehouse/live/matches_flat/{season}/{league_id}.parquet"
-    path_events = f"warehouse/live/events_flat/{season}/{league_id}.parquet"
+        path_matches = f"warehouse/live/matches_flat/{season}/{league_id}.parquet"
+        path_events = f"warehouse/live/events_flat/{season}/{league_id}.parquet"
 
-    parquet_matches = df_matches.to_parquet(index=False, engine="pyarrow")
-    parquet_events = df_events.to_parquet(index=False, engine="pyarrow")
+        parquet_matches = df_matches.to_parquet(index=False, engine="pyarrow")
+        parquet_events = df_events.to_parquet(index=False, engine="pyarrow")
 
-    azure_blob.put_bytes(
-        container=container,
-        blob_path=path_matches,
-        data=parquet_matches,
-        content_type="application/octet-stream"
-    )
+        azure_blob.put_bytes(
+            container=container,
+            blob_path=path_matches,
+            data=parquet_matches,
+            content_type="application/octet-stream"
+        )
 
-    azure_blob.put_bytes(
-        container=container,
-        blob_path=path_events,
-        data=parquet_events,
-        content_type="application/octet-stream"
-    )
+        azure_blob.put_bytes(
+            container=container,
+            blob_path=path_events,
+            data=parquet_events,
+            content_type="application/octet-stream"
+        )
 
-    print(f"[build_matches_events_live] ✅ Uploaded {len(df_matches)} matches, {len(df_events)} events → {season}/{league_id}")
+        print(f"[build_matches_events_flat] ✅ Uploaded {len(df_matches)} matches, {len(df_events)} events → {season}/{league_id}")
 
 
 if __name__ == "__main__":
