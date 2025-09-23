@@ -39,8 +39,7 @@ def download_json_debug(blob_path: str):
 def get_latest_finished_date(manifest) -> str | None:
     """
     Hitta senaste matchdatum i manifest som ligger innan dagens datum.
-    Stödjer SoccerData-struktur (league -> stage -> matches).
-    Returnerar datumsträng 'YYYY-MM-DD' eller None.
+    Returnerar datumsträng 'DD/MM/YYYY' (för API-kompatibilitet).
     """
     if not manifest:
         return None
@@ -57,15 +56,12 @@ def get_latest_finished_date(manifest) -> str | None:
                 if not raw_date:
                     continue
 
-                # Debug: skriv ut varje datum vi hittar
-                print(f"[debug] match_id={m.get('id')} raw_date={raw_date}")
-
                 try:
                     dt = datetime.strptime(raw_date, "%d/%m/%Y").date()
                     if dt < today:
                         dates.append(dt)
-                except Exception as e:
-                    print(f"[debug] Kunde inte tolka datum '{raw_date}': {e}")
+                except Exception:
+                    continue
 
     if not dates:
         print("[collectors] ⚠️ Inga matchdatum före idag hittades i manifest")
@@ -73,4 +69,5 @@ def get_latest_finished_date(manifest) -> str | None:
 
     latest = max(dates)
     print(f"[collectors] ✅ Valde senaste matchdatum: {latest}")
-    return latest.strftime("%Y-%m-%d")
+    # 👇 returnera i rätt format för API:t
+    return latest.strftime("%d/%m/%Y")
