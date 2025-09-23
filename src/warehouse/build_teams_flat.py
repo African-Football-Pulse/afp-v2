@@ -37,13 +37,19 @@ def main():
             print(f"[build_teams_flat] ⚠️ Skipping {path}: {e}")
             continue
 
-        stadium = team_data.get("stadium") or {}
+        # Säker hantering av stadium (kan vara dict, list eller None)
+        stadium_raw = team_data.get("stadium")
+        stadium = stadium_raw if isinstance(stadium_raw, dict) else {}
+
+        # Säker hantering av country
+        country_raw = team_data.get("country")
+        country = country_raw.get("name") if isinstance(country_raw, dict) else None
 
         rows.append({
             "team_id": str(team_data.get("id", team_id)),
             "team_name": team_data.get("name"),
             "league_id": league_id,
-            "country": (team_data.get("country") or {}).get("name"),
+            "country": country,
             "stadium_id": stadium.get("id"),
             "stadium_name": stadium.get("name"),
             "stadium_city": stadium.get("city"),
