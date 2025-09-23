@@ -12,7 +12,7 @@ AUTH_KEY = os.getenv("SOCCERDATA_AUTH_KEY")
 def run(league_id: int, season: str, match_date: str = None, mode: str = "weekly"):
     """
     Hämtar statistik från SoccerData API för given liga, säsong och ev. datum.
-    Skriver resultat till Azure Blob.
+    Skriver resultat till Azure Blob och returnerar datat som Python-objekt.
     """
     params = {"league_id": league_id, "auth_token": AUTH_KEY}
 
@@ -52,6 +52,8 @@ def run(league_id: int, season: str, match_date: str = None, mode: str = "weekly
         print(f"[collect_stats] ✅ Uploaded {out_path}")
     except Exception as e:
         raise RuntimeError(f"Failed to upload stats for league {league_id}: {e}")
+
+    return data  # 👈 Viktigt! Returnera datat så att fullseason kan använda det
 
 
 # 👇 Wrapper för bakåtkompatibilitet
