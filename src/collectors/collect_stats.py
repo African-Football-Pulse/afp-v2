@@ -26,9 +26,11 @@ def run(league_id: int, mode: str = "weekly", season: str = None):
 
     params = {"league_id": league_id, "auth_token": AUTH_KEY}
 
-    # ⚡ Använd season om den är satt
+
+    if date:
+        params["date"] = date
     if season:
-    params["season"] = season
+        params["season"] = season
 
     headers = {"Accept-Encoding": "gzip", "Content-Type": "application/json"}
 
