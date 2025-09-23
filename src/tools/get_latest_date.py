@@ -1,38 +1,30 @@
 def get_latest_finished_date(manifest) -> str | None:
     """
     Hitta senaste matchdatum i manifest som ligger innan dagens datum.
-    Stödjer både { "matches": [...] } och en lista direkt.
+    Stödjer SoccerData-struktur med leagues -> stages -> matches.
     Returnerar datumsträng 'YYYY-MM-DD' eller None.
     """
     if not manifest:
         return None
 
-    if isinstance(manifest, dict):
-        matches = manifest.get("matches", [])
-    elif isinstance(manifest, list):
-        matches = manifest
-    else:
-        return None
-
     today = datetime.utcnow().date()
     dates = []
 
-    for m in matches:
-        if isinstance(m, dict):
-            raw_date = m.get("match_date") or m.get("date")
-            if not raw_date:
-                continue
-            try:
-                # Hantera både YYYY-MM-DD och DD/MM/YYYY
-                if "-" in raw_date:
-                    dt = datetime.strptime(raw_date, "%Y-%m-%d").date()
-                else:
-                    dt = datetime.strptime(raw_date, "%d/%m/%Y").date()
+    # Manifest kan vara list eller dict
+    leagues = manifest if isinstance(manifest, list) else [manifest]
 
-                if dt < today:
-                    dates.append(dt)
-            except Exception:
-                continue
+    for league in leagues:
+        for stage in league.get("stage", []):
+            for m in stage.get("matches", []):
+                raw_date = m.get("date")
+                if not raw_date:
+                    continue
+                try:
+                    dt = datetime.strptime(raw_date, "%d/%m/%Y").date()
+                    if dt < today:
+                        dates.append(dt)
+                except Exception:
+                    continue
 
     if not dates:
         print("[collectors] ⚠️ Inga matchdatum före idag hittades i manifest")
