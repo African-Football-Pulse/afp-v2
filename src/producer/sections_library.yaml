@@ -34,7 +34,7 @@ sections:
     runner: build_section
     description: Spotlight on one club based on recent news candidates
 
-  S.STATS.TOP_PERFORMERS_ROUND:        # 🆕 vår nya sektion
-    module: s_stats_top_performers_round
+  S.STATS.DRIVER:
+    module: s_stats_driver
     runner: build_section
-    description: Best African performers across the full round
+    description: Run all stats sections across all leagues
