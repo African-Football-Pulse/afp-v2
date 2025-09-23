@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import pandas as pd
 from collections import defaultdict
 from src.storage import azure_blob
@@ -8,6 +9,11 @@ from src.storage import azure_blob
 def load_json_from_blob(container: str, path: str):
     text = azure_blob.get_text(container, path)
     return json.loads(text)
+
+
+def is_date_folder(name: str) -> bool:
+    """Returnerar True om strängen är på formatet DD-MM-YYYY."""
+    return re.match(r"\d{2}-\d{2}-\d{4}", name) is not None
 
 
 def main():
@@ -20,12 +26,13 @@ def main():
 
     all_files = azure_blob.list_prefix(container, matches_prefix)
 
-    # Filtrera fram bara match-filer (inte players eller manifest)
+    # Filtrera fram bara match-filer (inte players, manifest eller mappar med datum)
     match_files = [
         f for f in all_files
         if f.endswith(".json")
         and "/players/" not in f
         and not f.endswith("manifest.json")
+        and not any(is_date_folder(part) for part in f.split("/"))
     ]
 
     if filter_season:
@@ -35,7 +42,7 @@ def main():
 
     total = len(match_files)
     if total == 0:
-        print("[build_matches_events_flat] ⚠️ No match files found with given filters")
+        print("[build_matches_events_flat:live] ⚠️ No match files found with given filters")
         return
 
     # Samla rader per (season, league_id)
@@ -54,11 +61,11 @@ def main():
             match = load_json_from_blob(container, path)
         except Exception as e:
             if i % 100 == 0 or i == total:
-                print(f"[build_matches_events_flat] ⚠️ Skipping {path}: {e} ({i}/{total})")
+                print(f"[build_matches_events_flat:live] ⚠️ Skipping {path}: {e} ({i}/{total})")
             continue
 
         if i % 100 == 0 or i == total:
-            print(f"[build_matches_events_flat] Processing {i}/{total} → {path}")
+            print(f"[build_matches_events_flat:live] Processing {i}/{total} → {path}")
 
         # --- Matchnivå ---
         matches_by_group[(season, league_id)].append({
@@ -113,9 +120,8 @@ def main():
         df_matches = pd.DataFrame(rows)
         df_events = pd.DataFrame(events_by_group[(season, league_id)])
 
-        # 👇 Enda skillnaden: output går till warehouse/live istället för warehouse/base
         path_matches = f"warehouse/live/matches_flat/{season}/{league_id}.parquet"
-        path_events  = f"warehouse/live/events_flat/{season}/{league_id}.parquet"
+        path_events = f"warehouse/live/events_flat/{season}/{league_id}.parquet"
 
         parquet_matches = df_matches.to_parquet(index=False, engine="pyarrow")
         parquet_events = df_events.to_parquet(index=False, engine="pyarrow")
@@ -134,7 +140,7 @@ def main():
             content_type="application/octet-stream"
         )
 
-        print(f"[build_matches_events_flat] ✅ Uploaded {len(df_matches)} matches, {len(df_events)} events → {season}/{league_id}")
+        print(f"[build_matches_events_flat:live] ✅ Uploaded {len(df_matches)} matches, {len(df_events)} events → {season}/{league_id}")
 
 
 if __name__ == "__main__":
