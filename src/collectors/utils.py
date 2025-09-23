@@ -36,17 +36,26 @@ def download_json_debug(blob_path: str):
         return None
 
 
-def get_latest_finished_date(manifest: dict) -> str | None:
+def get_latest_finished_date(manifest) -> str | None:
     """
     Hitta senaste datumet för avslutade matcher i manifest.
+    Stödjer både { "matches": [...] } och en lista direkt.
     Returnerar datumsträng 'YYYY-MM-DD' eller None.
     """
     if not manifest:
         return None
 
+    # Plocka ut matches beroende på format
+    if isinstance(manifest, dict):
+        matches = manifest.get("matches", [])
+    elif isinstance(manifest, list):
+        matches = manifest
+    else:
+        return None
+
     dates = []
-    for m in manifest.get("matches", []):
-        if m.get("status") == "finished" and "date" in m:
+    for m in matches:
+        if isinstance(m, dict) and m.get("status") == "finished" and "date" in m:
             try:
                 dt = datetime.strptime(m["date"], "%d/%m/%Y")
                 dates.append(dt)
