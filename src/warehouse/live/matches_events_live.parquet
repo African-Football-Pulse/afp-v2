@@ -1,0 +1,84 @@
+import os
+import json
+import pandas as pd
+from datetime import datetime, timedelta
+from src.storage import azure_blob
+
+CONTAINER = os.environ.get("AZURE_CONTAINER", "afp")
+
+def list_recent_match_files(container, days=7, season="2025-2026", league_id="228"):
+    """
+    Hämta matcher i stats/<season>/<league_id>/ som är yngre än 'days'.
+    """
+    prefix = f"stats/{season}/{league_id}/"
+    all_blobs = azure_blob.list_blobs(container, prefix)
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    result = []
+    for blob_name in all_blobs:
+        if not blob_name.endswith(".json"):
+            continue
+        props = azure_blob.get_blob_properties(container, blob_name)
+        last_modified = props.get("last_modified")
+        if last_modified and last_modified > cutoff:
+            result.append(blob_name)
+    return result
+
+def load_match(container, path):
+    text = azure_blob.get_text(container, path)
+    return json.loads(text)
+
+def main():
+    league_id = os.environ.get("LEAGUE_ID", "228")  # default Premier League
+    season = os.environ.get("SEASON", "2025-2026")
+    days = int(os.environ.get("DAYS", "7"))
+
+    print(f"[build_matches_events_live] ⏩ Fetching matches for {league_id}, season {season}, last {days} days")
+
+    match_files = list_recent_match_files(CONTAINER, days=days, season=season, league_id=league_id)
+    print(f"[build_matches_events_live] Found {len(match_files)} new/updated matches")
+
+    rows = []
+    for idx, mf in enumerate(match_files, 1):
+        data = load_match(CONTAINER, mf)
+        match_id = data.get("id")
+        events = data.get("events", [])
+        for ev in events:
+            row = {
+                "match_id": match_id,
+                "minute": ev.get("minute"),
+                "type": ev.get("type"),
+                "player_id": ev.get("player", {}).get("id"),
+                "player_name": ev.get("player", {}).get("name"),
+                "assist_id": (ev.get("assist_player") or {}).get("id"),
+                "assist_name": (ev.get("assist_player") or {}).get("name"),
+            }
+            rows.append(row)
+
+        if idx % 10 == 0:
+            print(f"[build_matches_events_live] Processed {idx}/{len(match_files)}")
+
+    if not rows:
+        print("[build_matches_events_live] No events found.")
+        return
+
+    new_df = pd.DataFrame(rows)
+
+    # Ladda befintlig live-parquet om den finns
+    path = "warehouse/live/matches_events_live.parquet"
+    try:
+        existing_bytes = azure_blob.get_bytes(CONTAINER, path)
+        existing_df = pd.read_parquet(pd.io.common.BytesIO(existing_bytes))
+        df = pd.concat([existing_df, new_df]).drop_duplicates(
+            subset=["match_id", "minute", "type", "player_id", "assist_id"]
+        )
+        print(f"[build_matches_events_live] Upserted: {len(new_df)} → Total {len(df)}")
+    except Exception:
+        df = new_df
+        print(f"[build_matches_events_live] Created new live parquet with {len(df)} rows")
+
+    parquet_bytes = df.to_parquet(index=False, engine="pyarrow")
+    azure_blob.upload_bytes(CONTAINER, path, parquet_bytes, content_type="application/octet-stream")
+    print(f"[build_matches_events_live] ✅ Uploaded → {path}")
+
+if __name__ == "__main__":
+    main()
