@@ -8,3 +8,4 @@ pydub
 ffmpeg-python
 pandas>=2.2.0
 beautifulsoup4
+pyarrow>=16.0.0
