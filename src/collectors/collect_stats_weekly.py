@@ -19,7 +19,6 @@ def main():
     for league in leagues:
         league_id = league["id"]
         season = league.get("season")
-        league_key = league.get("key")
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         print(f"[collect_stats_weekly] Processing {league['name']} ({league_id}) for {today}...")
@@ -33,8 +32,10 @@ def main():
 
         match_date = utils.get_latest_finished_date(manifest)
         if not match_date:
-            print(f"[collect_stats_weekly] ❌ Failed for {league['name']} ({league_id}): No finished matches found in manifest")
+            print(f"[collect_stats_weekly] ❌ Failed for {league['name']} ({league_id}): No valid match dates found before today")
             continue
+
+        print(f"[collect_stats_weekly] ➡️ Using match date {match_date} for {league['name']} ({league_id})")
 
         try:
             collect_stats.run(league_id, season, match_date, mode="weekly")
