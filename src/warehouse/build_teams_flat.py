@@ -23,6 +23,11 @@ def main():
         if not path.endswith(".json"):
             continue
 
+        # Hoppa över manifestfiler (de är listor med ID:n)
+        if "manifest" in path:
+            print(f"[build_teams_flat] ⏩ Skipping manifest file {path}")
+            continue
+
         # Exempel: teams/228/4157.json
         parts = path.split("/")
         if len(parts) < 3:
@@ -37,7 +42,7 @@ def main():
             print(f"[build_teams_flat] ⚠️ Skipping {path}: {e}")
             continue
 
-        # Säker hantering av stadium (kan vara dict, list eller None)
+        # Säker hantering av stadium (kan vara dict, None eller fel format)
         stadium_raw = team_data.get("stadium")
         stadium = stadium_raw if isinstance(stadium_raw, dict) else {}
 
