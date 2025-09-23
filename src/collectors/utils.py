@@ -39,7 +39,7 @@ def download_json_debug(blob_path: str):
 def get_latest_finished_date(manifest) -> str | None:
     """
     Hitta senaste matchdatum i manifest som ligger innan dagens datum.
-    Returnerar datumsträng 'DD/MM/YYYY' (för API-kompatibilitet).
+    Returnerar datumsträng 'DD-MM-YYYY' (för API-kompatibilitet).
     """
     if not manifest:
         return None
@@ -69,5 +69,5 @@ def get_latest_finished_date(manifest) -> str | None:
 
     latest = max(dates)
     print(f"[collectors] ✅ Valde senaste matchdatum: {latest}")
-    # 👇 returnera i rätt format för API:t
-    return latest.strftime("%d/%m/%Y")
+    # 👇 returnera i bindestrecksformat
+    return latest.strftime("%d-%m-%Y")
