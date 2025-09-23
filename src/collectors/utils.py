@@ -22,6 +22,20 @@ def upload_text_debug(blob_path: str, text: str, content_type: str = "text/plain
     print(f"[collectors] Uploaded {blob_path}")
 
 
+def download_json_debug(blob_path: str) -> dict:
+    """
+    Ladda ner JSON från Azure Blob + logga pathen.
+    Returnerar dict (eller list beroende på fil).
+    """
+    try:
+        data = azure_blob.download_json(CONTAINER, blob_path)
+        print(f"[collectors] Downloaded {blob_path}")
+        return data
+    except Exception as e:
+        print(f"[collectors] ⚠️ Misslyckades hämta {blob_path}: {e}")
+        return None
+
+
 def get_latest_finished_date(manifest: dict) -> str:
     """
     Returnerar senaste speldatum (YYYY-MM-DD) från ett manifest.
