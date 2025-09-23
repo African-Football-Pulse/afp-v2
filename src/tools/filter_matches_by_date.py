@@ -1,8 +1,9 @@
 import argparse
+import os
 from src.storage import azure_blob
 
 def filter_matches(league_id: int, season: str, date: str, container: str = None):
-    container = container or azure_blob.CONTAINER
+    container = container or os.getenv("AZURE_STORAGE_CONTAINER", "afp")
     src_path = f"stats/{season}/{league_id}/matches.json"
     data = azure_blob.download_json(src_path, container=container)
 
