@@ -69,3 +69,11 @@ tasks:
       - --write-latest
       - --news
       - producer/candidates/{{today}}/scored.jsonl
+
+  - section: S.STATS.TOP_PERFORMERS_ROUND   # 🆕 ny stats-sektion
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
