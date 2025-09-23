@@ -1,7 +1,7 @@
 import argparse
 import json
 from pathlib import Path
-from src.utils import get_latest_finished_date  # ✅ rätt import
+from src.collectors.utils import get_latest_finished_date  # ✅ rätt import
 
 def get_latest_match_date_for_league(league_id: int, stats_dir: str = "stats") -> str | None:
     seasons = sorted(Path(stats_dir).iterdir(), key=lambda p: p.name, reverse=True)
@@ -17,7 +17,7 @@ def get_latest_match_date_for_league(league_id: int, stats_dir: str = "stats") -
     with open(manifest_path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
 
-    return get_latest_finished_date(manifest)  # ✅ använd funktionen
+    return get_latest_finished_date(manifest)
 
 def main():
     parser = argparse.ArgumentParser(description="Get latest finished match date for a league.")
