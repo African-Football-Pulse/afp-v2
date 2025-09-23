@@ -1,68 +1,128 @@
 import os
 import json
 import pandas as pd
+from collections import defaultdict
 from src.storage import azure_blob
 
-def load_json_from_blob(container, path):
+
+def load_json_from_blob(container: str, path: str):
     text = azure_blob.get_text(container, path)
     return json.loads(text)
 
+
 def main():
-    container = os.getenv("AZURE_CONTAINER", "afp")
+    container = "afp"
+    matches_prefix = "stats/"
 
-    season_filter = os.getenv("SEASON")
-    league_filter = os.getenv("LEAGUE")
-
-    if not season_filter or not league_filter:
+    # Live kräver alltid filter
+    season = os.environ.get("SEASON")
+    league_id = os.environ.get("LEAGUE")
+    if not season or not league_id:
         raise RuntimeError("SEASON and LEAGUE must be set for live job")
 
-    rows = []
-    match_count = 0
+    all_files = azure_blob.list_prefix(container, matches_prefix)
 
-    base_path = f"stats/{season_filter}/{league_filter}"
-    match_files = azure_blob.list_files(container, base_path)
+    # Filtrera fram bara match-filer (inte players eller manifest)
+    match_files = [
+        f for f in all_files
+        if f.endswith(".json")
+        and "/players/" not in f
+        and not f.endswith("manifest.json")
+        and f.split("/")[1] == season
+        and f.split("/")[2] == league_id
+    ]
 
-    for mf in match_files:
-        if mf.endswith("manifest.json"):
+    total = len(match_files)
+    if total == 0:
+        print("[build_matches_events_live] ⚠️ No match files found with given filters")
+        return
+
+    matches = []
+    events = []
+
+    for i, path in enumerate(match_files, start=1):
+        try:
+            match = load_json_from_blob(container, path)
+        except Exception as e:
+            print(f"[build_matches_events_live] ⚠️ Skipping {path}: {e} ({i}/{total})")
             continue
 
-        match_data = load_json_from_blob(container, mf)
-        if isinstance(match_data, list):
-            continue
+        if i % 50 == 0 or i == total:
+            print(f"[build_matches_events_live] Processing {i}/{total} → {path}")
 
-        match_count += 1
-        if match_count % 50 == 0:
-            print(f"[build_matches_events_live] ({match_count}) Processing {mf}")
+        # --- Matchnivå ---
+        matches.append({
+            "match_id": match.get("id"),
+            "date": match.get("date"),
+            "time": match.get("time"),
+            "league_id": league_id,
+            "season": season,
+            "home_team_id": (match.get("teams", {}).get("home") or {}).get("id"),
+            "home_team_name": (match.get("teams", {}).get("home") or {}).get("name"),
+            "away_team_id": (match.get("teams", {}).get("away") or {}).get("id"),
+            "away_team_name": (match.get("teams", {}).get("away") or {}).get("name"),
+            "status": match.get("status"),
+            "winner": match.get("winner"),
+            "home_goals": (match.get("goals") or {}).get("home_ft_goals"),
+            "away_goals": (match.get("goals") or {}).get("away_ft_goals"),
+            "has_extra_time": match.get("has_extra_time"),
+            "has_penalties": match.get("has_penalties"),
+        })
 
-        match_id = match_data.get("id")
-
-        for ev in match_data.get("events", []):
+        # --- Eventnivå ---
+        for ev in match.get("events", []):
             row = {
-                "match_id": match_id,
-                "league_id": league_filter,
-                "season": season_filter,
-                "date": match_data.get("date"),
+                "match_id": match.get("id"),
+                "league_id": league_id,
+                "season": season,
                 "event_type": ev.get("event_type"),
                 "event_minute": ev.get("event_minute"),
                 "team": ev.get("team"),
-                "player_id": ev.get("player", {}).get("id") if ev.get("player") else None,
-                "player_name": ev.get("player", {}).get("name") if ev.get("player") else None,
-                "assist_id": ev.get("assist_player", {}).get("id") if ev.get("assist_player") else None,
-                "assist_name": ev.get("assist_player", {}).get("name") if ev.get("assist_player") else None,
             }
-            rows.append(row)
 
-    if not rows:
-        print("[build_matches_events_live] ⚠️ No rows built, nothing to upload")
-        return
+            player = ev.get("player") or {}
+            row["player_id"] = player.get("id")
+            row["player_name"] = player.get("name")
 
-    df = pd.DataFrame(rows)
-    parquet_bytes = df.to_parquet(index=False, engine="pyarrow")
+            assist = ev.get("assist_player") or {}
+            row["assist_id"] = assist.get("id")
+            row["assist_name"] = assist.get("name")
 
-    out_path = f"warehouse/live/matches_events_flat_{league_filter}_{season_filter}.parquet"
-    azure_blob.upload_bytes(container, out_path, parquet_bytes)
+            pin = ev.get("player_in") or {}
+            row["player_in_id"] = pin.get("id")
+            row["player_in_name"] = pin.get("name")
 
-    print(f"[build_matches_events_live] ✅ Uploaded {len(rows)} rows → {out_path}")
+            pout = ev.get("player_out") or {}
+            row["player_out_id"] = pout.get("id")
+            row["player_out_name"] = pout.get("name")
+
+            events.append(row)
+
+    # --- Skriv parquet ---
+    df_matches = pd.DataFrame(matches)
+    df_events = pd.DataFrame(events)
+
+    path_matches = f"warehouse/live/matches_flat/{season}/{league_id}.parquet"
+    path_events = f"warehouse/live/events_flat/{season}/{league_id}.parquet"
+
+    parquet_matches = df_matches.to_parquet(index=False, engine="pyarrow")
+    parquet_events = df_events.to_parquet(index=False, engine="pyarrow")
+
+    azure_blob.put_bytes(
+        container=container,
+        blob_path=path_matches,
+        data=parquet_matches,
+        content_type="application/octet-stream"
+    )
+
+    azure_blob.put_bytes(
+        container=container,
+        blob_path=path_events,
+        data=parquet_events,
+        content_type="application/octet-stream"
+    )
+
+    print(f"[build_matches_events_live] ✅ Uploaded {len(df_matches)} matches, {len(df_events)} events → {season}/{league_id}")
 
 
 if __name__ == "__main__":
