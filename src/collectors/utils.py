@@ -1,3 +1,4 @@
+# src/collectors/utils.py
 import os
 from datetime import datetime
 from src.storage import azure_blob
@@ -27,32 +28,25 @@ def download_json_debug(blob_path: str):
     Ladda ner JSON från Azure Blob + logga pathen.
     """
     try:
-        obj = azure_blob.download_json(CONTAINER, blob_path)
+        data = azure_blob.get_json(CONTAINER, blob_path)   # ✅ rätt metod
         print(f"[collectors] Downloaded {blob_path}")
-        return obj
+        return data
     except Exception as e:
         print(f"[collectors] ⚠️ Misslyckades att ladda {blob_path}: {e}")
         return None
 
 
-def get_latest_finished_date(manifest) -> str | None:
+def get_latest_finished_date(manifest: dict) -> str | None:
     """
     Hitta senaste datumet för avslutade matcher i manifest.
-    Hanterar både dict med 'matches' och list med matcher.
     Returnerar datumsträng 'YYYY-MM-DD' eller None.
     """
     if not manifest:
         return None
 
-    matches = []
-    if isinstance(manifest, dict):
-        matches = manifest.get("matches", [])
-    elif isinstance(manifest, list):
-        matches = manifest  # hela listan är matcher
-
     dates = []
-    for m in matches:
-        if isinstance(m, dict) and m.get("status") == "finished" and "date" in m:
+    for m in manifest.get("matches", []):
+        if m.get("status") == "finished" and "date" in m:
             try:
                 dt = datetime.strptime(m["date"], "%d/%m/%Y")
                 dates.append(dt)
