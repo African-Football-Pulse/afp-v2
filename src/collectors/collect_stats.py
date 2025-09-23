@@ -1,5 +1,6 @@
 import os
 import requests
+import urllib.parse
 from datetime import datetime, timezone
 from src.storage import azure_blob
 
@@ -25,6 +26,10 @@ def run(league_id: int, season: str, match_date: str, mode: str = "weekly"):
     }
 
     print(f"[collect_stats] Requesting matches for league={league_id}, mode={mode}, params={params}")
+
+    # 👇 Bygg och logga full URL
+    full_url = f"{API_URL}?{urllib.parse.urlencode(params)}"
+    print(f"[collect_stats] Full URL: {full_url}")
 
     try:
         resp = requests.get(API_URL, headers=headers, params=params, timeout=30)
