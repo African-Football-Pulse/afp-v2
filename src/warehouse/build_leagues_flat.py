@@ -1,5 +1,4 @@
-# src/warehouse/build_leagues_flat.py
-
+import os
 import json
 import pandas as pd
 import yaml
@@ -11,20 +10,20 @@ def load_json_from_blob(container: str, path: str):
     return json.loads(text)
 
 
-def load_yaml_from_blob(container: str, path: str):
-    text = azure_blob.get_text(container, path)
-    return yaml.safe_load(text)
+def load_yaml_local(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
 
 def main():
     container = "afp"
 
     # Inputs
-    yaml_path = "config/leagues.yaml"
-    json_path = "meta/leagues.json"
+    local_yaml_path = "config/leagues.yaml"     # från repo
+    blob_json_path = "meta/leagues.json"        # från Azure
 
-    leagues_yaml = load_yaml_from_blob(container, yaml_path).get("leagues", [])
-    leagues_json = load_json_from_blob(container, json_path).get("results", [])
+    leagues_yaml = load_yaml_local(local_yaml_path).get("leagues", [])
+    leagues_json = load_json_from_blob(container, blob_json_path).get("results", [])
 
     rows = []
 
