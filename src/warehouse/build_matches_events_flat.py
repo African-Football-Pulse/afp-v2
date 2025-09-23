@@ -1,4 +1,4 @@
-# src/warehouse/build_matches_events.py
+# src/warehouse/build_matches_events_flat.py
 
 import json
 import pandas as pd
@@ -19,28 +19,25 @@ def main():
     match_rows = []
     event_rows = []
 
-    for path in all_files:
-        if not path.endswith(".json"):
-            continue
+    # Filtrera fram bara match-filer (inte players eller manifest)
+    match_files = [f for f in all_files if f.endswith(".json") and "/players/" not in f]
 
-        # Vi vill bara ha matchfiler → /stats/<season>/<league>/<match>.json
+    total = len(match_files)
+    for i, path in enumerate(match_files, start=1):
         parts = path.split("/")
         if len(parts) < 4:
             continue
 
         season = parts[1]
         league_id = parts[2]
-        filename = parts[3].replace(".json", "")
-
-        # Hoppa över "players" undermappar (de hanteras i S_05)
-        if "players" in parts:
-            continue
 
         try:
             match = load_json_from_blob(container, path)
         except Exception as e:
-            print(f"[build_matches_events] ⚠️ Skipping {path}: {e}")
+            print(f"[build_matches_events_flat] ⚠️ Skipping {path}: {e}")
             continue
+
+        print(f"[build_matches_events_flat] ({i}/{total}) Processing {path}")
 
         # --- Matchnivå ---
         match_rows.append({
@@ -71,19 +68,22 @@ def main():
                 "event_minute": ev.get("event_minute"),
                 "team": ev.get("team"),
             }
-            # Spelare inblandade
-            if "player" in ev:
-                row["player_id"] = ev["player"].get("id")
-                row["player_name"] = ev["player"].get("name")
-            if "assist_player" in ev:
-                row["assist_id"] = ev["assist_player"].get("id")
-                row["assist_name"] = ev["assist_player"].get("name")
-            if "player_in" in ev:
-                row["player_in_id"] = ev["player_in"].get("id")
-                row["player_in_name"] = ev["player_in"].get("name")
-            if "player_out" in ev:
-                row["player_out_id"] = ev["player_out"].get("id")
-                row["player_out_name"] = ev["player_out"].get("name")
+
+            player = ev.get("player") or {}
+            row["player_id"] = player.get("id")
+            row["player_name"] = player.get("name")
+
+            assist = ev.get("assist_player") or {}
+            row["assist_id"] = assist.get("id")
+            row["assist_name"] = assist.get("name")
+
+            pin = ev.get("player_in") or {}
+            row["player_in_id"] = pin.get("id")
+            row["player_in_name"] = pin.get("name")
+
+            pout = ev.get("player_out") or {}
+            row["player_out_id"] = pout.get("id")
+            row["player_out_name"] = pout.get("name")
 
             event_rows.append(row)
 
@@ -109,8 +109,8 @@ def main():
         content_type="application/octet-stream"
     )
 
-    print(f"[build_matches_events] ✅ Uploaded {len(df_matches)} matches → warehouse/base/matches_flat.parquet")
-    print(f"[build_matches_events] ✅ Uploaded {len(df_events)} events → warehouse/base/events_flat.parquet")
+    print(f"[build_matches_events_flat] ✅ Uploaded {len(df_matches)} matches → warehouse/base/matches_flat.parquet")
+    print(f"[build_matches_events_flat] ✅ Uploaded {len(df_events)} events → warehouse/base/events_flat.parquet")
 
 
 if __name__ == "__main__":
