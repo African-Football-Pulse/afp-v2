@@ -8,21 +8,14 @@ from src.sections import utils as section_utils
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
-def build_section(args):
+def build_section(season: str, league_id: int, round_dates: list, output_prefix: str):
     """
-    PRODUCE entrypoint: kör Top Performers för en hel omgång.
-    args: argparse.Namespace från produce_section.py
+    Kör Top Performers för en hel omgång (kan vara flera datum).
+    Anropas från s_stats_driver.py.
     """
-    league = getattr(args, "league", "premier_league")
-    season = getattr(args, "season", os.getenv("SEASON", "2025-2026"))
-    output_prefix = getattr(args, "outdir", "sections")
-
-    # TODO: just nu hårdkodat till dagens datum – kan göras smartare
-    round_dates = [getattr(args, "date", os.getenv("DATE", ""))]
-
     # Hämta events och spara fil i Azure
     blob_path = stats_utils.save_african_events(
-        season=season, league_id=league, round_dates=round_dates, scope="round"
+        season=season, league_id=league_id, round_dates=round_dates, scope="round"
     )
     if not blob_path:
         return None
@@ -63,7 +56,7 @@ def build_section(args):
 
     manifest = {
         "season": season,
-        "league": league,
+        "league_id": league_id,
         "round_dates": round_dates,
         "count": len(top_players),
         "players": [p["name"] for p in top_players],
