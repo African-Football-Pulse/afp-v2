@@ -1,5 +1,3 @@
-# src/warehouse/build_matches_events_flat.py
-
 import json
 import pandas as pd
 from src.storage import azure_blob
@@ -24,6 +22,12 @@ def main():
 
     total = len(match_files)
     for i, path in enumerate(match_files, start=1):
+        # hoppa över manifest-filer
+        if path.endswith("manifest.json"):
+            if i % 100 == 0 or i == total:
+                print(f"[build_matches_events_flat] ⏩ Skipping manifest file {path} ({i}/{total})")
+            continue
+
         parts = path.split("/")
         if len(parts) < 4:
             continue
@@ -34,10 +38,12 @@ def main():
         try:
             match = load_json_from_blob(container, path)
         except Exception as e:
-            print(f"[build_matches_events_flat] ⚠️ Skipping {path}: {e}")
+            if i % 100 == 0 or i == total:
+                print(f"[build_matches_events_flat] ⚠️ Skipping {path}: {e} ({i}/{total})")
             continue
 
-        print(f"[build_matches_events_flat] ({i}/{total}) Processing {path}")
+        if i % 100 == 0 or i == total:
+            print(f"[build_matches_events_flat] Processing {i}/{total} → {path}")
 
         # --- Matchnivå ---
         match_rows.append({
