@@ -22,38 +22,32 @@ def upload_text_debug(blob_path: str, text: str, content_type: str = "text/plain
     print(f"[collectors] Uploaded {blob_path}")
 
 
-def download_json_debug(blob_path: str) -> dict:
+def download_json_debug(blob_path: str):
     """
-    Ladda ner JSON från Azure Blob + logga pathen.
-    Returnerar dict (eller list beroende på fil).
+    Läs JSON från Azure Blob + logga pathen.
+    Returnerar None om filen inte finns.
     """
     try:
-        data = azure_blob.download_json(CONTAINER, blob_path)
+        obj = azure_blob.download_json(CONTAINER, blob_path)
         print(f"[collectors] Downloaded {blob_path}")
-        return data
+        return obj
     except Exception as e:
-        print(f"[collectors] ⚠️ Misslyckades hämta {blob_path}: {e}")
+        print(f"[collectors] ⚠️ Misslyckades att ladda {blob_path}: {e}")
         return None
 
 
-def get_latest_finished_date(manifest: dict) -> str:
+def get_latest_finished_date(manifest: dict) -> str | None:
     """
-    Returnerar senaste speldatum (YYYY-MM-DD) från ett manifest.
-    Filtrerar på status='finished'.
+    Hitta senaste färdiga matchdatum från ett manifest.
+    Returnerar YYYY-MM-DD eller None om inget hittas.
     """
-    finished_matches = []
-
-    for match in manifest.get("matches", []):
-        if match.get("status") == "finished":
-            raw_date = match.get("date")
+    latest = None
+    for m in manifest.get("matches", []):
+        if m.get("status") == "finished":
             try:
-                d = datetime.strptime(raw_date, "%d/%m/%Y")
-                finished_matches.append(d)
-            except Exception as e:
-                print(f"[utils.get_latest_finished_date] ⚠️ Skippade match med fel datumformat: {raw_date} ({e})")
-
-    if not finished_matches:
-        raise ValueError("Inga färdiga matcher hittades i manifestet")
-
-    latest = max(finished_matches)
-    return latest.strftime("%Y-%m-%d")
+                dt = datetime.strptime(m["date"], "%d/%m/%Y")
+                if latest is None or dt > latest:
+                    latest = dt
+            except Exception:
+                continue
+    return latest.strftime("%Y-%m-%d") if latest else None
