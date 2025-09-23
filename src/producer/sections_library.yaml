@@ -29,7 +29,12 @@ sections:
     runner: build_section
     description: Generic daily intro section
 
-  S.NEWS.CLUB_HIGHLIGHT:          # 🔥 ny sektion
+  S.NEWS.CLUB_HIGHLIGHT:
     module: s_news_club_highlight
     runner: build_section
     description: Spotlight on one club based on recent news candidates
+
+  S.STATS.TOP_PERFORMERS_ROUND:        # 🆕 vår nya sektion
+    module: s_stats_top_performers_round
+    runner: build_section
+    description: Best African performers across the full round
