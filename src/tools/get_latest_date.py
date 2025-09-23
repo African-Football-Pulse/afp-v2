@@ -7,7 +7,6 @@ def get_latest_finished_date(manifest) -> str | None:
     if not manifest:
         return None
 
-    # Plocka ut matches beroende på format
     if isinstance(manifest, dict):
         matches = manifest.get("matches", [])
     elif isinstance(manifest, list):
@@ -22,13 +21,15 @@ def get_latest_finished_date(manifest) -> str | None:
         if isinstance(m, dict) and "date" in m:
             try:
                 dt = datetime.strptime(m["date"], "%d/%m/%Y").date()
-                if dt < today:  # bara matcher före idag
+                if dt < today:
                     dates.append(dt)
             except Exception:
                 continue
 
     if not dates:
+        print("[debug] Inga giltiga datum hittades i manifest")
         return None
 
     latest = max(dates)
+    print(f"[debug] Valde senaste matchdatum: {latest}")
     return latest.strftime("%Y-%m-%d")
