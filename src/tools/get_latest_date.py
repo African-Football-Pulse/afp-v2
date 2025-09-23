@@ -2,7 +2,8 @@
 import argparse
 import json
 from pathlib import Path
-from src import utils  # här ligger get_latest_finished_date
+from src import utils as utils
+
 
 def get_latest_match_date_for_league(league_id: int, stats_dir: str = "stats") -> str | None:
     seasons = sorted(Path(stats_dir).iterdir(), key=lambda p: p.name, reverse=True)
