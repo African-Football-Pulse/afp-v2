@@ -12,9 +12,10 @@ def filter_matches(league_id: int, season: str, date: str, stats_dir: str = "sta
 
     matches = []
     for league in data if isinstance(data, list) else [data]:
-        for m in league.get("matches", []):
-            if m.get("date") == date:
-                matches.append(m)
+        for stage in league.get("stage", []):
+            for m in stage.get("matches", []):
+                if m.get("date") == date:
+                    matches.append(m)
 
     print(f"✅ Found {len(matches)} matches for {date} in league {league_id}")
     for m in matches:
