@@ -12,7 +12,6 @@ def load_json_from_blob(container: str, path: str):
 
 
 def is_date_folder(name: str) -> bool:
-    """Returnerar True om strängen är på formatet DD-MM-YYYY."""
     return re.match(r"\d{2}-\d{2}-\d{4}", name) is not None
 
 
@@ -26,12 +25,13 @@ def main():
 
     all_files = azure_blob.list_prefix(container, matches_prefix)
 
-    # Filtrera fram bara match-filer (inte players, manifest eller mappar med datum)
+    # Filtrera fram bara rena match-filer
     match_files = [
         f for f in all_files
         if f.endswith(".json")
         and "/players/" not in f
         and not f.endswith("manifest.json")
+        and not f.endswith("matches.json")     # 👈 Ignorera batch-fil
         and not any(is_date_folder(part) for part in f.split("/"))
     ]
 
@@ -45,7 +45,6 @@ def main():
         print("[build_matches_events_flat:live] ⚠️ No match files found with given filters")
         return
 
-    # Samla rader per (season, league_id)
     matches_by_group = defaultdict(list)
     events_by_group = defaultdict(list)
 
