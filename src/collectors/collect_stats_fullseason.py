@@ -1,13 +1,11 @@
 import os
-import json
-from pathlib import Path
 from src.collectors.collect_stats import collect_stats
-from src.collectors.utils import get_latest_finished_date, download_json_debug
+from src.collectors.utils import get_latest_finished_date, download_json_debug, upload_json_debug
 
 
-def save_latest_round(league_id: int, season: str, matches: dict, manifest: dict, stats_dir="stats"):
+def save_latest_round(league_id: int, season: str, matches: dict, manifest: dict):
     """
-    Filtrera ut senaste omgången ur matches.json och spara den i en separat katalog.
+    Filtrera ut senaste omgången ur matches.json och ladda upp den till Azure.
     """
     latest_date = get_latest_finished_date(manifest)
     if not latest_date:
@@ -24,15 +22,14 @@ def save_latest_round(league_id: int, season: str, matches: dict, manifest: dict
         print(f"[collect_stats_fullseason] ⚠️ Hittade inga matcher för {latest_date} i liga {league_id}")
         return
 
-    # använd YYYY-MM-DD i paths istället för snedstreck
     safe_date = latest_date.replace("/", "-")
-    out_path = Path(stats_dir) / season / str(league_id) / safe_date / "matches.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path = f"stats/{season}/{league_id}/{safe_date}/matches.json"
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(latest_matches, f, indent=2, ensure_ascii=False)
-
-    print(f"[collect_stats_fullseason] ✅ Saved {len(latest_matches)} matches for {league_id} on {latest_date} → {out_path}")
+    try:
+        upload_json_debug(out_path, latest_matches)
+        print(f"[collect_stats_fullseason] ✅ Uploaded {len(latest_matches)} matches for {league_id} on {latest_date} → {out_path}")
+    except Exception as e:
+        print(f"[collect_stats_fullseason] ⚠️ Misslyckades att ladda upp latest round för {league_id}: {e}")
 
 
 def main():
@@ -61,7 +58,7 @@ def main():
             print(f"[collect_stats_fullseason] ⚠️ Ingen manifest för {league_id}, hoppar över latest round-save.")
             continue
 
-        # 3. Filtrera & spara senaste omgången
+        # 3. Filtrera & ladda upp senaste omgången
         save_latest_round(league_id, season, matches, manifest)
 
 
