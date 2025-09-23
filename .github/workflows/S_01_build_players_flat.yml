@@ -1,0 +1,35 @@
+name: S_01 Build Players Flat
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 4 * * 1"   # varje måndag kl 04:00 UTC (valfritt schema)
+
+jobs:
+  build-players-flat:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build Players Flat
+        run: |
+          python -m src.warehouse.build_players_flat
