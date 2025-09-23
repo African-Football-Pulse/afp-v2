@@ -4,6 +4,7 @@ from pathlib import Path
 from src.collectors.collect_stats import collect_stats
 from src.collectors.utils import get_latest_finished_date, download_json_debug
 
+
 def save_latest_round(league_id: int, season: str, matches: dict, manifest: dict, stats_dir="stats"):
     """
     Filtrera ut senaste omgången ur matches.json och spara den i en separat katalog.
@@ -23,7 +24,9 @@ def save_latest_round(league_id: int, season: str, matches: dict, manifest: dict
         print(f"[collect_stats_fullseason] ⚠️ Hittade inga matcher för {latest_date} i liga {league_id}")
         return
 
-    out_path = Path(stats_dir) / season / str(league_id) / latest_date / "matches.json"
+    # använd YYYY-MM-DD i paths istället för snedstreck
+    safe_date = latest_date.replace("/", "-")
+    out_path = Path(stats_dir) / season / str(league_id) / safe_date / "matches.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(out_path, "w", encoding="utf-8") as f:
