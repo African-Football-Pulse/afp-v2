@@ -1,8 +1,7 @@
 import os
-import argparse
 import requests
-from datetime import datetime, timezone
-from collections import defaultdict
+from datetime import datetime
+from src.storage import azure_blob
 from src.collectors import utils
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
@@ -10,98 +9,66 @@ API_URL = "https://api.soccerdataapi.com/matches/"
 AUTH_KEY = os.getenv("SOCCERDATA_AUTH_KEY")
 
 
-def today_str():
-    return datetime.now(timezone.utc).date().isoformat()
-
-
-def run(league_id: int, mode: str = "weekly", season: str = None):
+def fetch_and_store_stats(league_id: int, season: str, date: str = None, mode: str = "weekly"):
     """
-    Hämtar matcher från SoccerData API och sparar manifest i Azure.
-    - weekly: hämtar ALLA matcher för aktiv säsong (ingen season i params),
-              plockar senaste datum med finished-matcher.
-    - fullseason: hämtar ALLA matcher för given season och sparar allt.
+    Hämtar statistik för en liga, antingen för en specifik dag eller via manifest.
+    Sparar resultatet till Azure Blob Storage.
     """
+
     if not AUTH_KEY:
-        raise RuntimeError("Missing SOCCERDATA_AUTH_KEY in environment")
+        raise RuntimeError("SOCCERDATA_AUTH_KEY saknas i environment")
 
-    params = {"league_id": league_id, "auth_token": AUTH_KEY}
-
-
-    if date:
-        params["date"] = date
+    # --- bygg parametrar ---
+    params = {
+        "league_id": league_id,
+        "auth_token": AUTH_KEY,
+    }
     if season:
         params["season"] = season
-
-    headers = {"Accept-Encoding": "gzip", "Content-Type": "application/json"}
+    if date:
+        params["date"] = date
 
     print(f"[collect_stats] Requesting matches for league={league_id}, mode={mode}, params={params}")
+
+    headers = {
+        "Accept-Encoding": "gzip",
+        "Content-Type": "application/json",
+    }
+
     resp = requests.get(API_URL, headers=headers, params=params, timeout=60)
     resp.raise_for_status()
-
     data = resp.json()
-    if isinstance(data, dict):
-        data = [data]
 
+    if not data or (isinstance(data, list) and len(data) == 0):
+        raise RuntimeError(f"No data returned for league {league_id}")
+
+    # --- filtrera finished matcher ---
     matches = []
-    for league in data:
-        matches.extend(league.get("matches", []))
+    for block in data:
+        for m in block.get("matches", []):
+            if m.get("status") == "finished":
+                matches.append(m)
 
-    if mode == "weekly":
-        # Gruppér matcher per datum där status == finished
-        finished_by_date = defaultdict(list)
-        for m in matches:
-            status = (m.get("status") or "").lower()
-            if status in ("finished", "ft", "ended", "full time"):
-                finished_by_date[m.get("date")].append(m)
+    if not matches:
+        raise RuntimeError(f"No finished matches found for league {league_id}")
 
-        if not finished_by_date:
-            raise RuntimeError(f"No finished matches found for league {league_id}")
+    # --- spara till Azure ---
+    out_path = f"stats/{season}/{league_id}/{mode}_{date or 'latest'}.json"
+    azure_blob.upload_json(CONTAINER, out_path, {"matches": matches})
+    print(f"[collect_stats] ✅ Uploaded {len(matches)} matches → {out_path}")
 
-        # Hitta senaste datum (API ger oftast DD/MM/YYYY)
-        parsed = []
-        for d, ms in finished_by_date.items():
-            try:
-                dt = datetime.strptime(d, "%d/%m/%Y").date()
-            except ValueError:
-                dt = datetime.strptime(d, "%Y-%m-%d").date()
-            parsed.append((dt, d, ms))
+    # --- uppdatera manifest ---
+    manifest_path = f"stats/{season}/{league_id}/manifest.json"
+    try:
+        manifest = azure_blob.get_json(CONTAINER, manifest_path)
+    except Exception:
+        manifest = {"matches": []}
 
-        parsed.sort(key=lambda x: x[0], reverse=True)
-        latest_date, latest_date_str, latest_matches = parsed[0]
+    # merge nya matcher
+    seen_ids = {m["id"] for m in manifest["matches"]}
+    for m in matches:
+        if m["id"] not in seen_ids:
+            manifest["matches"].append(m)
 
-        blob_path = f"stats/weekly/{latest_date.isoformat()}/{league_id}/manifest.json"
-        manifest = {
-            "league_id": league_id,
-            "mode": "weekly",
-            "date": latest_date.isoformat(),
-            "matches": latest_matches,
-        }
-        utils.upload_json_debug(blob_path, manifest)
-        print(f"[collect_stats] ✅ Uploaded weekly manifest with {len(latest_matches)} matches "
-              f"({latest_date_str}) → {blob_path}")
-
-    elif mode == "fullseason":
-        if not season:
-            raise ValueError("Season must be provided in fullseason mode")
-        blob_path = f"stats/{season}/{league_id}/manifest.json"
-        manifest = {
-            "league_id": league_id,
-            "mode": "fullseason",
-            "season": season,
-            "matches": matches,
-        }
-        utils.upload_json_debug(blob_path, manifest)
-        print(f"[collect_stats] ✅ Uploaded fullseason manifest with {len(matches)} matches → {blob_path}")
-
-    else:
-        raise ValueError(f"Unsupported mode: {mode}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--league_id", type=int, required=True)
-    parser.add_argument("--mode", choices=["weekly", "fullseason"], default="weekly")
-    parser.add_argument("--season", type=str, required=False)
-    args = parser.parse_args()
-
-    run(args.league_id, mode=args.mode, season=args.season)
+    azure_blob.upload_json(CONTAINER, manifest_path, manifest)
+    print(f"[collect_stats] 📌 Manifest updated → {manifest_path}")
