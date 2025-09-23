@@ -7,6 +7,7 @@ from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
+
 def load_masterlist() -> Dict[int, Dict[str, Any]]:
     """
     Laddar masterlistan och returnerar en dict med player_id som nyckel.
@@ -44,7 +45,7 @@ def extract_african_events(season: str, league_id: int, round_dates: List[str]) 
                 player = ev.get("player")
                 assist = ev.get("assist_player")
 
-                # Kolla målskytt/annan spelare
+                # Kolla målskytt/assist
                 for role, pl in [("main", player), ("assist", assist)]:
                     if not pl:
                         continue
@@ -82,3 +83,68 @@ def save_african_events(season: str, league_id: int, round_dates: List[str], sco
     azure_blob.upload_json(CONTAINER, blob_path, events)
     return blob_path
 
+
+# ---------- Ny state-hantering ----------
+
+STATE_PATH = "sections/state/last_stats.json"
+
+
+def load_last_stats() -> Dict[str, str]:
+    """
+    Hämta senaste körda stats-datum per liga från Azure.
+    Returnerar dict: { league_id: last_date }
+    """
+    try:
+        return azure_blob.get_json(CONTAINER, STATE_PATH)
+    except Exception:
+        return {}
+
+
+def save_last_stats(state: Dict[str, str]):
+    """
+    Spara senaste stats-datum per liga till Azure.
+    """
+    azure_blob.upload_json(CONTAINER, STATE_PATH, state)
+
+
+def list_available_rounds(season: str, league_id: int) -> List[str]:
+    """
+    Lista alla datum-mappar som finns i stats/{season}/{league_id}/ i Azure.
+    Returnerar sorterad lista [ "20-09-2025", "21-09-2025", ... ]
+    """
+    prefix = f"stats/{season}/{league_id}/"
+    blobs = azure_blob.list_prefix(CONTAINER, prefix)
+    rounds = set()
+    for b in blobs:
+        parts = b.split("/")
+        if len(parts) >= 4:
+            rounds.add(parts[3])  # stats/<season>/<league_id>/<round_date>/...
+    return sorted(rounds)
+
+
+def find_next_round(season: str, league_id: int) -> List[str]:
+    """
+    Hitta nästa runda (en eller flera datum) som inte körts än.
+    Returnerar listan av datum (ex: ["20-09-2025","21-09-2025"]) eller [] om inget nytt.
+    """
+    last_state = load_last_stats()
+    last_date = last_state.get(str(league_id))
+
+    available = list_available_rounds(season, league_id)
+    if not available:
+        return []
+
+    # Om ingen state finns → ta senaste runda (alla datum samma helg)
+    if not last_date:
+        return [available[-1]]
+
+    # Hitta om det finns datum nyare än last_date
+    if last_date in available:
+        idx = available.index(last_date)
+        if idx + 1 < len(available):
+            return [available[idx + 1]]
+        else:
+            return []
+    else:
+        # last_date ej i listan → ta sista som fallback
+        return [available[-1]]
