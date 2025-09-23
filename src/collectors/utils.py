@@ -28,7 +28,7 @@ def download_json_debug(blob_path: str):
     Ladda ner JSON från Azure Blob + logga pathen.
     """
     try:
-        data = azure_blob.get_json(CONTAINER, blob_path)   # ✅ rätt metod
+        data = azure_blob.get_json(CONTAINER, blob_path)
         print(f"[collectors] Downloaded {blob_path}")
         return data
     except Exception as e:
@@ -38,7 +38,7 @@ def download_json_debug(blob_path: str):
 
 def get_latest_finished_date(manifest) -> str | None:
     """
-    Hitta senaste datumet för avslutade matcher i manifest.
+    Hitta senaste matchdatum i manifest som ligger innan dagens datum.
     Stödjer både { "matches": [...] } och en lista direkt.
     Returnerar datumsträng 'YYYY-MM-DD' eller None.
     """
@@ -53,17 +53,22 @@ def get_latest_finished_date(manifest) -> str | None:
     else:
         return None
 
+    today = datetime.utcnow().date()
     dates = []
+
     for m in matches:
-        if isinstance(m, dict) and m.get("status") == "finished" and "date" in m:
+        if isinstance(m, dict) and "date" in m:
             try:
-                dt = datetime.strptime(m["date"], "%d/%m/%Y")
-                dates.append(dt)
+                dt = datetime.strptime(m["date"], "%d/%m/%Y").date()
+                if dt < today:
+                    dates.append(dt)
             except Exception:
                 continue
 
     if not dates:
+        print("[collectors] ⚠️ Inga giltiga matchdatum före idag hittades i manifest")
         return None
 
     latest = max(dates)
+    print(f"[collectors] ✅ Valde senaste matchdatum: {latest}")
     return latest.strftime("%Y-%m-%d")
