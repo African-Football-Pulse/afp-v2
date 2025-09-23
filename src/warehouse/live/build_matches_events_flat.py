@@ -3,61 +3,56 @@ import json
 import pandas as pd
 from src.storage import azure_blob
 
-def load_json_from_blob(container, path):
-    text = azure_blob.get_text(container, path)
-    return json.loads(text)
-
 def main():
-    container = os.environ.get("AZURE_CONTAINER")
-    season = os.environ.get("SEASON")
-    league = os.environ.get("LEAGUE")
+    container = os.getenv("AZURE_CONTAINER", "afp")
+    season = os.getenv("SEASON")
+    league = os.getenv("LEAGUE")
 
-    base_path = f"stats/{season}/{league}"
-    files = azure_blob.list_files(container, base_path)
+    if not season or not league:
+        raise RuntimeError("SEASON and LEAGUE must be set as environment variables")
+
+    base_path = f"stats/{season}/{league}/"
+    manifest_path = f"{base_path}manifest.json"
+
+    # Hämta manifest
+    manifest_text = azure_blob.get_text(container, manifest_path)
+    match_ids = json.loads(manifest_text)
 
     rows = []
-    total = len(files)
+    total = len(match_ids)
+    for i, match_id in enumerate(match_ids, 1):
+        match_path = f"{base_path}{match_id}.json"
+        match_text = azure_blob.get_text(container, match_path)
+        match = json.loads(match_text)
 
-    for i, path in enumerate(files, start=1):
-        if not path.endswith(".json"):
-            continue
-        try:
-            match = load_json_from_blob(container, path)
-        except Exception as e:
-            if i % 100 == 0 or i == total:
-                print(f"[build_matches_events_flat] ⚠️ Skipping {path}: {e} ({i}/{total})")
-            continue
+        print(f"[build_matches_events_flat] ({i}/{total}) Processing {match_path}")
 
-        # hoppa över om filen är en lista (manifest, inte en match)
-        if isinstance(match, list):
-            continue
-
-        if i % 100 == 0 or i == total:
-            print(f"[build_matches_events_flat] Processing {i}/{total} → {path}")
-
-        match_id = match.get("id")
+        # Extrahera events från match
         events = match.get("events", [])
-
         for ev in events:
             row = {
-                "match_id": match_id,
+                "match_id": match.get("id"),
                 "event_id": ev.get("id"),
-                "type": ev.get("type", {}).get("name"),
+                "type": ev.get("type"),
                 "minute": ev.get("minute"),
-                "second": ev.get("second"),
-                "team_id": ev.get("team", {}).get("id"),
-                "player_id": ev.get("player", {}).get("id"),
-                "assist_id": (ev.get("assist_player") or {}).get("id"),
+                "team_id": ev.get("team", {}).get("id") if ev.get("team") else None,
+                "player_id": ev.get("player", {}).get("id") if ev.get("player") else None,
+                "assist_id": ev.get("assist_player", {}).get("id") if ev.get("assist_player") else None,
                 "x": ev.get("x"),
                 "y": ev.get("y"),
-                "outcome": ev.get("outcome", {}).get("name"),
+                "expected_goals": ev.get("expected_goals"),
             }
             rows.append(row)
 
+    # Bygg DataFrame
     df = pd.DataFrame(rows)
-    output_path = f"warehouse/live/matches_events_flat.parquet"
-    azure_blob.upload_df(container, output_path, df)
-    print(f"[build_matches_events_flat] ✅ Uploaded {len(rows)} rows → {output_path}")
+
+    # Sparar alltid i live-mappen
+    out_path = "warehouse/live/matches_events_flat.parquet"
+    parquet_bytes = df.to_parquet(index=False, engine="pyarrow")
+    azure_blob.upload_bytes(container, out_path, parquet_bytes, content_type="application/octet-stream")
+
+    print(f"[build_matches_events_flat LIVE] ✅ Uploaded {len(df)} rows → {out_path}")
 
 if __name__ == "__main__":
     main()
