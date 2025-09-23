@@ -1,45 +1,61 @@
 import os
 import yaml
+import datetime
 from src.storage import azure_blob
-from src.tools.get_latest_date import get_latest_match_date_for_league
 
 
 def filter_latest_round_for_league(league: dict, season: str, container: str):
     league_id = league["id"]
     league_name = league["name"]
 
-    # 1. Hämta senaste datum från manifest
-    latest_date = get_latest_match_date_for_league(league_id, season=season, container=container)
-    if not latest_date:
-        print(f"[filter_matches_latest] ⚠️ Inget giltigt matchdatum hittades för {league_name} ({league_id})")
-        return
-
-    # 2. Hämta fullseason matches.json
+    # 1. Hämta fullseason matches.json
     src_path = f"stats/{season}/{league_id}/matches.json"
     data = azure_blob.get_json(container, src_path)
     if not data:
-        print(f"[filter_matches_latest] ❌ Kunde inte hämta {src_path} från Azure")
+        print(f"[filter_matches_by_date] ❌ Kunde inte hämta {src_path} från Azure")
         return
 
-    # 3. Filtrera fram matcherna för latest_date
-    matches = []
+    # 2. Extrahera alla datum
+    dates = []
     leagues = data if isinstance(data, list) else [data]
 
     for lg in leagues:
         for stage in lg.get("stage", []):
             for m in stage.get("matches", []):
-                if m.get("date") == latest_date:
+                d = m.get("date")
+                try:
+                    dt = datetime.datetime.strptime(d, "%d/%m/%Y")
+                    if dt.date() < datetime.date.today():
+                        dates.append(dt.date())
+                except Exception:
+                    continue
+
+    if not dates:
+        print(f"[filter_matches_by_date] ⚠️ Inga giltiga datum hittades i {src_path}")
+        return
+
+    latest_date = max(dates)
+    latest_date_str = latest_date.strftime("%d/%m/%Y")
+    safe_date = latest_date.strftime("%d-%m-%Y")
+
+    print(f"[filter_matches_by_date] ✅ Valde senaste datum {latest_date_str} för {league_name} ({league_id})")
+
+    # 3. Filtrera fram matcherna för latest_date
+    matches = []
+    for lg in leagues:
+        for stage in lg.get("stage", []):
+            for m in stage.get("matches", []):
+                if m.get("date") == latest_date_str:
                     matches.append(m)
 
     if not matches:
-        print(f"[filter_matches_latest] ⚠️ Hittade inga matcher för {latest_date} i {league_name} ({league_id})")
+        print(f"[filter_matches_by_date] ⚠️ Hittade inga matcher för {latest_date_str} i {league_name} ({league_id})")
         return
 
     # 4. Ladda upp filtrerade matcher
-    safe_date = latest_date.replace("/", "-")
     out_path = f"stats/{season}/{league_id}/{safe_date}/matches.json"
     azure_blob.upload_json(container, out_path, matches)
-    print(f"[filter_matches_latest] ✅ Uploaded {len(matches)} matches for {league_name} ({league_id}) on {latest_date} → {out_path}")
+    print(f"[filter_matches_by_date] ✅ Uploaded {len(matches)} matches for {league_name} ({league_id}) → {out_path}")
 
 
 def main():
