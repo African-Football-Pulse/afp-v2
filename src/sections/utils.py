@@ -1,74 +1,52 @@
-# src/producer/s_stats_top_performers_round.py
+# src/sections/utils.py
 
 import os
-from collections import defaultdict
+import json
 from src.storage import azure_blob
-from src.producer import stats_utils
-from src.producer.sections import utils as section_utils
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
-def build_section(season: str, league_id: int, round_dates: list, output_prefix: str):
+
+def write_outputs(container: str,
+                  prefix: str,
+                  section_id: str,
+                  text: str,
+                  manifest: dict):
     """
-    Producerar sektionen 'Top Performers' för en hel ligaomgång.
-    round_dates = t.ex. ["20-09-2025", "21-09-2025"]
+    Skriv ut standardiserade filer för en sektion:
+      - section.md (textinnehåll)
+      - section.json (JSON med text)
+      - section_manifest.json (metadata/manifest)
+    Alla filer läggs i Azure under angivet prefix.
     """
-    # Skapa / hämta eventfil (sparas även i Azure)
-    blob_path = stats_utils.save_african_events(
-        season=season, league_id=league_id, round_dates=round_dates, scope="round"
-    )
-    if not blob_path:
-        return None
+    # Paths
+    base = f"{prefix}/{section_id}"
+    md_path = f"{base}/section.md"
+    json_path = f"{base}/section.json"
+    manifest_path = f"{base}/section_manifest.json"
 
-    events = azure_blob.get_json(CONTAINER, blob_path)
-    if not events:
-        return None
+    # Skriv text som markdown
+    azure_blob.put_text(container, md_path, text, content_type="text/markdown; charset=utf-8")
 
-    # Summera statistik per spelare
-    performers = defaultdict(lambda: {"goals": 0, "assists": 0, "cards": 0, "name": ""})
-    for ev in events:
-        pid = ev["player"]["id"]
-        pname = ev["player"]["name"]
-        performers[pid]["name"] = pname
+    # Skriv text som JSON
+    obj = {"text": text}
+    azure_blob.upload_json(container, json_path, obj)
 
-        if ev["event_type"] == "goal":
-            performers[pid]["goals"] += 1
-        elif ev["event_type"] == "assist":
-            performers[pid]["assists"] += 1
-        elif ev["event_type"] in ["yellow_card", "red_card"]:
-            performers[pid]["cards"] += 1
+    # Skriv manifest
+    azure_blob.upload_json(container, manifest_path, manifest)
 
-    if not performers:
-        return None
-
-    # Sortera topp 3 (mål + assist → mest betydelse)
-    top_players = sorted(
-        performers.values(),
-        key=lambda x: (x["goals"] + x["assists"]),
-        reverse=True
-    )[:3]
-
-    # Bygg sektionstext
-    lines = []
-    for p in top_players:
-        lines.append(
-            f"- {p['name']} ({p['goals']} mål, {p['assists']} assist, {p['cards']} kort)"
-        )
-    section_text = "Helgens afrikanska topp-prestationer:\n" + "\n".join(lines)
-
-    manifest = {
-        "season": season,
-        "league_id": league_id,
-        "round_dates": round_dates,
-        "count": len(top_players),
-        "players": [p["name"] for p in top_players],
+    return {
+        "md": md_path,
+        "json": json_path,
+        "manifest": manifest_path,
     }
 
-    # Spara output via sections/utils
-    return section_utils.write_outputs(
-        container=CONTAINER,
-        prefix=output_prefix,
-        section_id="S.STATS.TOP_PERFORMERS_ROUND",
-        text=section_text,
-        manifest=manifest,
-    )
+
+def load_news_items(container: str, blob_path: str):
+    """
+    Hjälpfunktion för NEWS-sektioner som laddar scorade kandidater.
+    """
+    if not azure_blob.exists(container, blob_path):
+        return []
+    data = azure_blob.get_json(container, blob_path)
+    return data
