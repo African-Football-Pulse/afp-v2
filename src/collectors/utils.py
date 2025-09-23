@@ -39,34 +39,36 @@ def download_json_debug(blob_path: str):
 def get_latest_finished_date(manifest) -> str | None:
     """
     Hitta senaste matchdatum i manifest som ligger innan dagens datum.
-    Stödjer både { "matches": [...] } och en lista direkt.
+    Stödjer SoccerData-struktur (league -> stage -> matches).
     Returnerar datumsträng 'YYYY-MM-DD' eller None.
     """
     if not manifest:
         return None
 
-    # Plocka ut matches beroende på format
-    if isinstance(manifest, dict):
-        matches = manifest.get("matches", [])
-    elif isinstance(manifest, list):
-        matches = manifest
-    else:
-        return None
-
     today = datetime.utcnow().date()
     dates = []
 
-    for m in matches:
-        if isinstance(m, dict) and "date" in m:
-            try:
-                dt = datetime.strptime(m["date"], "%d/%m/%Y").date()
-                if dt < today:
-                    dates.append(dt)
-            except Exception:
-                continue
+    leagues = manifest if isinstance(manifest, list) else [manifest]
+
+    for league in leagues:
+        for stage in league.get("stage", []):
+            for m in stage.get("matches", []):
+                raw_date = m.get("date")
+                if not raw_date:
+                    continue
+
+                # Debug: skriv ut varje datum vi hittar
+                print(f"[debug] match_id={m.get('id')} raw_date={raw_date}")
+
+                try:
+                    dt = datetime.strptime(raw_date, "%d/%m/%Y").date()
+                    if dt < today:
+                        dates.append(dt)
+                except Exception as e:
+                    print(f"[debug] Kunde inte tolka datum '{raw_date}': {e}")
 
     if not dates:
-        print("[collectors] ⚠️ Inga giltiga matchdatum före idag hittades i manifest")
+        print("[collectors] ⚠️ Inga matchdatum före idag hittades i manifest")
         return None
 
     latest = max(dates)
