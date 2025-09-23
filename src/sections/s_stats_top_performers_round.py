@@ -1,10 +1,10 @@
-# src/producer/s_stats_top_performers_round.py
+# src/sections/s_stats_top_performers_round.py  (läggs här med de andra sektionerna)
 
 import os
 from collections import defaultdict
 from src.storage import azure_blob
 from src.producer import stats_utils
-from src.utils import write_outputs
+from src.sections import utils as section_utils
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
@@ -64,8 +64,8 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
         "players": [p["name"] for p in top_players],
     }
 
-    # Spara output i Azure
-    return write_outputs(
+    # Spara output via sections/utils
+    return section_utils.write_outputs(
         container=CONTAINER,
         prefix=output_prefix,
         section_id="S.STATS.TOP_PERFORMERS_ROUND",
