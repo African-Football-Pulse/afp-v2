@@ -34,4 +34,4 @@ jobs:
           MATCH_DATE: ${{ github.event.inputs.match_date }}
         run: |
           echo "Running filter for season=$SEASON date=${MATCH_DATE:-yesterday}"
-          python -m src.tools.filter_matches_daily
+          python -m src.collectors.filter_matches_daily
