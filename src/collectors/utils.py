@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from src.storage import azure_blob
 
 # Container sätts från env, annars fallback
@@ -23,13 +24,36 @@ def upload_text_debug(blob_path: str, text: str, content_type: str = "text/plain
 
 def download_json_debug(blob_path: str):
     """
-    Läs JSON från Azure Blob + logga pathen.
-    Returnerar None om filen inte finns.
+    Ladda ner JSON från Azure Blob + logga pathen.
     """
     try:
-        obj = azure_blob.get_json(CONTAINER, blob_path)   # ✅ använder rätt metod
+        data = azure_blob.download_json(CONTAINER, blob_path)
         print(f"[collectors] Downloaded {blob_path}")
-        return obj
+        return data
     except Exception as e:
         print(f"[collectors] ⚠️ Misslyckades att ladda {blob_path}: {e}")
         return None
+
+
+def get_latest_finished_date(manifest: dict) -> str | None:
+    """
+    Hitta senaste datumet för avslutade matcher i manifest.
+    Returnerar datumsträng 'YYYY-MM-DD' eller None.
+    """
+    if not manifest:
+        return None
+
+    dates = []
+    for m in manifest.get("matches", []):
+        if m.get("status") == "finished" and "date" in m:
+            try:
+                dt = datetime.strptime(m["date"], "%d/%m/%Y")
+                dates.append(dt)
+            except Exception:
+                continue
+
+    if not dates:
+        return None
+
+    latest = max(dates)
+    return latest.strftime("%Y-%m-%d")
