@@ -1,0 +1,37 @@
+name: Publish Episode
+
+on:
+  workflow_dispatch:  # manuell körning till att börja med
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Download final episode from blob
+        run: |
+          az storage blob download \
+            --account-name ${{ secrets.BLOB_ACCOUNT_NAME }} \
+            --container-name ${{ secrets.BLOB_CONTAINER_NAME }} \
+            --name final_episode.mp3 \
+            --file final_episode.mp3 \
+            --sas-token ${{ secrets.BLOB_CONTAINER_SAS_TOKEN }}
+
+      - name: Publish to Buzzsprout
+        env:
+          BUZZSPROUT_API_KEY: ${{ secrets.BUZZSPROUT_API_KEY }}
+          BUZZSPROUT_PODCAST_ID: ${{ secrets.BUZZSPROUT_PODCAST_ID }}
+        run: |
+          python scripts/publish_to_buzzsprout.py
