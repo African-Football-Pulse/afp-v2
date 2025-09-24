@@ -2,6 +2,8 @@ import os, json, pathlib
 from datetime import datetime
 from typing import List
 from src.common.blob_io import get_container_client
+from jinja2 import Environment, FileSystemLoader
+from src.tools.voice_map import load_voice_map   # <-- nytt
 
 LEAGUE = os.getenv("LEAGUE", "premier_league")
 
@@ -94,6 +96,17 @@ def parse_section_text(section_id: str, date: str, league: str) -> dict:
     else:
         return {"text": raw_text}
 
+# ---------- Rendering via Jinja ----------
+def render_episode(sections_meta, lang: str) -> str:
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("episode.jinja")
+    sections_dict = {s["section_id"]: s for s in sections_meta}
+    return template.render(
+        sections=sections_dict,
+        weekday=datetime.utcnow().weekday(),
+        lang=lang
+    )
+
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str):
     manifests = list_section_manifests(date, league)
@@ -127,6 +140,9 @@ def build_episode(date: str, league: str, lang: str):
         })
         total += dur
 
+    # Ladda voice_map
+    voice_map = load_voice_map(lang)
+
     manifest = {
         "pod_id": POD_ID,
         "date": date,
@@ -134,21 +150,13 @@ def build_episode(date: str, league: str, lang: str):
         "lang": lang,
         "sections": sections_meta,
         "duration_s": total,
+        "voice_map": voice_map,   # <-- nytt
     }
 
     write_text(base + "episode_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
 
-    # Debug/läsbar textversion
-    script_parts = []
-    for s in sections_meta:
-        if "lines" in s:
-            for l in s["lines"]:
-                script_parts.append(f"{l['persona']}: {l['text']}")
-        else:
-            if s.get("text"):
-                script_parts.append(s["text"])
-    episode_script = "\n\n---\n\n".join(script_parts)
-
+    # Bygg script via Jinja-mall
+    episode_script = render_episode(sections_meta, lang)
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
 
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
