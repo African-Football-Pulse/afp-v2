@@ -48,9 +48,18 @@ def main():
             print(f"[build_player_match_stats] ⚠️ Kunde inte läsa {path}: {e}")
             continue
 
+        # 👀 Debug: visa struktur före filtrering
+        print(f"\n[DEBUG] Fil: {path}")
+        print(f"[DEBUG] Kolumner: {list(df.columns)}")
+        print("[DEBUG] Första 5 rader:")
+        print(df.head().to_string(index=False))
+
         # Filtrera på spelare i masterlistan
-        df = df[df["player_id"].astype(str).isin(player_ids)]
+        df["player_id"] = df["player_id"].astype(str)
+        df = df[df["player_id"].isin(player_ids)]
+
         if df.empty:
+            print(f"[DEBUG] Efter filtrering: 0 rader för {path}")
             continue
 
         # Bygg player × match rader
@@ -65,12 +74,12 @@ def main():
         rows.append(grouped)
 
     if not rows:
-        print("[build_player_match_stats] ⚠️ Ingen data efter filtrering")
+        print("[build_player_match_stats] ⚠️ Ingen data efter filtrering i någon fil")
         return
 
     result = pd.concat(rows, ignore_index=True)
 
-    # 📦 Spara till Parquet (alla spelare × matcher)
+    # 📦 Spara till Parquet
     parquet_bytes = result.to_parquet(index=False, engine="pyarrow")
     output_path = "warehouse/base/player_match_stats.parquet"
     azure_blob.put_bytes(
@@ -84,7 +93,7 @@ def main():
         f"[build_player_match_stats] ✅ Uploaded {len(result)} rows → {output_path}"
     )
 
-    # 👀 Preview
+    # 👀 Preview per spelare
     print("\n[build_player_match_stats] 🔎 Sample (per spelare):")
     print(result.groupby("player_id").head(3).to_string(index=False))
 
