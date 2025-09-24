@@ -4,7 +4,10 @@ from typing import List
 from src.common.blob_io import get_container_client
 
 LEAGUE = os.getenv("LEAGUE", "premier_league")
-LANG   = os.getenv("LANG", "en")  # Behövs ej för path längre, men kvar i manifest
+
+_raw_lang = os.getenv("LANG")
+LANG = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
+
 POD_ID = os.getenv("POD_ID", f"afp-{LEAGUE}-daily-{LANG}")
 
 USE_LOCAL   = os.getenv("USE_LOCAL", "0") == "1"
