@@ -1,10 +1,54 @@
-{# --------------------------------------------------------- #}
-{# Fallback language (default = en)                          #}
-{# --------------------------------------------------------- #}
+{# ========================================================= #}
+{# Episode Template                                          #}
+{# mode = "script" → renderar färdigt manus (txt)            #}
+{# mode = "used"   → renderar JSON-lista av section_id       #}
+{# ========================================================= #}
+
 {% set safe_lang = lang if lang in ["en", "fr", "sw"] else "en" %}
 
+{% if mode == "used" %}
+[
+  {# ------------------------------------------------------- #}
+  {# Måndag: Post-Match intro + alla NEWS                    #}
+  {# ------------------------------------------------------- #}
+  {% if weekday == 0 %}
+    {% if sections.get("S.GENERIC.INTRO_POSTMATCH") %}"S.GENERIC.INTRO_POSTMATCH",{% endif %}
+    {% for sid, sec in sections.items() if sid.startswith("S.NEWS.") %}
+      "{{ sid }}",
+    {% endfor %}
+  {# ------------------------------------------------------- #}
+  {# Tisdag: Daily intro + Top3 + Stats                      #}
+  {# ------------------------------------------------------- #}
+  {% elif weekday == 1 %}
+    {% if sections.get("S.GENERIC.INTRO_DAILY") %}"S.GENERIC.INTRO_DAILY",{% endif %}
+    {% if sections.get("S.NEWS.TOP3") %}"S.NEWS.TOP3",{% endif %}
+    {% if sections.get("S.STATS.TOP_AFRICAN_PLAYERS") %}"S.STATS.TOP_AFRICAN_PLAYERS",{% endif %}
+  {# ------------------------------------------------------- #}
+  {# Torsdag: Daily intro + Highlight + Expert               #}
+  {# ------------------------------------------------------- #}
+  {% elif weekday == 3 %}
+    {% if sections.get("S.GENERIC.INTRO_DAILY") %}"S.GENERIC.INTRO_DAILY",{% endif %}
+    {% if sections.get("S.NEWS.CLUB_HIGHLIGHT") %}"S.NEWS.CLUB_HIGHLIGHT",{% endif %}
+    {% if sections.get("S.OPINION.EXPERT_COMMENT") %}"S.OPINION.EXPERT_COMMENT",{% endif %}
+  {# ------------------------------------------------------- #}
+  {# Övriga dagar: Daily intro + max 2 NEWS                  #}
+  {# ------------------------------------------------------- #}
+  {% else %}
+    {% if sections.get("S.GENERIC.INTRO_DAILY") %}"S.GENERIC.INTRO_DAILY",{% endif %}
+    {% set counter = 0 %}
+    {% for sid, sec in sections.items() if sid.startswith("S.NEWS.") %}
+      {% if counter < 2 %}"{{ sid }}",{% endif %}
+      {% set counter = counter + 1 %}
+    {% endfor %}
+  {% endif %}
+]
+{% else %}
+{# ========================================================= #}
+{# SCRIPT-LÄGE                                               #}
+{# ========================================================= #}
+
 {# --------------------------------------------------------- #}
-{# Intro: måndag = post-match, annars daily                  #}
+{# Intro                                                     #}
 {# --------------------------------------------------------- #}
 {% if weekday == 0 %}
 ### {% if safe_lang == "fr" %}Introduction d'après-match{% elif safe_lang == "sw" %}Utangulizi wa Baada ya Mechi{% else %}Post-Match Intro{% endif %}
@@ -59,4 +103,5 @@
   {% endif %}
   {% set counter = counter + 1 %}
 {% endfor %}
+{% endif %}
 {% endif %}
