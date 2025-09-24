@@ -13,13 +13,19 @@ INPUT_MP3 = "final_episode.mp3"
 def download_from_blob(filename: str):
     """Ladda ner en blob-fil från Azure Storage till arbetsmappen."""
     print(f"⬇️  Hämtar {filename} från blob...")
+
+    # Plocka ut delar ur SAS-URL
+    url_base, sas_token = BLOB_SAS_URL.split("?")
+    account_name = url_base.split("//")[1].split(".")[0]  # afpstoragepilot
+    container_name = url_base.split(".net/")[1]           # afp
+
     cmd = [
         "az", "storage", "blob", "download",
-        "--file", filename,
-        "--account-url", BLOB_SAS_URL.split("?")[0],
-        "--container-name", BLOB_SAS_URL.split(".net/")[1].split("?")[0],
+        "--account-name", account_name,
+        "--container-name", container_name,
         "--name", filename,
-        "--sas-token", BLOB_SAS_URL.split("?")[1]
+        "--file", filename,
+        "--sas-token", sas_token
     ]
     subprocess.check_call(cmd)
 
