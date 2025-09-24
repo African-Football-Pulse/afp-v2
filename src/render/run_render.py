@@ -19,7 +19,10 @@ def load_manifest(manifest_path: pathlib.Path) -> dict:
 def main():
     date = os.getenv("DATE") or datetime.date.today().isoformat()
     league = os.getenv("LEAGUE", "premier_league")
-    lang = os.getenv("LANG") or "en"
+
+    # Normalisera språk: använd "en" om LANG saknas eller är typ "C.UTF-8"
+    _raw_lang = os.getenv("LANG")
+    lang = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
 
     log(f"Start render: date={date}, league={league}, lang={lang}")
 
