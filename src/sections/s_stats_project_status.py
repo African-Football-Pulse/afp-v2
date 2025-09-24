@@ -5,11 +5,15 @@ from src.sections import utils as section_utils
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
-def build_section(season: str, league_id: int, round_dates: list, output_prefix: str):
+
+def build_section(args=None):
     """
-    Bygger en statisk status-sektion som berättar om omfattningen
-    av våra afrikanska spelare i masterlistan och att vi expanderar.
+    Statisk status-sektion som berättar om antalet spelare i masterlistan
+    och att fler är på väg att läggas till.
     """
+    season = getattr(args, "season", os.getenv("SEASON", "2025-2026"))
+    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+    day = getattr(args, "date", "unknown")
 
     title = "Status på vårt projekt"
     text = (
@@ -23,17 +27,19 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
     manifest = {
         "section": "S.STATS.PROJECT_STATUS",
         "season": season,
-        "league_id": league_id,
-        "round_dates": round_dates,
+        "league": league,
+        "date": day,
         "title": title,
+        "status": "ok",
     }
 
+    # ✅ Returnera manifest via write_outputs
     return section_utils.write_outputs(
         section="S.STATS.PROJECT_STATUS",
         season=season,
-        league_id=league_id,
-        round_dates=round_dates,
-        output_prefix=output_prefix,
+        league=league,
+        round_dates=[],
+        output_prefix=f"sections/S.STATS.PROJECT_STATUS/{day}/{league}/_",
         text=text,
         manifest=manifest,
     )
