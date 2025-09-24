@@ -9,6 +9,19 @@ def load_json_from_blob(container: str, path: str):
     return json.loads(text)
 
 
+def extract_matches(manifest):
+    """Flatten manifest structure to a simple list of matches."""
+    matches = []
+    if isinstance(manifest, list):
+        for league in manifest:
+            for stage in league.get("stage", []):
+                matches.extend(stage.get("matches", []))
+    elif isinstance(manifest, dict):
+        for stage in manifest.get("stage", []):
+            matches.extend(stage.get("matches", []))
+    return matches
+
+
 def main():
     container = "afp"
 
@@ -24,14 +37,14 @@ def main():
         print(f"[collect_lineups_fbref] ❌ Kunde inte läsa manifest {manifest_path}: {e}")
         return
 
-    matches = manifest.get("matches", [])
+    matches = extract_matches(manifest)
     if not matches:
-        print(f"[collect_lineups_fbref] ⚠️ Inga matcher i manifestet {manifest_path}")
+        print(f"[collect_lineups_fbref] ⚠️ Inga matcher hittades i manifestet {manifest_path}")
         return
 
     print(f"[collect_lineups_fbref] Hittade {len(matches)} matcher i manifestet")
 
-    # 📥 Initiera FBref-collector (no cache/store eftersom vi kör i container)
+    # 📥 Initiera FBref-collector
     fbref = sd.FBref(leagues="ENG-Premier League", seasons=2024, no_cache=True, no_store=True)
 
     processed = []
