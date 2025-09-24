@@ -57,13 +57,21 @@ def main():
         log("ERROR: Inga sektioner i manifestet.")
         sys.exit(1)
 
-    # 2b) Rensa bort streck '---' ur texterna
+    # 2b) Rensa bort streck '---' och rubriker '#'
+    def clean_text_block(text: str) -> str:
+        cleaned = []
+        for line in text.splitlines():
+            if line.strip().startswith("#") or line.strip().startswith("---"):
+                continue
+            cleaned.append(line)
+        return "\n".join(cleaned).strip()
+
     def clean_section_text(section):
         if "text" in section:
-            section["text"] = section["text"].replace("---", "").strip()
+            section["text"] = clean_text_block(section["text"])
         if "lines" in section:
             for l in section["lines"]:
-                l["text"] = l["text"].replace("---", "").strip()
+                l["text"] = clean_text_block(l["text"])
         return section
 
     sections = {sid: clean_section_text(sec) for sid, sec in sections.items()}
@@ -90,4 +98,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
