@@ -1,0 +1,33 @@
+name: Build and Mix Episode
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 7 * * *"   # kör varje dag kl 07:30
+
+jobs:
+  mix:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run mix script
+        env:
+          PYTHONPATH: src
+          BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+          LEAGUE: premier_league
+          LANG: en
+        run: |
+          python src/mix/mix_episode.py
