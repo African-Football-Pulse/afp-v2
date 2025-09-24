@@ -1,79 +1,45 @@
-import os, json, pathlib, sys, datetime, requests
+import os
+import requests
+import datetime
+import json
 
-def read_json(p: pathlib.Path) -> dict:
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
-    return {}
+API_KEY = os.environ["BUZZSPROUT_API_KEY"]
+PODCAST_ID = os.environ["BUZZSPROUT_PODCAST_ID"]
 
-def write_json(p: pathlib.Path, data: dict):
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+# Standardfil som laddats ner från blob
+INPUT_FILE = "final_episode.mp3"
 
-def main():
-    date = os.getenv("DATE") or datetime.date.today().isoformat()
-    league = os.getenv("LEAGUE", "epl")
-    lang = os.getenv("LANG", "en")
-    title_override = os.getenv("TITLE_OVERRIDE", "")
+# Skapa filnamn baserat på datum (eller annan metadata senare)
+today = datetime.date.today().strftime("%Y-%m-%d")
+episode_file = f"episode_{today}.mp3"
 
-    token = os.getenv("BUZZSPROUT_API_TOKEN", "")
-    podcast_id = os.getenv("BUZZSPROUT_PODCAST_ID", "")
-    if not token or not podcast_id:
-        print("ERROR: BUZZSPROUT_API_TOKEN / BUZZSPROUT_PODCAST_ID saknas")
-        sys.exit(1)
+# Döp om lokalt
+os.rename(INPUT_FILE, episode_file)
 
-    base_audio = pathlib.Path(f"audio/episodes/{date}/{league}/daily/{lang}")
-    base_pub = pathlib.Path(f"publisher/episodes/{date}/{league}/daily/{lang}")
-    audio_path = base_audio / "episode.mp3"
-    render_manifest = base_audio / "render_manifest.json"
-    publish_request_path = base_pub / "publish_request.json"
-    publish_report_path = base_pub / "publish_report.json"
+# Titel och beskrivning (kan senare hämtas från era JSON-filer)
+episode_title = f"Episode {today}"
+episode_description = "Automatiskt publicerat av workflow"
 
-    if not audio_path.exists():
-        print(f"ERROR: Saknar audio: {audio_path}")
-        sys.exit(1)
-
-    rm = read_json(render_manifest)
-    pr = read_json(publish_request_path)
-
-    title = title_override or pr.get("title") or rm.get("title") or f"{league.upper()} daily – {date} ({lang})"
-    description = pr.get("description") or "Automated episode."
-    artwork_url = pr.get("artwork_url") or ""
-    language = pr.get("language") or lang
-    pub_dt = pr.get("published_at")  # ISO8601, t.ex. "2025-08-31T05:15:00Z"
-    explicit = pr.get("explicit", False)
-
-    # Buzzsprout upload
-    # POST https://www.buzzsprout.com/api/{podcast_id}/episodes.json
-    # Headers: Authorization: Token token=<token>
-    url = f"https://www.buzzsprout.com/api/{podcast_id}/episodes.json"
-    headers = {"Authorization": f"Token token={token}"}
-
-    files = {
-        "audio_file": ("episode.mp3", open(audio_path, "rb"), "audio/mpeg")
+# 1. Skapa episod
+resp = requests.post(
+    f"https://api.buzzsprout.com/api/podcasts/{PODCAST_ID}/episodes.json",
+    headers={"Authorization": f"Token token={API_KEY}"},
+    json={
+        "title": episode_title,
+        "description": episode_description,
+        "published_at": datetime.datetime.utcnow().isoformat() + "Z"
     }
-    data = {
-        "title": title,
-        "description": description,
-        "explicit": str(explicit).lower(),  # "true"/"false"
-        "language": language
-    }
-    if pub_dt:
-        data["published_at"] = pub_dt
-    if artwork_url:
-        data["artwork_url"] = artwork_url
+)
+resp.raise_for_status()
+episode_id = resp.json()["id"]
+print(f"Created episode {episode_id}")
 
-    print("Publish: laddar upp till Buzzsprout…")
-    r = requests.post(url, headers=headers, files=files, data=data, timeout=180)
-    if r.status_code not in (200, 201):
-        print(f"ERROR: Buzzsprout {r.status_code}: {r.text[:600]}")
-        write_json(publish_report_path, {
-            "status": "error", "http_status": r.status_code, "response": r.text[:2000]
-        })
-        sys.exit(1)
-
-    resp = r.json()
-    write_json(publish_report_path, {"status": "ok", "response": resp})
-    print("Klart: publicerat till Buzzsprout (RSS → Spotify m.fl.).")
-
-if __name__ == "__main__":
-    main()
+# 2. Ladda upp ljudfilen
+with open(episode_file, "rb") as f:
+    resp = requests.patch(
+        f"https://api.buzzsprout.com/api/podcasts/{PODCAST_ID}/episodes/{episode_id}.json",
+        headers={"Authorization": f"Token token={API_KEY}"},
+        files={"audio_file": f}
+    )
+resp.raise_for_status()
+print(f"Uploaded audio file for episode {episode_id}")
