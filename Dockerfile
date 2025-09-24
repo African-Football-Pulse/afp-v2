@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ src/
 COPY config/ config/
 COPY assets/audio/ assets/audio/
+COPY templates/ /app/templates/
 
 # Entrypoint-skript som startar rätt modul och laddar hemligheter
 COPY job_entrypoint.py /app/job_entrypoint.py
