@@ -1,7 +1,11 @@
-{# Fallback language #}
+{# --------------------------------------------------------- #}
+{# Fallback language (default = en)                          #}
+{# --------------------------------------------------------- #}
 {% set safe_lang = lang if lang in ["en", "fr", "sw"] else "en" %}
 
-{# Rubriker beroende på dag och språk #}
+{# --------------------------------------------------------- #}
+{# Intro: måndag = post-match, annars daily                  #}
+{# --------------------------------------------------------- #}
 {% if weekday == 0 %}
 ### {% if safe_lang == "fr" %}Introduction d'après-match{% elif safe_lang == "sw" %}Utangulizi wa Baada ya Mechi{% else %}Post-Match Intro{% endif %}
 {{ sections.get("S.GENERIC.INTRO_POSTMATCH", {}).text }}
@@ -12,7 +16,9 @@
 
 ---
 
-{# --- Måndagar: längre recap (alla news) --- #}
+{# --------------------------------------------------------- #}
+{# Måndag: alla NEWS-sektioner                               #}
+{# --------------------------------------------------------- #}
 {% if weekday == 0 %}
 {% for sid, sec in sections.items() if sid.startswith("S.NEWS.") %}
 {{ sec.text }}
@@ -20,7 +26,9 @@
 ---
 {% endfor %}
 
-{# --- Tisdagar: Top3 + Stats --- #}
+{# --------------------------------------------------------- #}
+{# Tisdag: Top3 + Stats                                      #}
+{# --------------------------------------------------------- #}
 {% elif weekday == 1 %}
 {{ sections.get("S.NEWS.TOP3", {}).text }}
 
@@ -28,7 +36,9 @@
 
 {{ sections.get("S.STATS.TOP_AFRICAN_PLAYERS", {}).text }}
 
-{# --- Torsdagar: Highlights + Expert --- #}
+{# --------------------------------------------------------- #}
+{# Torsdag: Highlights + Expert                              #}
+{# --------------------------------------------------------- #}
 {% elif weekday == 3 %}
 {{ sections.get("S.NEWS.CLUB_HIGHLIGHT", {}).text }}
 
@@ -36,16 +46,17 @@
 
 {{ sections.get("S.OPINION.EXPERT_COMMENT", {}).text }}
 
-{# --- Övriga dagar: 1–2 NEWS --- #}
+{# --------------------------------------------------------- #}
+{# Övriga dagar: max 2 NEWS                                  #}
+{# --------------------------------------------------------- #}
 {% else %}
 {% set counter = 0 %}
 {% for sid, sec in sections.items() if sid.startswith("S.NEWS.") %}
+  {% if counter < 2 %}
 {{ sec.text }}
 
 ---
-{% set counter = counter + 1 %}
-{% if counter >= 2 %}
-{% break %}
-{% endif %}
+  {% endif %}
+  {% set counter = counter + 1 %}
 {% endfor %}
 {% endif %}
