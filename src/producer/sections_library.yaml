@@ -3,16 +3,19 @@ sections:
     module: s_news_top3_generic
     runner: build_section
     description: Top 3 news items about African players
+    role: news_anchor
 
   S.NEWS.TOP_AFRICAN_PLAYERS:
     module: s_news_top_african_players
     runner: build_section
     description: Top African players based on news candidates
+    role: news_anchor
 
   S.OPINION.EXPERT_COMMENT:
     module: s_opinion_expert_comment
     runner: build_section
     description: Expert comment on recent events
+    role: expert
 
   S.OPINION.DUO_EXPERTS:
     module: s_opinion_duo_experts
@@ -23,28 +26,40 @@ sections:
     module: s_generic_intro_postmatch
     runner: build_section
     description: Generic intro after a matchday
+    role: news_anchor
 
   S.GENERIC.INTRO_DAILY:
     module: s_generic_intro_daily
     runner: build_section
     description: Generic daily intro section
+    role: news_anchor
 
   S.NEWS.CLUB_HIGHLIGHT:
     module: s_news_club_highlight
     runner: build_section
     description: Spotlight on one club based on recent news candidates
+    role: news_anchor
 
   S.STATS.DRIVER:
     module: s_stats_driver
     runner: build_section
     description: Run all stats sections across all leagues
+    role: expert
 
-  S.STATS.PROJECT_STATUS:
-    module: s_stats_project_status
+  S.STATS.TOP_PERFORMERS_ROUND:
+    module: s_stats_top_performers_round
     runner: build_section
-    description: Status på projektet och antal spelare som ingår
+    description: Top performing African players in a round
+    role: expert
 
-  S.STATS.TOP_CONTRIBUTORS_SEASON:
-    module: s_stats_top_contributors_season
+  S.STATS.DISCIPLINE:
+    module: s_stats_discipline
     runner: build_section
-    description: Top African players this season based on goal contributions (goals + assists)
+    description: Discipline stats for African players
+    role: expert
+
+  S.STATS.GOAL_IMPACT:
+    module: s_stats_goal_impact
+    runner: build_section
+    description: Goal impact stats for African players
+    role: expert
