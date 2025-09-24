@@ -1,18 +1,13 @@
 import os
 import requests
 import datetime
-import json
 import subprocess
 
 API_KEY = os.environ["BUZZSPROUT_API_KEY"]
 PODCAST_ID = os.environ["BUZZSPROUT_PODCAST_ID"]
-
-BLOB_ACCOUNT = os.environ["BLOB_ACCOUNT_NAME"]
-BLOB_CONTAINER = os.environ["BLOB_CONTAINER_NAME"]
-BLOB_SAS = os.environ["BLOB_CONTAINER_SAS_TOKEN"]
+BLOB_SAS_URL = os.environ["BLOB_SAS_URL"]  # full SAS-URL inkl. token
 
 INPUT_MP3 = "final_episode.mp3"
-INPUT_JSON = "final_episode.json"
 
 
 def download_from_blob(filename: str):
@@ -20,29 +15,24 @@ def download_from_blob(filename: str):
     print(f"⬇️  Hämtar {filename} från blob...")
     cmd = [
         "az", "storage", "blob", "download",
-        "--account-name", BLOB_ACCOUNT,
-        "--container-name", BLOB_CONTAINER,
-        "--name", filename,
         "--file", filename,
-        "--sas-token", BLOB_SAS
+        "--account-url", BLOB_SAS_URL.split("?")[0],
+        "--container-name", BLOB_SAS_URL.split(".net/")[1].split("?")[0],
+        "--name", filename,
+        "--sas-token", BLOB_SAS_URL.split("?")[1]
     ]
     subprocess.check_call(cmd)
 
 
-# --- 1. Se till att vi har filerna ---
+# --- 1. Hämta mp3 ---
 if not os.path.exists(INPUT_MP3):
     download_from_blob(INPUT_MP3)
 
-if not os.path.exists(INPUT_JSON):
-    download_from_blob(INPUT_JSON)
-
-# --- 2. Läs metadata ---
-with open(INPUT_JSON, "r", encoding="utf-8") as f:
-    metadata = json.load(f)
-
-episode_title = metadata.get("title", f"Episode {datetime.date.today()}")
-episode_description = metadata.get("description", "Automatiskt publicerat av workflow")
-episode_date = metadata.get("date", str(datetime.date.today()))
+# --- 2. Sätt default metadata ---
+today = datetime.date.today().strftime("%Y-%m-%d")
+episode_title = f"Episode {today}"
+episode_description = "Automatiskt publicerat av workflow"
+episode_date = today
 
 # --- 3. Namnge filen ---
 episode_file = f"episode_{episode_date}.mp3"
