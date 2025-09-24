@@ -7,7 +7,11 @@ def load_voice_map(lang: str):
         voice_ids = json.load(f)
 
     voice_map = {}
-    if lang in roles["roles"]["duo_experts"]:
-        for role, key in roles["roles"]["duo_experts"][lang].items():
+    # Om språket inte finns → fallback till engelska
+    target_lang = lang if lang in roles["roles"]["duo_experts"] else "en"
+
+    for role, key in roles["roles"]["duo_experts"].get(target_lang, {}).items():
+        if key in voice_ids:
             voice_map[role] = voice_ids[key]
+
     return voice_map
