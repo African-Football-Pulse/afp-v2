@@ -23,13 +23,18 @@ def load_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
     return pd.read_parquet(BytesIO(blob_bytes), engine="pyarrow")
 
 
+def normalize_id(series: pd.Series) -> pd.Series:
+    """Konvertera ID-kolumner från float/NaN till str utan decimal."""
+    return series.fillna(0).astype(int).astype(str)
+
+
 def main():
     container = "afp"
 
     # 🎯 Masterlista för afrikanska spelare
     master_path = "players/africa/players_africa_master.json"
     master = load_json_from_blob(container, master_path)
-    player_ids = {str(p.get("id")) for p in master.get("players", [])}
+    player_ids = {str(int(p.get("id"))) for p in master.get("players", []) if p.get("id")}
 
     rows = []
 
@@ -48,14 +53,18 @@ def main():
             print(f"[build_player_match_stats] ⚠️ Kunde inte läsa {path}: {e}")
             continue
 
+        # Normalisera ID-kolumner
+        df["player_id"] = normalize_id(df["player_id"])
+        if "assist_id" in df.columns:
+            df["assist_id"] = normalize_id(df["assist_id"])
+
         # 👀 Debug: visa struktur före filtrering
         print(f"\n[DEBUG] Fil: {path}")
         print(f"[DEBUG] Kolumner: {list(df.columns)}")
-        print("[DEBUG] Första 5 rader:")
+        print("[DEBUG] Första 5 rader (innan filtrering):")
         print(df.head().to_string(index=False))
 
         # Filtrera på spelare i masterlistan
-        df["player_id"] = df["player_id"].astype(str)
         df = df[df["player_id"].isin(player_ids)]
 
         if df.empty:
@@ -89,9 +98,7 @@ def main():
         content_type="application/octet-stream",
     )
 
-    print(
-        f"[build_player_match_stats] ✅ Uploaded {len(result)} rows → {output_path}"
-    )
+    print(f"[build_player_match_stats] ✅ Uploaded {len(result)} rows → {output_path}")
 
     # 👀 Preview per spelare
     print("\n[build_player_match_stats] 🔎 Sample (per spelare):")
