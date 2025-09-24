@@ -83,3 +83,11 @@ tasks:
       - --outdir
       - sections
       - --write-latest
+
+  - section: S.STATS.TOP_CONTRIBUTORS_SEASON
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
