@@ -1,4 +1,5 @@
 import os, sys, json, pathlib, datetime, time, requests, yaml
+from src.storage import azure_blob
 
 CONFIG_PATH = pathlib.Path("config/pods.yaml")
 API_BASE = "https://www.buzzsprout.com/api"
@@ -16,7 +17,6 @@ def read_config():
         pod_id = pod.get("publish", {}).get("buzzsprout_podcast_id")
         print(f"  - {name}: status={status_val} → id={pod_id}")
 
-    # Robust filter: on / "on" / true / "true"
     active = [
         (k, v) for k, v in pods.items()
         if str(v.get("status")).lower() in ("on", "true")
@@ -49,22 +49,21 @@ def main():
         sys.exit(1)
 
     pod_name, pod_cfg = read_config()
-    podcast_id = pod_cfg["publish"]["buzzsprout_podcast_id"]
+    publish_cfg = pod_cfg.get("publish", {})
+    podcast_id = publish_cfg["buzzsprout_podcast_id"]
 
-    # Bygg path till dagens publish_request.json
     from datetime import date
-    episode_date = str(os.getenv("EPISODE_DATE", "")) or date.today().isoformat()
+    episode_date = os.getenv("EPISODE_DATE", "") or date.today().isoformat()
     league = pod_cfg["leagues"][0]
     lang = pod_cfg["langs"][0]
 
-    req_path = pathlib.Path(
-        f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json"
-    )
-    if not req_path.exists():
-        print(f"❌ ERROR: Missing {req_path}")
+    container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+    blob_path = f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json"
+    if not azure_blob.exists(container, blob_path):
+        print(f"❌ ERROR: Missing {blob_path} in Azure")
         sys.exit(1)
 
-    req = json.loads(req_path.read_text(encoding="utf-8"))
+    req = azure_blob.get_json(container, blob_path)
 
     headers = {
         "Authorization": f"Token token={token}",
@@ -88,10 +87,10 @@ def main():
         sys.exit(1)
 
     resp = r.json()
-    out_path = req_path.parent / "publish_report.json"
-    out_path.write_text(json.dumps({"status":"ok","response":resp}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_path = f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_report.json"
+    azure_blob.upload_json(container, report_path, {"status":"ok","response":resp})
 
-    print(f"✅ Publicerat! Rapport: {out_path}")
+    print(f"✅ Publicerat! Rapport: {report_path}")
 
 if __name__ == "__main__":
     main()
