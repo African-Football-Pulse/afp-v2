@@ -1,63 +1,46 @@
-# src/producer/produce_candidates.py
-import os, json, uuid
+import os
+import sys
+import json
+import uuid
 from datetime import datetime, timezone
 
 from src.storage import azure_blob
+from src.producer import news_utils
 
-CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
-def today_str():
-    return datetime.now(timezone.utc).date().isoformat()
+def log(msg: str):
+    """Standardiserad loggning"""
+    print(f"[produce_candidates] {msg}", flush=True)
 
 
 def load_master_players():
-    """Ladda masterlistan över afrikanska spelare från Azure Blob Storage."""
-    blob_path = os.getenv(
-        "MASTER_PLAYERS_BLOB",
-        "players/africa/players_africa_master.json"
-    )
-    print(f"[produce_candidates] Loading master players from blob: {blob_path}")
-    data = azure_blob.get_json(CONTAINER, blob_path)
-    if isinstance(data, dict) and "players" in data:
-        return data["players"]
-    raise RuntimeError(f"Masterfilen {blob_path} har oväntat format")
-
-
-def load_curated_news():
-    blob_paths = azure_blob.list_prefix(CONTAINER, "curated/news/")
-    items = []
-    for bp in blob_paths:
-        if not bp.endswith("items.json"):
-            continue
-        try:
-            data = azure_blob.get_json(CONTAINER, bp)
-            for d in data:
-                d["__blob_path"] = bp
-            items.extend(data)
-        except Exception as e:
-            print(f"[WARN] Failed to load {bp}: {e}")
-    return items
+    """Ladda masterlistan med afrikanska spelare"""
+    blob_path = "players/africa/players_africa_master.json"
+    log(f"Loading master players from blob: {blob_path}")
+    return azure_blob.get_json(CONTAINER, blob_path)
 
 
 def candidate_from_news(item, master_players):
-    title = (item.get("title") or "")
-    summary = (item.get("summary") or "")
-    text = f"{title} {summary}"
+    """Bygg en kandidat från en nyhetsitem"""
+    title = (item.get("title") or "").lower()
+    summary = (item.get("summary") or "").lower()
     src = item.get("source", "unknown")
+    published_utc = item.get("published")
 
     player = None
-    direct_mention = 0
+    direct_mention = 0.0
+
     for mp in master_players:
-        name = mp.get("name")
-        club = mp.get("club")
+        name = (mp.get("name") or "").lower()
+        club = (mp.get("club") or "").lower()
 
-        if name and name.lower() in text.lower():
+        if name and name in title + " " + summary:
             player = mp
-            direct_mention = 1
+            direct_mention = 1.0
             break
-
-        if not player and club and club.lower() in src.lower():
+        if club and club in src.lower():
             player = mp
             direct_mention = 0.4
             break
@@ -65,20 +48,11 @@ def candidate_from_news(item, master_players):
     if not player:
         return None
 
-    published = item.get("published_iso")
-    published_utc = None
-    if published:
-        try:
-            dt = datetime.fromisoformat(published)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            published_utc = dt.isoformat()
-        except Exception:
-            pass
-
     return {
         "id": str(uuid.uuid4()),
         "player": player,
+        "player_id": player.get("id") if player else None,
+        "club_id": player.get("club_id") if player and player.get("club_id") else None,
         "event": {"type": "news"},
         "source": {
             "name": src,
@@ -87,21 +61,21 @@ def candidate_from_news(item, master_players):
         "direct_player_mention": direct_mention,
         "event_importance": 0.0,
         "published_iso": published_utc,
-        "recency_score": None,   # fylls i scoring-steget
-        "novelty_24h": None,     # fylls i scoring-steget
-        "language_match": None,  # fylls i scoring-steget
+        "recency_score": None,
+        "novelty_24h": None,
+        "language_match": None,
     }
 
 
 def main():
-    day = today_str()
-    print(f"[produce_candidates] START day={day} (UTC)")
+    day = datetime.utcnow().strftime("%Y-%m-%d")
+    log(f"START day={day} (UTC)")
 
     master_players = load_master_players()
-    print(f"[produce_candidates] Loaded {len(master_players)} master players")
+    log(f"Loaded {len(master_players)} master players")
 
-    news_items = load_curated_news()
-    print(f"[produce_candidates] Loaded {len(news_items)} news items from Azure")
+    news_items = news_utils.load_curated_news(day)
+    log(f"Loaded {len(news_items)} news items from Azure")
 
     candidates = []
     for item in news_items:
@@ -109,14 +83,18 @@ def main():
         if cand:
             candidates.append(cand)
 
-    print(f"[produce_candidates] Built {len(candidates)} raw candidates")
+    log(f"Built {len(candidates)} raw candidates")
 
+    # 🔑 Ny debug-statistik
+    with_player = sum(1 for c in candidates if c.get("player_id"))
+    log(f"Stats → total={len(candidates)}, with_player_id={with_player}, without={len(candidates)-with_player}")
+
+    # Skriv till Azure
     out_path = f"producer/candidates/{day}/candidates.jsonl"
     text = "\n".join(json.dumps(c, ensure_ascii=False) for c in candidates)
-    azure_blob.put_text(CONTAINER, out_path, text, content_type="application/jsonl")
-
-    print(f"[produce_candidates] Wrote {out_path}")
-    print("[produce_candidates] DONE")
+    azure_blob.put_text(CONTAINER, out_path, text, content_type="application/json; charset=utf-8")
+    log(f"Wrote {out_path}")
+    log("DONE")
 
 
 if __name__ == "__main__":
