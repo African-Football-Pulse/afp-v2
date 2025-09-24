@@ -11,6 +11,10 @@ def main():
         cfg = yaml.safe_load(f)
 
     pods = cfg.get("pods", {})
+    print("🔍 Pods i config/pods.yaml:")
+    for name, pod in pods.items():
+        print(f"  - {name}: status={pod.get('status')} → id={pod.get('publish', {}).get('buzzsprout_podcast_id')}")
+
     active_pods = [ (k, v) for k, v in pods.items() if v.get("status") == "on" ]
     if not active_pods:
         raise RuntimeError("❌ No active pod found in pods.yaml")
@@ -25,11 +29,8 @@ def main():
     league = pod_cfg["leagues"][0]
     lang = pod_cfg["langs"][0]
 
-    # Datum = idag (kan senare styras av pipeline)
-    episode_date = str(os.getenv("EPISODE_DATE", "")) or str(pathlib.Path().cwd())  # fallback hack
-    if not episode_date or episode_date == str(pathlib.Path().cwd()):
-        from datetime import date
-        episode_date = date.today().isoformat()
+    from datetime import date
+    episode_date = str(os.getenv("EPISODE_DATE", "")) or date.today().isoformat()
 
     container_sas_url = os.getenv("BLOB_CONTAINER_SAS_URL", "")
     if not container_sas_url:
@@ -67,8 +68,9 @@ def main():
         "audio_url": audio_url
     }
 
-    # Publisher path per podcast
-    out_path = pathlib.Path(f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json")
+    out_path = pathlib.Path(
+        f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json"
+    )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
 
