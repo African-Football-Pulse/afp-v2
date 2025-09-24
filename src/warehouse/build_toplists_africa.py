@@ -25,9 +25,9 @@ def main():
 
     df_players = (
         read_parquet_from_blob(container, players_path)[
-            ["player_id", "current_club", "country"]
+            ["player_id", "name", "current_club", "country"]
         ]
-        .rename(columns={"current_club": "club"})
+        .rename(columns={"current_club": "club", "name": "player_name"})
     )
 
     # ---- Merge metrics ----
