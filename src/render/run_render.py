@@ -5,7 +5,7 @@ import sys
 import json
 
 from src.common.blob_io import get_container_client
-from render import tts_elevenlabs
+from . import tts_elevenlabs
 
 
 def log(msg: str) -> None:
