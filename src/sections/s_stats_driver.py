@@ -64,4 +64,11 @@ def build_section(args=None):
     if results:
         stats_utils.save_last_stats(state)
 
-    return results
+    # ✅ Returnera manifest istället för lista
+    return {
+        "section": "S.STATS.DRIVER",
+        "status": "ok" if results else "no_data",
+        "season": season,
+        "league_count": len(league_ids),
+        "subsections": [s["id"] for s in STATS_SECTIONS],
+    }
