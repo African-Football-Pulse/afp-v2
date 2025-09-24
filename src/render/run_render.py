@@ -15,7 +15,9 @@ def log(msg: str) -> None:
 def main():
     date = os.getenv("DATE") or datetime.date.today().isoformat()
     league = os.getenv("LEAGUE", "premier_league")
-    lang = os.getenv("LANG", "en")
+    lang = os.getenv("LANG") or "en"   # ✅ fallback till "en"
+
+    log(f"Start render: date={date}, league={league}, lang={lang}")
 
     # Init blob container
     container = get_container_client()
