@@ -1,22 +1,10 @@
-pods:
   PL_daily_africa_en:
     status: off
     leagues: ["premier_league"]
     langs: ["en"]
-    jingles:
-      intro: "jingles/J2.mp3"
-      outro: "jingles/J2.mp3"
-    personas_active: ["p1","p2"]
-    sections: ["S1","S2","S3"]
-    rules:
-      type: micro
-      min_sections: 1
-      max_sections: 3
-      freshness_hours: 24
-    overrides:
-      S1:
-        target_duration_s: 55
-        lead_persona: "p1"
+    role_map:
+      news_anchor: "AK"
+      expert: "JJK"
     publish:
       buzzsprout_podcast_id: 2538204
       buzzsprout_name: "African Football Pulse"
@@ -27,16 +15,9 @@ pods:
     status: on
     leagues: ["premier_league"]
     langs: ["en"]
-    jingles:
-      intro: "jingles/test_intro.mp3"
-      outro: "jingles/test_outro.mp3"
-    personas_active: ["pX"]
-    sections: ["S_test"]
-    rules:
-      type: micro
-      min_sections: 1
-      max_sections: 1
-      freshness_hours: 24
+    role_map:
+      news_anchor: "AK"
+      expert: "JJK"
     publish:
       buzzsprout_podcast_id: 2533393
       buzzsprout_name: "Patrik's Podcast"
