@@ -24,7 +24,7 @@ pods:
       explicit: false
 
   test_patriks_podcast:
-    status: off
+    status: on
     leagues: ["premier_league"]
     langs: ["en"]
     jingles:
