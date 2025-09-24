@@ -27,7 +27,8 @@ def download_episode(container_client, date_str: str):
     blob_client = container_client.get_blob_client(blob_path)
     with open(EPISODE_FILE, "wb") as f:
         f.write(blob_client.download_blob().readall())
-    log("Nedladdning klar.")
+    size = os.path.getsize(EPISODE_FILE)
+    log(f"Nedladdning klar. Filstorlek: {size} bytes")
 
 def upload_final(container_client, date_str: str):
     blob_path = f"audio/episodes/{date_str}/{LEAGUE}/daily/{LANG}/{FINAL_FILE}"
@@ -45,10 +46,21 @@ def mix_files():
         f.write(f"file '{EPISODE_FILE}'\n")
         f.write(f"file '{OUTRO}'\n")
 
+    # Debug: logga concat_list och filstorlekar
+    with open(concat_list, "r") as f:
+        log("Concat list:\n" + f.read())
+
+    for file in [INTRO, EPISODE_FILE, OUTRO]:
+        if os.path.exists(file):
+            log(f"{file} finns, storlek {os.path.getsize(file)} bytes")
+        else:
+            log(f"❌ {file} saknas!")
+
+    # Kör ffmpeg med re-encode istället för copy
     cmd = [
         "ffmpeg", "-y", "-f", "concat", "-safe", "0",
         "-i", concat_list,
-        "-c", "copy", FINAL_FILE
+        "-c:a", "libmp3lame", "-b:a", "192k", FINAL_FILE
     ]
     subprocess.run(cmd, check=True)
     log("Mixning klar.")
