@@ -1,32 +1,14 @@
-# src/producer/produce_auto.py
-import subprocess
-import datetime
-import yaml
-import os
-import sys
+PODS_PATH = "config/pods.yaml"
 
-LIBRARY_PATH = "src/producer/sections_library.yaml"
-
-
-def run_step(cmd, section):
-    print(f"[produce_auto] 🚀 Startar sektion: {section}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
-    if result.returncode != 0:
-        print(f"[produce_auto] ❌ FEL: {section} returnerade {result.returncode}")
-        print(result.stderr)
-        return False
-
-    # Leta efter rad från produce_section som visar manifest
-    if "[produce_section] Received manifest" in result.stdout:
-        print(f"[produce_auto] ✅ Klar: {section} (manifest mottaget)")
-    else:
-        print(f"[produce_auto] ⚠️ VARNING: {section} gav inget manifest (fallback?)")
-
-    # Skicka igenom stdout från subprocess för debug
-    sys.stdout.write(result.stdout)
-    return True
-
+def load_active_pod():
+    with open(PODS_PATH, "r", encoding="utf-8") as f:
+        pods_cfg = yaml.safe_load(f).get("pods", {})
+    # Hitta första pod med status: on
+    for pod_key, pod_cfg in pods_cfg.items():
+        if str(pod_cfg.get("status", "")).lower() == "on":
+            print(f"[produce_auto] Aktiv pod hittad: {pod_key}")
+            return pod_key
+    raise RuntimeError("[produce_auto] Ingen aktiv pod hittades i pods.yaml")
 
 def main():
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
@@ -37,6 +19,9 @@ def main():
         library = yaml.safe_load(f)
     sections = library.get("sections", {})
     print(f"[produce_auto] Sections i library ({len(sections)}): {', '.join(sections.keys())}")
+
+    # Ladda aktiv pod
+    pod_key = load_active_pod()
 
     # 1. Produce candidates
     result = subprocess.run([sys.executable, "-m", "src.producer.produce_candidates"])
@@ -62,17 +47,13 @@ def main():
             "--path-scope", "blob",
             "--league", "premier_league",
             "--outdir", "sections",
-            "--write-latest"
+            "--write-latest",
+            "--pod", pod_key  # från pods.yaml
         ]
 
-        # NEWS och OPINION behöver kandidater
         if section.startswith("S.NEWS") or section.startswith("S.OPINION"):
             cmd.extend(["--news", news_path])
 
         run_step(cmd, section)
 
     print("[produce_auto] 🎉 DONE")
-
-
-if __name__ == "__main__":
-    main()
