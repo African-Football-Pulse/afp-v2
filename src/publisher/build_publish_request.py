@@ -1,5 +1,6 @@
 import os, sys, json, pathlib, urllib.parse, yaml
 from src.storage import azure_blob
+from datetime import date
 
 CONFIG_PATH = pathlib.Path("config/pods.yaml")
 
@@ -17,7 +18,7 @@ def main():
         pod_id = pod.get("publish", {}).get("buzzsprout_podcast_id")
         print(f"  - {name}: status={status_val} → id={pod_id}")
 
-    # Robust filter: accepterar "on", "true", True
+    # Robust filter
     active_pods = [
         (k, v) for k, v in pods.items()
         if str(v.get("status")).lower() in ("on", "true")
@@ -34,8 +35,7 @@ def main():
     league = pod_cfg["leagues"][0]
     lang = pod_cfg["langs"][0]
 
-    from datetime import date
-    episode_date = str(os.getenv("EPISODE_DATE", "")) or date.today().isoformat()
+    episode_date = os.getenv("EPISODE_DATE", "") or date.today().isoformat()
 
     container_sas_url = os.getenv("BLOB_CONTAINER_SAS_URL", "")
     if not container_sas_url:
@@ -45,6 +45,7 @@ def main():
     base_url = f"{u.scheme}://{u.netloc}{u.path}"
     query = u.query
 
+    # Paths i Azure
     blob_base = f"audio/episodes/{episode_date}/{league}/daily/{lang}"
     render_manifest_path = f"{blob_base}/render_manifest.json"
     mp3_path = f"{blob_base}/final_episode.mp3"
@@ -54,11 +55,13 @@ def main():
         raise RuntimeError(f"Hittar inte render_manifest: {render_manifest_path}")
     manifest = azure_blob.get_json(container, render_manifest_path)
 
+    # Metadata
     title = manifest.get("title") or f"{league.capitalize()} Daily – {episode_date}"
     description = manifest.get("description") or f"Automated recap for {league}."
     language = publish_cfg.get("language") or manifest.get("language") or lang
     explicit = publish_cfg.get("explicit", manifest.get("explicit", False))
 
+    # Bygg SAS-URL till mp3
     audio_url = f"{base_url}/{mp3_path}?{query}"
 
     req = {
@@ -69,13 +72,11 @@ def main():
         "audio_url": audio_url
     }
 
-    out_path = pathlib.Path(
-        f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json"
-    )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Skriv till Azure
+    blob_path = f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json"
+    azure_blob.upload_json(container, blob_path, req)
 
-    print(f"✅ Skapade publish_request.json för {pod_name} → {out_path}")
+    print(f"✅ Skapade publish_request.json för {pod_name} → {blob_path}")
     print(json.dumps(req, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
