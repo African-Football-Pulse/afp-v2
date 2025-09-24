@@ -1,4 +1,4 @@
-import os, sys, json, pathlib, datetime, time, requests, urllib.parse, yaml
+import os, sys, json, pathlib, datetime, time, requests, yaml
 
 CONFIG_PATH = pathlib.Path("config/pods.yaml")
 API_BASE = "https://www.buzzsprout.com/api"
@@ -9,10 +9,21 @@ def read_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     pods = cfg.get("pods", {})
-    active = [ (k,v) for k,v in pods.items() if v.get("status") == "on" ]
+
+    print("🔍 Pods i config/pods.yaml:")
+    for name, pod in pods.items():
+        status_val = str(pod.get("status")).lower()
+        pod_id = pod.get("publish", {}).get("buzzsprout_podcast_id")
+        print(f"  - {name}: status={status_val} → id={pod_id}")
+
+    # Robust filter: on / "on" / true / "true"
+    active = [
+        (k, v) for k, v in pods.items()
+        if str(v.get("status")).lower() in ("on", "true")
+    ]
     if not active:
         raise RuntimeError("❌ No active pod found in pods.yaml")
-    return active[0]  # (name, cfg)
+    return active[0]
 
 def post_with_retries(url, headers=None, json_body=None, max_tries=3):
     backoff = 1
@@ -40,12 +51,15 @@ def main():
     pod_name, pod_cfg = read_config()
     podcast_id = pod_cfg["publish"]["buzzsprout_podcast_id"]
 
-    # Hitta senaste publish_request.json (vi tar dagens datum)
-    episode_date = datetime.date.today().isoformat()
+    # Bygg path till dagens publish_request.json
+    from datetime import date
+    episode_date = str(os.getenv("EPISODE_DATE", "")) or date.today().isoformat()
     league = pod_cfg["leagues"][0]
     lang = pod_cfg["langs"][0]
 
-    req_path = pathlib.Path(f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json")
+    req_path = pathlib.Path(
+        f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json"
+    )
     if not req_path.exists():
         print(f"❌ ERROR: Missing {req_path}")
         sys.exit(1)
