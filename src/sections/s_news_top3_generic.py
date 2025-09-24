@@ -1,102 +1,101 @@
 # src/sections/s_news_top3_generic.py
-import os
+import os, json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
-import json
 
 from src.sections.utils import write_outputs
 from src.storage import azure_blob
+from src.gpt import run_gpt
+from src.producer import role_utils
 
 def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
 def _load_scored_items(league: str, day: str) -> List[Dict[str, Any]]:
-    """Ladda scored.jsonl för given dag och liga från Azure."""
     container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
-    if not container or not container.strip():
-        raise RuntimeError("AZURE_STORAGE_CONTAINER is missing or empty")
-
     path = f"scored/{day}/{league}/scored.jsonl"
     if not azure_blob.exists(container, path):
-        print(f"[s_news_top3_generic] ⚠️ scored.jsonl saknas: {path}")
         return []
-
     text = azure_blob.get_text(container, path)
-    items = []
-    for line in text.splitlines():
-        if line.strip():
-            try:
-                items.append(json.loads(line))
-            except Exception as e:
-                print(f"[s_news_top3_generic] JSON decode error: {e}")
-    return items
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 def _pick_topn_diverse(items: List[Dict[str, Any]], n: int) -> List[Dict[str, Any]]:
-    """Välj top N items med högsta score, max ett per spelare."""
-    seen_players, picked = set(), []
-    for it in items:
+    seen, picked = set(), []
+    for it in sorted(items, key=lambda x: x.get("score", 0), reverse=True):
         player = it.get("player", {}).get("name")
-        if not player:
-            continue
-        if player in seen_players:
-            continue
-        seen_players.add(player)
-        picked.append(it)
+        if player and player not in seen:
+            seen.add(player)
+            picked.append(it)
         if len(picked) >= n:
             break
     return picked
 
-def _render_section(league: str, day: str, items: List[Dict[str, Any]]) -> str:
-    lines = [f"Top {len(items)} African player news for {league} ({day}):"]
-    for it in items:
-        title = it.get("title") or ""
-        src = it.get("source", {}).get("name") if isinstance(it.get("source"), dict) else it.get("source", "")
-        lines.append(f"- {title} ({src})")
-    return "\n".join(lines)
-
 def build_section(args=None):
-    """Bygg en sektion för topp 3 nyheter från scored.jsonl (med diversitet)."""
     league = getattr(args, "league", "premier_league")
     day = getattr(args, "date", today_str())
     top_n = int(getattr(args, "top_n", 3))
     lang = getattr(args, "lang", "en")
     section_id = getattr(args, "section_code", "S.NEWS.TOP3")
+    role = "news_anchor"  # från sections_library.yaml
 
-    # Hämta role från args eller default till news_anchor
-    role = getattr(args, "role", "news_anchor")
+    # Hämta pod-konfig
+    pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
+    pod_cfg = pods_cfg.get(getattr(args, "pod"))
+    persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
 
+    # Hämta personas
+    personas = role_utils.load_yaml("config/personas.json")
+    persona_cfg = personas.get(persona_id, {})
+    persona_block = f"""{persona_cfg.get("name")}
+Role: {persona_cfg.get("role")}
+Voice: {persona_cfg.get("voice")}
+Tone: {persona_cfg.get("tone", {}).get("primary", "")}
+Style: {persona_cfg.get("style", "")}
+"""
+
+    # Ladda nyheter
     items = _load_scored_items(league, day)
     if not items:
-        print("[s_news_top3_generic] Inga scored items hittades")
         payload = {
             "slug": "top3_news",
             "title": "Top 3 African Player News",
             "text": "No scored news items available.",
             "length_s": 2,
-            "sources": {"feeds": []},
-            "meta": {"role": role},
+            "sources": [],
+            "meta": {"role": role, "persona": persona_id},
             "items": [],
             "type": "news",
             "model": "gpt-4o-mini",
         }
         return write_outputs(section_id, day, league, payload, status="no_items", lang=lang)
 
-    # Sortera på score (högst först)
-    items_sorted = sorted(items, key=lambda x: x.get("score", 0), reverse=True)
+    picked = _pick_topn_diverse(items, top_n)
 
-    # Välj diversifierat top-N
-    picked = _pick_topn_diverse(items_sorted, top_n)
-    body = _render_section(league, day, picked)
+    # GPT-sammanfattning för varje nyhet
+    summaries = []
+    for it in picked:
+        url = it.get("source", {}).get("url")
+        title = it.get("title")
+        prompt_config = {
+            "persona": persona_block,
+            "instructions": f"""Summarize this football news item in 2–3 spoken-style sentences:
+Title: {title}
+URL: {url}"""
+        }
+        ctx = {"title": title, "url": url}
+        system_rules = "You are an assistant generating natural spoken football news summaries."
+        gpt_out = run_gpt(prompt_config, ctx, system_rules)
+        summaries.append(f"- {title} ({it.get('source',{}).get('name')})\n  {gpt_out}")
 
-    print(f"[s_news_top3_generic] Totalt {len(items)} scored → valde {len(picked)}")
+    body = f"Top {len(picked)} African player news for {league} ({day}):\n" + "\n".join(summaries)
 
     payload = {
         "slug": "top3_news",
         "title": "Top 3 African Player News",
         "text": body,
-        "length_s": len(picked) * 30,
-        "sources": {"feeds": []},
-        "meta": {"role": role},
+        "length_s": len(picked) * 35,
+        "sources": [it.get("source", {}).get("url") for it in picked],
+        "meta": {"role": role, "persona": persona_id},
         "items": picked,
         "type": "news",
         "model": "gpt-4o-mini",
