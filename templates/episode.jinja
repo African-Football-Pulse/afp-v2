@@ -1,0 +1,44 @@
+{# Intro #}
+{% if weekday == 0 %}
+### Post-Match Intro
+{{ sections["S.GENERIC.INTRO_POSTMATCH"].text }}
+{% else %}
+### Daily Intro
+{{ sections["S.GENERIC.INTRO_DAILY"].text }}
+{% endif %}
+
+---
+
+{# Måndagar: längre recap #}
+{% if weekday == 0 %}
+{% for sid, sec in sections.items() if sid.startswith("S.NEWS.") %}
+{{ sec.text }}
+
+---
+{% endfor %}
+
+{# Tisdagar: Top3 + Stats #}
+{% elif weekday == 1 %}
+{{ sections["S.NEWS.TOP3"].text }}
+
+---
+
+{{ sections["S.STATS.TOP_AFRICAN_PLAYERS"].text }}
+
+{# Torsdagar: Highlights + Expert #}
+{% elif weekday == 3 %}
+{{ sections["S.NEWS.CLUB_HIGHLIGHT"].text if sections.get("S.NEWS.CLUB_HIGHLIGHT") }}
+
+---
+
+{{ sections["S.OPINION.EXPERT_COMMENT"].text if sections.get("S.OPINION.EXPERT_COMMENT") }}
+
+{# Övriga dagar: 1–2 NEWS #}
+{% else %}
+{% for sid, sec in sections.items() if sid.startswith("S.NEWS.") %}
+{{ sec.text }}
+
+---
+{% if loop.index >= 2 %}{% break %}{% endif %}
+{% endfor %}
+{% endif %}
