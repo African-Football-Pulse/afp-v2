@@ -57,6 +57,17 @@ def main():
         log("ERROR: Inga sektioner i manifestet.")
         sys.exit(1)
 
+    # 2b) Rensa bort streck '---' ur texterna
+    def clean_section_text(section):
+        if "text" in section:
+            section["text"] = section["text"].replace("---", "").strip()
+        if "lines" in section:
+            for l in section["lines"]:
+                l["text"] = l["text"].replace("---", "").strip()
+        return section
+
+    sections = {sid: clean_section_text(sec) for sid, sec in sections.items()}
+
     # 3) Kör ElevenLabs-rendering med hela section-objekten (text/lines)
     try:
         tts_elevenlabs.main(sections)
@@ -79,3 +90,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
