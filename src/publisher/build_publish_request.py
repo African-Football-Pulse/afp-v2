@@ -1,14 +1,35 @@
-import os, sys, json, pathlib, urllib.parse
+import os, sys, json, pathlib, urllib.parse, yaml
 from src.storage import azure_blob
 
-INBOX_DIR = pathlib.Path("publisher/inbox")
+CONFIG_PATH = pathlib.Path("config/pods.yaml")
 
 def main():
-    if len(sys.argv) < 4:
-        print("Usage: python -m src.publisher.build_publish_request <date> <league> <lang>")
-        sys.exit(1)
+    if not CONFIG_PATH.exists():
+        raise RuntimeError(f"Missing config file: {CONFIG_PATH}")
 
-    episode_date, league, lang = sys.argv[1:4]
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    pods = cfg.get("pods", {})
+    active_pods = [ (k, v) for k, v in pods.items() if v.get("status") == "on" ]
+    if not active_pods:
+        raise RuntimeError("❌ No active pod found in pods.yaml")
+
+    pod_name, pod_cfg = active_pods[0]
+    publish_cfg = pod_cfg.get("publish", {})
+    podcast_id = publish_cfg.get("buzzsprout_podcast_id")
+    if not podcast_id:
+        raise RuntimeError(f"❌ Pod {pod_name} missing buzzsprout_podcast_id")
+
+    # Vi tar första league/lang (för enkelhet, kan utökas sen)
+    league = pod_cfg["leagues"][0]
+    lang = pod_cfg["langs"][0]
+
+    # Datum = idag (kan senare styras av pipeline)
+    episode_date = str(os.getenv("EPISODE_DATE", "")) or str(pathlib.Path().cwd())  # fallback hack
+    if not episode_date or episode_date == str(pathlib.Path().cwd()):
+        from datetime import date
+        episode_date = date.today().isoformat()
 
     container_sas_url = os.getenv("BLOB_CONTAINER_SAS_URL", "")
     if not container_sas_url:
@@ -24,17 +45,16 @@ def main():
     render_manifest_path = f"{blob_base}/render_manifest.json"
     mp3_path = f"{blob_base}/final_episode.mp3"
 
-    # Läs render_manifest
     container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
     if not azure_blob.exists(container, render_manifest_path):
         raise RuntimeError(f"Hittar inte render_manifest: {render_manifest_path}")
     manifest = azure_blob.get_json(container, render_manifest_path)
 
-    # Metadata från render_manifest
+    # Metadata från render_manifest + publish_cfg
     title = manifest.get("title") or f"{league.capitalize()} Daily – {episode_date}"
     description = manifest.get("description") or f"Automated recap for {league}."
-    language = manifest.get("language") or lang
-    explicit = bool(manifest.get("explicit", False))
+    language = publish_cfg.get("language") or manifest.get("language") or lang
+    explicit = publish_cfg.get("explicit", manifest.get("explicit", False))
 
     # Bygg SAS-URL till mp3
     audio_url = f"{base_url}/{mp3_path}?{query}"
@@ -47,11 +67,12 @@ def main():
         "audio_url": audio_url
     }
 
-    INBOX_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = INBOX_DIR / "publish_request.json"
+    # Publisher path per podcast
+    out_path = pathlib.Path(f"publisher/podcasts/{podcast_id}/episodes/{episode_date}/{league}/{lang}/publish_request.json")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print(f"✅ Skapade publish_request.json → {out_path}")
+    print(f"✅ Skapade publish_request.json för {pod_name} → {out_path}")
     print(json.dumps(req, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
