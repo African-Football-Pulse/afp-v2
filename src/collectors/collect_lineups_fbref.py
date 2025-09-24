@@ -25,11 +25,11 @@ def extract_matches(manifest):
 def main():
     container = "afp"
 
-    # ⚙️ Miljövariabler (för enkel test)
+    # ⚙️ Miljövariabler
     season = os.environ.get("SEASON", "2024-2025")
-    league_id = os.environ.get("LEAGUE", "228")  # Premier League som exempel
+    league_id = os.environ.get("LEAGUE", "228")
 
-    # 🔎 Ladda manifestet för ligan & säsongen
+    # 🔎 Ladda manifest
     manifest_path = f"stats/{season}/{league_id}/manifest.json"
     try:
         manifest = load_json_from_blob(container, manifest_path)
@@ -52,6 +52,11 @@ def main():
 
     for i, match in enumerate(matches[:limit], start=1):
         match_id = str(match.get("id"))
+        home = (match.get("teams", {}).get("home") or {}).get("name")
+        away = (match.get("teams", {}).get("away") or {}).get("name")
+
+        print(f"[collect_lineups_fbref] 🔎 ({i}/{limit}) Försöker hämta lineup → Match {match_id}: {home} vs {away}")
+
         if not match_id:
             continue
 
