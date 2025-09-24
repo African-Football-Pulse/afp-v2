@@ -38,3 +38,8 @@ sections:
     module: s_stats_driver
     runner: build_section
     description: Run all stats sections across all leagues
+
+  S.STATS.PROJECT_STATUS:
+  module: s_stats_project_status
+  runner: build_section
+  description: Status på projektet och antal spelare som ingår
