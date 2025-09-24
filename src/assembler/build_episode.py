@@ -105,15 +105,18 @@ def parse_section_text(section_id: str, date: str, league: str) -> dict:
         return {"text": raw_text}
 
 # ---------- Rendering via Jinja ----------
-def render_episode(sections_meta, lang: str) -> str:
+def render_episode(sections_meta, lang: str):
     env = Environment(loader=FileSystemLoader("templates"))
     template = env.get_template("episode.jinja")
     sections_dict = {s["section_id"]: s for s in sections_meta}
-    return template.render(
+    script = template.render(
         sections=sections_dict,
         weekday=datetime.utcnow().weekday(),
         lang=lang
     )
+    # Lista vilka section_id som faktiskt användes i scriptet
+    used_sections = [sid for sid, sec in sections_dict.items() if sid in script]
+    return script, used_sections
 
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str):
@@ -128,7 +131,6 @@ def build_episode(date: str, league: str, lang: str):
         return
 
     sections_meta = []
-    total = 0
     for m in manifests:
         parts = m.split("/")
         section_id = parts[1] if len(parts) > 1 else "UNKNOWN"
@@ -146,7 +148,12 @@ def build_episode(date: str, league: str, lang: str):
             "duration_s": dur,
             **parsed
         })
-        total += dur
+
+    # Bygg script via Jinja-mall och hämta vilka sektioner som används
+    episode_script, used_sections = render_episode(sections_meta, lang)
+
+    # Filtrera manifestet så det bara innehåller använda sektioner
+    filtered_meta = [s for s in sections_meta if s["section_id"] in used_sections]
 
     # Ladda voice_map
     voice_map = load_voice_map(lang)
@@ -156,15 +163,12 @@ def build_episode(date: str, league: str, lang: str):
         "date": date,
         "type": "micro",
         "lang": lang,
-        "sections": sections_meta,
-        "duration_s": total,
-        "voice_map": voice_map,   # <-- nytt
+        "sections": filtered_meta,
+        "duration_s": sum(s["duration_s"] for s in filtered_meta),
+        "voice_map": voice_map,
     }
 
     write_text(base + "episode_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
-
-    # Bygg script via Jinja-mall
-    episode_script = render_episode(sections_meta, lang)
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
 
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
@@ -182,3 +186,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
