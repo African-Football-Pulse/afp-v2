@@ -79,6 +79,14 @@ def parse_section_text(section_id: str, date: str, league: str) -> dict:
     except Exception:
         return {"text": ""}
 
+    # Ta bort rubrikrader som börjar med '#'
+    clean_lines = []
+    for line in raw_text.splitlines():
+        if line.strip().startswith("#"):
+            continue
+        clean_lines.append(line)
+    raw_text = "\n".join(clean_lines).strip()
+
     lines = []
     for line in raw_text.splitlines():
         line = line.strip()
