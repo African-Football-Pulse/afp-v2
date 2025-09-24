@@ -17,9 +17,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Källkod och config
+# Källkod, config och jinglar
 COPY src/ src/
 COPY config/ config/
+COPY assets/audio/ assets/audio/
 
 # Entrypoint-skript som startar rätt modul och laddar hemligheter
 COPY job_entrypoint.py /app/job_entrypoint.py
