@@ -63,31 +63,6 @@ def list_section_manifests(date: str, league: str) -> List[str]:
                 results.append(name[len(READ_PREFIX):])
         return sorted(results)
 
-# ---------- Bygg script ----------
-def build_episode_script(date: str, league: str) -> str:
-    order = [
-        "S.GENERIC.INTRO_POSTMATCH",
-        "S.OPINION.EXPERT_COMMENT",
-        "S.OPINION.DUO_EXPERTS",
-        "S.STATS.TOP_AFRICAN_PLAYERS",
-    ]
-
-    script_parts = ["[INTRO JINGEL]"]
-
-    for section in order:
-        path = f"sections/{section}/{date}/{league}/_/section.md"
-        log(f"DEBUG: trying {path}")
-        try:
-            text = read_text(path)
-            script_parts.append(text.strip())
-            log(f"added section {section}")
-        except Exception as e:
-            log(f"[SKIP] could not read {section} on {date}: {e}")
-            continue
-
-    script_parts.append("[OUTRO JINGEL]")
-    return "\n\n---\n\n".join(script_parts)
-
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str):
     manifests = list_section_manifests(date, league)
@@ -110,22 +85,36 @@ def build_episode(date: str, league: str, lang: str):
             dur = int(raw.get("target_duration_s", 60))
         except Exception:
             dur = 60
-        sections_meta.append({"section_id": section_id, "lang": lang, "duration_s": dur})
+
+        # Läs in texten från motsvarande section.md
+        md_path = f"sections/{section_id}/{date}/{league}/_/section.md"
+        try:
+            text = read_text(md_path).strip()
+        except Exception:
+            text = ""
+
+        sections_meta.append({
+            "section_id": section_id,
+            "lang": lang,
+            "duration_s": dur,
+            "text": text
+        })
         total += dur
 
-    script = {
+    # Nytt manifest: innehåller text i varje sektion
+    manifest = {
         "pod_id": POD_ID,
         "date": date,
         "type": "micro",
         "lang": lang,
-        "jingles": {"intro": "JINGEL_INTRO_PATH", "outro": "JINGEL_OUTRO_PATH"},
         "sections": sections_meta,
         "duration_s": total,
     }
 
-    write_text(base + "episode_manifest.json", json.dumps(script, ensure_ascii=False, indent=2), "application/json")
+    write_text(base + "episode_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
 
-    episode_script = build_episode_script(date, league)
+    # Skapa enkel episode_script.txt för debug/läsning (ingen jingel)
+    episode_script = "\n\n---\n\n".join(s["text"] for s in sections_meta if s["text"])
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
 
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
