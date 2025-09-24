@@ -103,3 +103,11 @@ def upload_json(container: str, blob_path: str, obj, content_type: str = "applic
     import json
     data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
     return put_bytes(container, blob_path, data, content_type)
+
+def get_bytes(container: str, blob_path: str) -> bytes:
+    """Hämta ett blob-innehåll som bytes (utan decode)."""
+    svc = _client()
+    container_client = svc.get_container_client(container)
+    blob = container_client.get_blob_client(blob_path)
+    return blob.download_blob().readall()
+

@@ -14,9 +14,9 @@ def load_json_from_blob(container: str, path: str):
 def main():
     container = "afp"
 
-    # Inputfiler (ligger i meta/)
-    master_path = "meta/players_africa_master.json"
-    history_path = "meta/players_africa_history.json"
+    # Inputfiler (ligger i players/)
+    master_path = "players/africa/players_africa_master.json"
+    history_path = "players/africa/players_africa_history.json"
 
     # Ladda masterfilen
     master = load_json_from_blob(container, master_path)

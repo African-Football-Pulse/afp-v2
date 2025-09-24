@@ -1,0 +1,30 @@
+name: S_05_build_matches_events_live
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * MON"   # måndag kl 06 UTC → varje vecka
+
+jobs:
+  build-matches-events-live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run build_matches_events_live
+        env:
+          JOB_TYPE: src.warehouse.build_matches_events_live
+          SECRETS_FILE: /home/runner/work/afp-v2/secrets/secret.json
+          SEASON: "2025-2026"
+          LEAGUE_ID: "228"
+          DAYS: "7"
+        run: |
+          python -m src.job_entrypoint

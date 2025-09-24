@@ -75,3 +75,19 @@ tasks:
       - --outdir
       - sections
       - --write-latest
+
+  - section: S.STATS.PROJECT_STATUS
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest
+
+  - section: S.STATS.TOP_CONTRIBUTORS_SEASON
+    args:
+      - --league
+      - premier_league
+      - --outdir
+      - sections
+      - --write-latest

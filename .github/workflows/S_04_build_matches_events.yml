@@ -1,0 +1,30 @@
+name: S_04 Build Matches + Events Flat
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-matches-events-flat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t afp-warehouse:test .
+
+      - name: Run warehouse job (matches + events flat)
+        run: |
+          docker run --rm \
+            -e JOB_TYPE=src.warehouse.build_matches_events \
+            -e SECRETS_FILE=/app/secrets/secret.json \
+            -v ${{ github.workspace }}/secrets/secret.json:/app/secrets/secret.json \
+            afp-warehouse:test
