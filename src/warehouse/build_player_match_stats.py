@@ -34,7 +34,20 @@ def main():
     # 🎯 Masterlista för afrikanska spelare
     master_path = "players/africa/players_africa_master.json"
     master = load_json_from_blob(container, master_path)
-    player_ids = {str(int(p.get("id"))) for p in master.get("players", []) if p.get("id")}
+
+    # Endast numeriska ID:n (skip placeholders som AFR007, NEW005)
+    player_ids = {
+        str(p.get("id"))
+        for p in master.get("players", [])
+        if str(p.get("id")).isdigit()
+    }
+
+    # Skapa mapping {player_id -> player_name}
+    id_to_name = {
+        str(p.get("id")): p.get("name")
+        for p in master.get("players", [])
+        if str(p.get("id")).isdigit()
+    }
 
     rows = []
 
@@ -58,17 +71,9 @@ def main():
         if "assist_id" in df.columns:
             df["assist_id"] = normalize_id(df["assist_id"])
 
-        # 👀 Debug: visa struktur före filtrering
-        print(f"\n[DEBUG] Fil: {path}")
-        print(f"[DEBUG] Kolumner: {list(df.columns)}")
-        print("[DEBUG] Första 5 rader (innan filtrering):")
-        print(df.head().to_string(index=False))
-
         # Filtrera på spelare i masterlistan
         df = df[df["player_id"].isin(player_ids)]
-
         if df.empty:
-            print(f"[DEBUG] Efter filtrering: 0 rader för {path}")
             continue
 
         # Bygg player × match rader
@@ -100,9 +105,11 @@ def main():
 
     print(f"[build_player_match_stats] ✅ Uploaded {len(result)} rows → {output_path}")
 
-    # 👀 Preview per spelare
+    # 👀 Preview per spelare (med namn)
     print("\n[build_player_match_stats] 🔎 Sample (per spelare):")
-    print(result.groupby("player_id").head(3).to_string(index=False))
+    preview = result.groupby("player_id").head(3).copy()
+    preview["player_name"] = preview["player_id"].map(id_to_name)
+    print(preview.to_string(index=False))
 
 
 if __name__ == "__main__":
