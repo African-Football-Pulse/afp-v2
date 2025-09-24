@@ -3,7 +3,8 @@
 import os
 import pandas as pd
 from datetime import datetime, timezone
-from src.sections.utils import write_outputs, run_gpt
+from src.sections.utils import write_outputs
+from src.gpt import run_gpt
 from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
