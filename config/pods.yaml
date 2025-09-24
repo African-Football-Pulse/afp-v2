@@ -1,3 +1,4 @@
+pods:
   PL_daily_africa_en:
     status: off
     leagues: ["premier_league"]
