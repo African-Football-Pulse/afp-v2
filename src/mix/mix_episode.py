@@ -6,7 +6,9 @@ from azure.storage.blob import ContainerClient
 # Miljövariabler från GitHub Actions / Docker
 BLOB_CONTAINER_SAS_URL = os.environ["BLOB_CONTAINER_SAS_URL"]
 LEAGUE = os.environ.get("LEAGUE", "premier_league")
-LANG = os.environ.get("LANG", "en")
+_raw_lang = os.getenv("LANG")
+LANG = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
+
 
 # Lokala filvägar
 INTRO = "assets/audio/afp_intro.mp3"
