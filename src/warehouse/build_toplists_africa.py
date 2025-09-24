@@ -1,7 +1,13 @@
 import os
+import io
 import pandas as pd
 from src.storage import azure_blob
-from src.storage.utils import read_parquet_from_blob
+
+
+def read_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
+    """Ladda en Parquet-fil från Azure Blob till DataFrame."""
+    blob_bytes = azure_blob.get_bytes(container, path)
+    return pd.read_parquet(io.BytesIO(blob_bytes), engine="pyarrow")
 
 
 def main():
