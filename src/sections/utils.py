@@ -5,6 +5,7 @@ from typing import Dict, Any
 import os
 
 from src.storage import azure_blob
+from src.producer import role_utils
 
 CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
 
@@ -62,6 +63,7 @@ def write_outputs(
 
     return manifest
 
+
 def load_candidates(day: str, news_arg: str = None):
     """
     Hämta scored candidates från Azure Blob.
@@ -88,3 +90,29 @@ def load_news_items(feed: str, league: str, day: str):
     except Exception as e:
         print(f"[utils] WARN: could not load news items from {path} ({e})")
         return []
+
+
+def get_persona_block(role: str, pod: str):
+    """
+    Returnera (persona_id, persona_block) för en given roll och pod.
+    - Läser pods.yaml för role_map.
+    - Slår upp persona i personas.json.
+    - Bygger ett block som kan användas i GPT-prompt.
+    """
+    # Ladda pod config
+    pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
+    pod_cfg = pods_cfg.get(pod)
+    persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
+
+    # Ladda personas
+    personas = role_utils.load_yaml("config/personas.json")
+    persona_cfg = personas.get(persona_id, {})
+
+    persona_block = f"""{persona_cfg.get("name")}
+Role: {persona_cfg.get("role")}
+Voice: {persona_cfg.get("voice")}
+Tone: {persona_cfg.get("tone", {}).get("primary", "")}
+Style: {persona_cfg.get("style", "")}
+"""
+
+    return persona_id, persona_block
