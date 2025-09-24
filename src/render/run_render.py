@@ -1,100 +1,60 @@
-import os
-import datetime
-import pathlib
-import sys
-import json
-
-from src.common.blob_io import get_container_client
-from . import tts_elevenlabs
-
-
-def log(msg: str) -> None:
-    print(f"[render] {msg}", flush=True)
-
-
-def load_manifest(manifest_path: pathlib.Path) -> dict:
-    return json.loads(manifest_path.read_text(encoding="utf-8"))
-
+import os, sys, json, pathlib
+from datetime import datetime
+from jinja2 import Environment, FileSystemLoader
+from src.storage import azure_blob
 
 def main():
-    date = os.getenv("DATE") or datetime.date.today().isoformat()
+    # Env-variabler
     league = os.getenv("LEAGUE", "premier_league")
+    lang = os.getenv("LANG", "en")
+    date = os.getenv("EPISODE_DATE", datetime.utcnow().date().isoformat())
 
-    # Normalisera språk: använd "en" om LANG saknas eller är typ "C.UTF-8"
-    _raw_lang = os.getenv("LANG")
-    lang = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
+    container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+    if not container:
+        raise RuntimeError("AZURE_STORAGE_CONTAINER missing")
 
-    log(f"Start render: date={date}, league={league}, lang={lang}")
+    # 1) Ladda sections från assembler-output
+    assembler_path = f"assembler/episodes/{date}/{league}/{lang}/episode_manifest.json"
+    if not azure_blob.exists(container, assembler_path):
+        raise RuntimeError(f"Hittar inte episode_manifest: {assembler_path}")
+    assembler_manifest = azure_blob.get_json(container, assembler_path)
+    sections = assembler_manifest.get("sections", {})
 
-    # Init blob container
-    container = get_container_client()
+    # 2) Kör Jinja-mallen
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("episode.jinja")
 
-    # Blob paths
-    base_in = f"assembler/episodes/{date}/{league}/daily/{lang}/"
-    base_out = f"audio/episodes/{date}/{league}/daily/{lang}/"
+    ctx = dict(
+        mode="used",
+        league=league,
+        lang=lang,
+        date=date,
+        weekday=datetime.fromisoformat(date).weekday(),
+        sections=sections,
+    )
+    rendered = template.render(**ctx)
 
-    # Lokala paths
-    local_in = pathlib.Path(base_in)
-    local_out = pathlib.Path(base_out)
-    local_in.mkdir(parents=True, exist_ok=True)
-    local_out.mkdir(parents=True, exist_ok=True)
+    # 3) Extrahera vilka sektioner som faktiskt användes
+    used_sections = [line.strip() for line in rendered.splitlines() if line.strip()]
 
-    # 1) Hämta manifest från blob
-    fname = "episode_manifest.json"
-    blob_name = base_in + fname
-    log(f"Laddar ner {blob_name}")
-    blob = container.get_blob_client(blob=blob_name)
-    data = blob.download_blob().readall().decode("utf-8")
-    (local_in / fname).write_text(data, encoding="utf-8")
+    # 4) Hämta metadata direkt från Jinja-variabler
+    title = template.module.episode_title
+    description = template.module.episode_description
 
-    # 2) Läs manifest
-    manifest = load_manifest(local_in / "episode_manifest.json")
-    sections = {s["section_id"]: s for s in manifest.get("sections", [])}
+    manifest = {
+        "sections": used_sections,
+        "title": title,
+        "description": description,
+        "language": lang,
+        "explicit": False,
+    }
 
-    log(f"Manifest-sektioner: {len(sections)}")
+    # 5) Ladda upp render_manifest.json till Azure
+    blob_path = f"audio/episodes/{date}/{league}/daily/{lang}/render_manifest.json"
+    azure_blob.upload_json(container, blob_path, manifest)
 
-    if not sections:
-        log("ERROR: Inga sektioner i manifestet.")
-        sys.exit(1)
-
-    # 2b) Rensa bort streck '---' och rubriker '#'
-    def clean_text_block(text: str) -> str:
-        cleaned = []
-        for line in text.splitlines():
-            if line.strip().startswith("#") or line.strip().startswith("---"):
-                continue
-            cleaned.append(line)
-        return "\n".join(cleaned).strip()
-
-    def clean_section_text(section):
-        if "text" in section:
-            section["text"] = clean_text_block(section["text"])
-        if "lines" in section:
-            for l in section["lines"]:
-                l["text"] = clean_text_block(l["text"])
-        return section
-
-    sections = {sid: clean_section_text(sec) for sid, sec in sections.items()}
-
-    # 3) Kör ElevenLabs-rendering med hela section-objekten (text/lines)
-    try:
-        tts_elevenlabs.main(sections)
-    except Exception as e:
-        log(f"FEL under TTS: {e}")
-        sys.exit(1)
-
-    # 4) Ladda upp resultatfiler
-    for fname in ["episode.mp3", "render_manifest.json", "report.json"]:
-        path = local_out / fname
-        if not path.exists():
-            continue
-        log(f"Laddar upp {base_out}{fname}")
-        blob = container.get_blob_client(blob=base_out + fname)
-        content_type = "application/json" if fname.endswith(".json") else "audio/mpeg"
-        blob.upload_blob(path.read_bytes(), overwrite=True, content_type=content_type)
-
-    log("Klart ✅")
-
+    print(f"✅ Skapade render_manifest.json → {blob_path}")
+    print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
     main()
