@@ -3,21 +3,25 @@ import requests
 import datetime
 import subprocess
 
+# --- Secrets från environment ---
 API_KEY = os.environ["BUZZSPROUT_API_KEY"]
 PODCAST_ID = os.environ["BUZZSPROUT_PODCAST_ID"]
-BLOB_SAS_URL = os.environ["BLOB_SAS_URL"]  # full SAS-URL inkl. token
+BLOB_SAS_URL = os.environ["BLOB_SAS_URL"]  # full SAS-URL till containern
 
-INPUT_MP3 = "audio/episodes/2025-09-24/premier_league/daily/en/final_episode.mp3"
+# --- Blob-namn (hela sökvägen i containern) ---
+BLOB_MP3 = "audio/episodes/2025-09-24/premier_league/daily/en/final_episode.mp3"
 
-
+# --- Lokala filnamn ---
 LOCAL_MP3 = "final_episode.mp3"
-INPUT_MP3 = "audio/episodes/2025-09-24/premier_league/daily/en/final_episode.mp3"
+
 
 def download_from_blob(blob_name: str, local_name: str):
+    """Ladda ner en blob-fil från Azure Storage till arbetsmappen."""
     print(f"⬇️  Hämtar {blob_name} från blob...")
+
     url_base, sas_token = BLOB_SAS_URL.split("?")
-    account_name = url_base.split("//")[1].split(".")[0]
-    container_name = url_base.split(".net/")[1]
+    account_name = url_base.split("//")[1].split(".")[0]   # ex: afpstoragepilot
+    container_name = url_base.split(".net/")[1]            # ex: afp
 
     cmd = [
         "az", "storage", "blob", "download",
@@ -32,20 +36,19 @@ def download_from_blob(blob_name: str, local_name: str):
 
 # --- 1. Hämta mp3 ---
 if not os.path.exists(LOCAL_MP3):
-    download_from_blob(INPUT_MP3, LOCAL_MP3)
+    download_from_blob(BLOB_MP3, LOCAL_MP3)
 
 # --- 2. Sätt default metadata ---
 today = datetime.date.today().strftime("%Y-%m-%d")
 episode_title = f"Episode {today}"
 episode_description = "Automatiskt publicerat av workflow"
-episode_date = today
 
-# --- 3. Namnge filen ---
-episode_file = f"episode_{episode_date}.mp3"
-if INPUT_MP3 != episode_file:
-    os.rename(INPUT_MP3, episode_file)
+# --- 3. Namnge filen lokalt ---
+episode_file = f"episode_{today}.mp3"
+if LOCAL_MP3 != episode_file:
+    os.rename(LOCAL_MP3, episode_file)
 
-# --- 4. Skapa episod ---
+# --- 4. Skapa episod i Buzzsprout ---
 print(f"📝 Skapar nytt episode i Buzzsprout: {episode_title}")
 resp = requests.post(
     f"https://api.buzzsprout.com/api/podcasts/{PODCAST_ID}/episodes.json",
