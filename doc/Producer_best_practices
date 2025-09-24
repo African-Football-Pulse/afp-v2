@@ -1,0 +1,56 @@
+# AFP – Config, Lookups & GPT-integration (Sammanfattning)
+
+Denna fil sammanfattar hur vi bygger sektioner i AFP-projektet utan hårdkodning, med rätt config-styrning och GPT-bearbetning.  
+
+---
+
+## 🔧 Grundflöde NEWS/OPINION/GENERIC/CLUB/STATS
+
+1. **Collect (rss_multi)**  
+   - Hämtar råa nyheter från ~17 RSS-feeds.  
+   - Sparas i `curated/news/<feed>/<league>/<date>/items.json`.  
+   - Här finns allt möjligt (även rugby, boxning osv).  
+
+2. **Candidates**  
+   - `produce_candidates` vaskar fram bara nyheter som nämner afrikanska spelare (via masterlist).  
+   - Output: `candidates.jsonl`.  
+
+3. **Scoring**  
+   - `produce_scoring` beräknar relevans (`score`, `recency_score`, `novelty`, `authority`).  
+   - Output: `scored.jsonl`.  
+
+4. **Sections**  
+   - Varje sektion (`s_news_top3_generic`, `s_news_club_highlight`, `s_stats_*`) hämtar **scored.jsonl** → aldrig råa RSS.  
+   - Helpers i `src/sections/utils.py`:  
+     - `load_candidates` (scored)  
+     - `get_persona_block` (role → persona-block)  
+     - `write_outputs` (sparar section.json/md/manifest i Azure).  
+
+---
+
+## 🎭 Roller & Personas (ingen hårdkodning)
+
+- **sections_library.yaml**: varje sektion har en `role:` (`news_anchor`, `expert`).  
+- **pods.yaml**: varje pod mappar roll → persona-id (ex: `news_anchor: "AK"`, `expert: "JJK"`).  
+- **personas.json**: definierar varje persona (namn, röst, ton, stil, catchphrases).  
+- **role_utils.py**:  
+  - Läser `pods.yaml`.  
+  - Returnerar persona-id för en role.  
+  - Fallback: `news_anchor → AK`, annars första `personas_active`.  
+- **utils.get_persona_block**:  
+  - Returnerar både `persona_id` och ett färdigt “persona-block” (från personas.json) som kan skickas in i GPT.  
+
+---
+
+## 🧠 GPT-integration
+
+- Wrapper: `src/gpt.py` → `run_gpt(prompt_config, ctx, system_rules)`.  
+- Sektioner (t.ex. Top3, Club Highlight):  
+  - Tar `title` + `source.url` från scored items.  
+  - Bygger prompt med `persona_block` + “instructions” (summarize, club spotlight osv).  
+  - GPT skriver korta, talvänliga sammanfattningar (2–3 meningar, journalistisk stil).  
+- Payload:  
+  ```yaml
+  meta:
+    role: news_anchor
+    persona: AK
