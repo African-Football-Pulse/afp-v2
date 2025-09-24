@@ -150,15 +150,13 @@ def build_episode(date: str, league: str, lang: str):
     # 1. Rendera manus
     episode_script = render_episode(sections_meta, lang, mode="script")
 
-    # 2. Rendera vilka sektioner som används
-    used_json = render_episode(sections_meta, lang, mode="used")
-    try:
-        used_sections = json.loads(used_json)
-    except Exception:
-        log("WARNING: kunde inte tolka used_json, använder alla sektioner")
-        used_sections = [s["section_id"] for s in sections_meta]
+    # 2. Rendera vilka sektioner som används (som radlista från mallen)
+    used_text = render_episode(sections_meta, lang, mode="used")
+    used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
 
-    # 3. Filtrera manifestet på used_sections
+    log(f"used_sections (från mallen): {used_sections}")
+
+    # 3. Filtrera manifestet
     filtered_meta = [s for s in sections_meta if s["section_id"] in used_sections]
 
     # 4. Voice map
@@ -177,7 +175,7 @@ def build_episode(date: str, league: str, lang: str):
     # 5. Skriv filer
     write_text(base + "episode_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
-    write_text(base + "episode_used.json", used_json, "application/json")
+    write_text(base + "episode_used.json", json.dumps(used_sections, ensure_ascii=False, indent=2), "application/json")
 
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_script.txt")
