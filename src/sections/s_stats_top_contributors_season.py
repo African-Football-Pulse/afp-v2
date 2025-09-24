@@ -137,7 +137,6 @@ Here are the stats to use (do not invent numbers):
 {players_str}
 
 Mention their clubs and exact totals (goals and assists). 
-Highlight if someone has recently made a big jump on the list. 
 Make it conversational, engaging, and ready to record.
 """
     }
