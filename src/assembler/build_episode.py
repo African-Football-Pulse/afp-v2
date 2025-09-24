@@ -158,7 +158,7 @@ def build_episode(date: str, league: str, lang: str):
         log("WARNING: kunde inte tolka used_json, använder alla sektioner")
         used_sections = [s["section_id"] for s in sections_meta]
 
-    # 3. Filtrera manifestet
+    # 3. Filtrera manifestet på used_sections
     filtered_meta = [s for s in sections_meta if s["section_id"] in used_sections]
 
     # 4. Voice map
