@@ -63,6 +63,34 @@ def list_section_manifests(date: str, league: str) -> List[str]:
                 results.append(name[len(READ_PREFIX):])
         return sorted(results)
 
+# ---------- Parser ----------
+def parse_section_text(section_id: str, date: str, league: str) -> dict:
+    """
+    Läser section.md och returnerar {"text": "..."} eller {"lines": [{"persona": "...", "text": "..."}]}
+    """
+    md_path = f"sections/{section_id}/{date}/{league}/_/section.md"
+    try:
+        raw_text = read_text(md_path).strip()
+    except Exception:
+        return {"text": ""}
+
+    lines = []
+    for line in raw_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("**Expert 1:**") or line.startswith("Expert 1:"):
+            text = line.split(":", 1)[1].strip()
+            lines.append({"persona": "expert1", "text": text})
+        elif line.startswith("**Expert 2:**") or line.startswith("Expert 2:"):
+            text = line.split(":", 1)[1].strip()
+            lines.append({"persona": "expert2", "text": text})
+
+    if lines:
+        return {"lines": lines}
+    else:
+        return {"text": raw_text}
+
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str):
     manifests = list_section_manifests(date, league)
@@ -86,22 +114,16 @@ def build_episode(date: str, league: str, lang: str):
         except Exception:
             dur = 60
 
-        # Läs in texten från motsvarande section.md
-        md_path = f"sections/{section_id}/{date}/{league}/_/section.md"
-        try:
-            text = read_text(md_path).strip()
-        except Exception:
-            text = ""
+        parsed = parse_section_text(section_id, date, league)
 
         sections_meta.append({
             "section_id": section_id,
             "lang": lang,
             "duration_s": dur,
-            "text": text
+            **parsed
         })
         total += dur
 
-    # Nytt manifest: innehåller text i varje sektion
     manifest = {
         "pod_id": POD_ID,
         "date": date,
@@ -113,8 +135,17 @@ def build_episode(date: str, league: str, lang: str):
 
     write_text(base + "episode_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
 
-    # Skapa enkel episode_script.txt för debug/läsning (ingen jingel)
-    episode_script = "\n\n---\n\n".join(s["text"] for s in sections_meta if s["text"])
+    # Debug/läsbar textversion
+    script_parts = []
+    for s in sections_meta:
+        if "lines" in s:
+            for l in s["lines"]:
+                script_parts.append(f"{l['persona']}: {l['text']}")
+        else:
+            if s.get("text"):
+                script_parts.append(s["text"])
+    episode_script = "\n\n---\n\n".join(script_parts)
+
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
 
     log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
