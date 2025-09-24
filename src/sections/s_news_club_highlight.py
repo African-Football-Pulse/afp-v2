@@ -1,12 +1,11 @@
 # src/sections/s_news_club_highlight.py
 from datetime import datetime, timezone
 from collections import Counter
-import os, json
+import os
 
-from src.sections.utils import write_outputs, load_candidates
+from src.sections.utils import write_outputs, load_candidates, get_persona_block
 from src.gpt import run_gpt
 from src.storage import azure_blob
-from src.producer import role_utils
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
@@ -51,9 +50,8 @@ def build_section(args=None):
     lang = getattr(args, "lang", "en")
     section_id = getattr(args, "section_code", "S.NEWS.CLUB_HIGHLIGHT")
     target = int(getattr(args, "target_length_s", 50))
-    role = "news_anchor"  # från sections_library.yaml
+    role = "news_anchor"
 
-    # Kandidater
     candidates, blob_path = load_candidates(day, args.news[0] if hasattr(args, "news") and args.news else None)
     if not candidates:
         payload = {
@@ -85,19 +83,8 @@ def build_section(args=None):
         }
         return write_outputs(section_id, day, league, payload, status="no_items", lang=lang)
 
-    # 🎯 Roll + persona lookup
-    pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
-    pod_cfg = pods_cfg.get(getattr(args, "pod"))
-    persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
-
-    personas = role_utils.load_yaml("config/personas.json")
-    persona_cfg = personas.get(persona_id, {})
-    persona_block = f"""{persona_cfg.get("name")}
-Role: {persona_cfg.get("role")}
-Voice: {persona_cfg.get("voice")}
-Tone: {persona_cfg.get("tone", {}).get("primary", "")}
-Style: {persona_cfg.get("style", "")}
-"""
+    # 🎯 Persona lookup
+    persona_id, persona_block = get_persona_block(role, getattr(args, "pod"))
 
     # GPT-prompt
     headlines = "\n".join([f"- {c['source']['name']}: {c['source']['url']}" for c in picked[:3]])
