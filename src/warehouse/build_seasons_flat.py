@@ -1,6 +1,5 @@
 # src/warehouse/build_seasons_flat.py
 
-import os
 import json
 import pandas as pd
 from src.storage import azure_blob
@@ -23,6 +22,8 @@ def main():
     for lg in leagues:
         league_id = str(lg.get("id"))
         league_name = lg.get("name")
+        country = (lg.get("country") or {}).get("name")
+        is_cup = lg.get("is_cup")
 
         seasons_path = f"meta/seasons_{league_id}.json"
         try:
@@ -36,6 +37,8 @@ def main():
             rows.append({
                 "league_id": league_id,
                 "league_name": league_name,
+                "country": country,
+                "is_cup": is_cup,
                 "season_year": season.get("year"),
                 "is_active": season.get("is_active"),
                 "source": "json"
