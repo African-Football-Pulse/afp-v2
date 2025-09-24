@@ -22,11 +22,13 @@ def write_json(p: pathlib.Path, data: dict):
 # Main
 # -------------------------------
 def main():
-    # Normalisera datum & språk
+    # Datum & språk
     DATE = os.getenv("DATE") or datetime.today().strftime("%Y-%m-%d")
     LEAGUE = os.getenv("LEAGUE", "premier_league")
+
+    # Viktigt: låt C.UTF-8 vara kvar om det är så env är satt
     _raw_lang = os.getenv("LANG")
-    LANG = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
+    LANG = _raw_lang if _raw_lang else "C.UTF-8"
 
     log(f"Start mix: date={DATE}, league={LEAGUE}, lang={LANG}")
 
@@ -48,6 +50,7 @@ def main():
     log(f"Laddar ner {episode_blob}")
     blob = container.get_blob_client(blob=episode_blob)
     data = blob.download_blob().readall()
+    ensure_dir(local_episode)
     local_episode.write_bytes(data)
 
     # 2) Bygg concat-lista
