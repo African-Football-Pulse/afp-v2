@@ -1,6 +1,20 @@
 import os
 import pandas as pd
+import io
 from src.storage import azure_blob
+
+
+# Helper för att läsa parquet från Azure
+def read_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
+    blob_bytes = (
+        azure_blob._client()
+        .get_container_client(container)
+        .get_blob_client(path)
+        .download_blob()
+        .readall()
+    )
+    return pd.read_parquet(io.BytesIO(blob_bytes), engine="pyarrow")
+
 
 def main():
     container = "afp"
@@ -15,87 +29,67 @@ def main():
     output_json = "warehouse/toplists/toplists_africa.json"
     output_md = "warehouse/toplists/toplists_africa.md"
 
-    # Ladda metrics
-    df_goals = pd.read_parquet(azure_blob.load_parquet(container, goals_path))
-    df_cards = pd.read_parquet(azure_blob.load_parquet(container, cards_path))
-
-    # Ladda player master (för club + country)
-    df_players = pd.read_parquet(azure_blob.load_parquet(container, players_path))[
+    # 📥 Läs in data
+    df_goals = read_parquet_from_blob(container, goals_path)
+    df_cards = read_parquet_from_blob(container, cards_path)
+    df_players = read_parquet_from_blob(container, players_path)[
         ["player_id", "club", "country"]
     ]
-    df_players["player_id"] = df_players["player_id"].astype(str)
 
-    # Enrich goals & cards
-    df_goals["player_id"] = df_goals["player_id"].astype(str)
-    df_cards["player_id"] = df_cards["player_id"].astype(str)
+    # Summera senaste säsongen
+    latest_season = df_goals["season"].max()
+    df_goals_latest = df_goals[df_goals["season"] == latest_season]
+    df_cards_latest = df_cards[df_cards["season"] == latest_season]
 
-    df_goals = df_goals.merge(df_players, on="player_id", how="left")
-    df_cards = df_cards.merge(df_players, on="player_id", how="left")
-
-    # --- Top scorers ---
+    # Toplists
     top_goals = (
-        df_goals.groupby(["player_id", "player_name", "country", "club"])
-        ["total_goals"].sum()
-        .reset_index()
-        .sort_values("total_goals", ascending=False)
+        df_goals_latest.sort_values("total_goals", ascending=False)
         .head(10)
+        .assign(metric="goals")
     )
-    top_goals["metric"] = "goals"
-
-    # --- Top assists ---
     top_assists = (
-        df_goals.groupby(["player_id", "player_name", "country", "club"])
-        ["total_assists"].sum()
-        .reset_index()
-        .sort_values("total_assists", ascending=False)
+        df_goals_latest.sort_values("total_assists", ascending=False)
         .head(10)
+        .assign(metric="assists")
     )
-    top_assists["metric"] = "assists"
-
-    # --- Goal contributions ---
-    top_gc = (
-        df_goals.groupby(["player_id", "player_name", "country", "club"])
-        ["goal_contributions"].sum()
-        .reset_index()
-        .sort_values("goal_contributions", ascending=False)
-        .head(10)
-    )
-    top_gc["metric"] = "goal_contributions"
-
-    # --- Cards (discipline) ---
     top_cards = (
-        df_cards.groupby(["player_id", "player_name", "country", "club"])
-        ["total_cards"].sum()
-        .reset_index()
-        .sort_values("total_cards", ascending=False)
+        df_cards_latest.sort_values("total_cards", ascending=False)
         .head(10)
+        .assign(metric="cards")
     )
-    top_cards["metric"] = "cards"
 
-    # Kombinera
-    toplists = pd.concat([top_goals, top_assists, top_gc, top_cards], ignore_index=True)
+    toplists = pd.concat([top_goals, top_assists, top_cards], ignore_index=True)
 
-    # 📦 Spara Parquet
+    # Lägg till club & country
+    toplists = toplists.merge(df_players, on="player_id", how="left")
+
+    # 📦 Spara till Parquet
     parquet_bytes = toplists.to_parquet(index=False, engine="pyarrow")
-    azure_blob.put_bytes(container, output_parquet, parquet_bytes, content_type="application/octet-stream")
+    azure_blob.put_bytes(
+        container=container,
+        blob_path=output_parquet,
+        data=parquet_bytes,
+        content_type="application/octet-stream",
+    )
 
     # 📦 Spara JSON
-    toplists_json = toplists.to_dict(orient="records")
-    azure_blob.upload_json(container, output_json, toplists_json)
+    azure_blob.upload_json(container, output_json, toplists.to_dict(orient="records"))
 
     # 📦 Spara Markdown
-    md_lines = ["# African Toplists\n"]
-    for metric in ["goals", "assists", "goal_contributions", "cards"]:
-        subset = toplists[toplists["metric"] == metric]
+    md_lines = ["# Africa Toplists", f"Season: {latest_season}", ""]
+    for metric in ["goals", "assists", "cards"]:
         md_lines.append(f"## Top {metric.capitalize()}")
+        subset = toplists[toplists["metric"] == metric]
         for _, row in subset.iterrows():
-            val = row[metric]
-            md_lines.append(f"- {row['player_name']} ({row['club']} / {row['country']}) – {val}")
+            md_lines.append(
+                f"- {row['player_name']} ({row['country']}, {row['club']}) → {row['metric']}: {row['total_goals'] if metric=='goals' else row['total_assists'] if metric=='assists' else row['total_cards']}"
+            )
         md_lines.append("")
-
     azure_blob.put_text(container, output_md, "\n".join(md_lines))
 
-    print(f"[build_toplists_africa] ✅ Uploaded toplists → {output_parquet}, {output_json}, {output_md}")
+    print(
+        f"[build_toplists_africa] ✅ Uploaded {len(toplists)} rows → {output_parquet}, {output_json}, {output_md}"
+    )
 
 
 if __name__ == "__main__":
