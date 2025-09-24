@@ -1,6 +1,6 @@
 # src/render/tts_elevenlabs.py
 import os, json, pathlib, datetime, sys, tempfile
-import requests
+import requests, yaml
 from pydub import AudioSegment  # kräver ffmpeg i workflow
 
 def ensure_dir(p: pathlib.Path):
@@ -16,19 +16,9 @@ def clean_persona(name: str) -> str:
 def log(msg: str):
     print(msg, flush=True)
 
-def tts_elevenlabs(text: str, voice_id: str, api_key: str, model_id: str, out_fmt: str) -> bytes:
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-    headers = {
-        "xi-api-key": api_key,
-        "Accept": "audio/mpeg" if out_fmt.startswith("mp3") else "audio/wav",
-        "Content-Type": "application/json",
-    }
-    payload = {"text": text, "model_id": model_id, "output_format": out_fmt}
-    r = requests.post(url, headers=headers, json=payload, timeout=180)
-    if r.status_code != 200:
-        raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:400]}")
-    return r.content
-
+# -------------------------------
+# Config loaders
+# -------------------------------
 def load_voice_map() -> dict:
     vm_env = os.getenv("ELEVENLABS_VOICE_IDS", "")
     if vm_env:
@@ -49,6 +39,34 @@ def load_voice_map() -> dict:
             pass
     return {}
 
+def load_speaking_roles() -> dict:
+    path = pathlib.Path("config/speaking_roles.yaml")
+    if not path.exists():
+        return {}
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+# -------------------------------
+# ElevenLabs TTS
+# -------------------------------
+def tts_elevenlabs(text: str, voice_id: str, api_key: str, model_id: str, out_fmt: str) -> bytes:
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    headers = {
+        "xi-api-key": api_key,
+        "Accept": "audio/mpeg" if out_fmt.startswith("mp3") else "audio/wav",
+        "Content-Type": "application/json",
+    }
+    payload = {"text": text, "model_id": model_id, "output_format": out_fmt}
+    r = requests.post(url, headers=headers, json=payload, timeout=180)
+    if r.status_code != 200:
+        raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:400]}")
+    return r.content
+
+# -------------------------------
+# Main
+# -------------------------------
 def main(section_texts: dict):
     date = os.getenv("DATE") or datetime.date.today().isoformat()
     league = os.getenv("LEAGUE", "premier_league")
@@ -71,6 +89,7 @@ def main(section_texts: dict):
     report_path = base_out / "report.json"
 
     voice_map = load_voice_map()
+    roles_cfg = load_speaking_roles()
     single_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "")
     mode = "multi" if voice_map else "single"
 
@@ -78,12 +97,19 @@ def main(section_texts: dict):
         log("ERROR: Ingen röst konfigurerad (ELEVENLABS_VOICE_IDS eller ELEVENLABS_VOICE_ID).")
         sys.exit(1)
 
+    # Bestäm språk-nyckel för duo_experts
+    lang_key = "en_swahili" if lang in ("en", "sw", "en_sw") else "en_arabic"
+    duo_roles = roles_cfg.get("roles", {}).get("duo_experts", {})
+
     # Bygg lista av sektioner
     sections = []
     for sid, sdata in section_texts.items():
         if "lines" in sdata:
             for l in sdata["lines"]:
                 persona = clean_persona(l["persona"] or default_persona)
+                # Om expert1/expert2 → mappa via speaking_roles.yaml
+                if persona in ("expert1", "expert2"):
+                    persona = duo_roles.get(lang_key, {}).get(persona, default_persona)
                 sections.append({"id": sid, "persona": persona, "text": l["text"]})
         else:
             txt = sdata.get("text", "")
