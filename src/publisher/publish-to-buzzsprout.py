@@ -16,20 +16,20 @@ LOCAL_MP3 = "final_episode.mp3"
 
 
 def download_from_blob(blob_name: str, local_name: str):
-    """Ladda ner en blob-fil från Azure Storage till arbetsmappen."""
     print(f"⬇️  Hämtar {blob_name} från blob...")
 
-    url_base, sas_token = BLOB_SAS_URL.split("?")
+    url_base, sas_token = BLOB_SAS_URL.split("?", 1)
     account_name = url_base.split("//")[1].split(".")[0]   # ex: afpstoragepilot
     container_name = url_base.split(".net/")[1]            # ex: afp
 
+    # Se till att vi skickar med "?" + token
     cmd = [
         "az", "storage", "blob", "download",
         "--account-name", account_name,
         "--container-name", container_name,
         "--name", blob_name,
         "--file", local_name,
-        "--sas-token", sas_token
+        "--sas-token", "?" + sas_token
     ]
     subprocess.check_call(cmd)
 
