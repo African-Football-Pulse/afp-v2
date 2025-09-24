@@ -29,7 +29,7 @@ COPY assets/audio/ assets/audio/
 COPY job_entrypoint.py /app/job_entrypoint.py
 
 # Publiceringsskript för Buzzsprout (nytt)
-COPY scripts/publish_to_buzzsprout.py /app/publish_to_buzzsprout.py
+COPY src/publisher/publish-to-buzzsprout.py /app/publish_to_buzzsprout.py
 
 # Default kör fortfarande era vanliga jobb
 ENTRYPOINT ["python","-u","/app/job_entrypoint.py"]
