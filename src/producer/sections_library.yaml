@@ -40,11 +40,11 @@ sections:
     description: Run all stats sections across all leagues
 
   S.STATS.PROJECT_STATUS:
-  module: s_stats_project_status
-  runner: build_section
-  description: Status på projektet och antal spelare som ingår
+    module: s_stats_project_status
+    runner: build_section
+    description: Status på projektet och antal spelare som ingår
 
   S.STATS.TOP_CONTRIBUTORS_SEASON:
-  module: s_stats_top_contributors_season
-  runner: build_section
-  description: Top African players this season based on goal contributions (goals + assists)
+    module: s_stats_top_contributors_season
+    runner: build_section
+    description: Top African players this season based on goal contributions (goals + assists)
