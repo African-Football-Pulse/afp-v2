@@ -39,7 +39,8 @@ def build_command():
     # Tillåt explicit modulväg, t.ex. src.collectors.collect_extract_weekly
     if job_type.startswith("src."):
         log(f"Selected job: custom module → {job_type}")
-        return ["python", "-m", job_type]
+        # 🔑 Viktigt: ta med extra CLI-argument
+        return ["python", "-m", job_type] + sys.argv[1:]
 
     # Okänd typ
     log(f"❌ Okänd JOB_TYPE: {job_type}")
