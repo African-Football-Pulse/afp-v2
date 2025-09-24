@@ -59,7 +59,7 @@ def main():
             assists=("event_type", lambda x: (x == "assist").sum()),
             yellow_cards=("event_type", lambda x: (x == "yellow_card").sum()),
             red_cards=("event_type", lambda x: (x == "red_card").sum()),
-            minutes_played=("event_minute", "max"),  # ungefärlig speltid
+            minutes_played=("event_minute", "max"),
         ).reset_index()
 
         rows.append(grouped)
@@ -83,6 +83,10 @@ def main():
     print(
         f"[build_player_match_stats] ✅ Uploaded {len(result)} rows → {output_path}"
     )
+
+    # 👀 Preview
+    print("\n[build_player_match_stats] 🔎 Sample (per spelare):")
+    print(result.groupby("player_id").head(3).to_string(index=False))
 
 
 if __name__ == "__main__":
