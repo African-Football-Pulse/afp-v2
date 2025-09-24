@@ -26,39 +26,32 @@ def load_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
 def main():
     container = "afp"
 
-    # 📥 Masterlista (id, namn, land)
+    # 📥 Masterlista (med pos)
     master_path = "players/africa/players_africa_master.json"
     master = load_json_from_blob(container, master_path)
     master_players = master.get("players", [])
 
-    id_to_name = {str(p["id"]): p["name"] for p in master_players if str(p.get("id")).isdigit()}
-    name_to_id = {p["name"]: str(p["id"]) for p in master_players if str(p.get("id")).isdigit()}
-    id_to_country = {str(p["id"]): p["country"] for p in master_players if str(p.get("id")).isdigit()}
+    # Endast målvakter (GK)
+    gks = [p for p in master_players if p.get("pos") == "GK" and str(p.get("id")).isdigit()]
 
-    # 📥 Players by country (pos info)
-    by_country_path = "players/africa/players_by_country.json"
-    players_by_country = load_json_from_blob(container, by_country_path)
+    if not gks:
+        print("[build_clean_sheets_africa] ⚠️ Hittade inga målvakter i masterlistan")
+        return
 
-    # Filtrera målvakter (GK)
-    gks = []
-    for code, players in players_by_country.items():
-        for p in players:
-            if p.get("pos") == "GK":
-                gks.append(p)
-
-    unmatched_players = []
-    gk_map = {}
-    for gk in gks:
-        name = gk.get("name")
-        if name in name_to_id:
-            gk_map[name] = name_to_id[name]
-        else:
-            unmatched_players.append(name)
+    gk_ids = {str(p["id"]) for p in gks}
+    id_to_name = {str(p["id"]): p["name"] for p in gks}
+    id_to_country = {str(p["id"]): p["country"] for p in gks}
 
     # 📥 Player match stats
     stats_path = "warehouse/base/player_match_stats.parquet"
     df_stats = load_parquet_from_blob(container, stats_path)
     df_stats["player_id"] = df_stats["player_id"].astype(str)
+
+    # Filtrera bara på GK
+    df_stats = df_stats[df_stats["player_id"].isin(gk_ids)]
+    if df_stats.empty:
+        print("[build_clean_sheets_africa] ⚠️ Ingen matchdata för målvakter")
+        return
 
     # 📥 Matches flat (för resultat)
     all_files = azure_blob.list_prefix(container, "warehouse/base/matches_flat/")
@@ -76,48 +69,35 @@ def main():
         except Exception as e:
             print(f"[build_clean_sheets_africa] ⚠️ Kunde inte läsa {path}: {e}")
             continue
+
     if not df_matches_all:
         print("[build_clean_sheets_africa] ⚠️ Ingen matchdata laddad")
         return
 
     df_matches = pd.concat(df_matches_all, ignore_index=True)
 
-    # 🔎 Koppla ihop målvakter med matcher
+    # 🔎 Koppla matcher till målvakter
     rows = []
-    unmatched_matches = []
-
     for _, row in df_stats.iterrows():
         pid = row["player_id"]
         season = row["season"]
-        league_id = row["league_id"]
         match_id = row["match_id"]
 
-        # Bara målvakter
-        pname = id_to_name.get(pid)
-        if pname not in gk_map:
-            continue
-
-        # Slå upp matchresultat
         match = df_matches[df_matches["match_id"] == match_id]
         if match.empty:
-            unmatched_matches.append(match_id)
             continue
 
         m = match.iloc[0]
         home_goals = m.get("home_goals")
         away_goals = m.get("away_goals")
-        home_team_id = m.get("home_team_id")
-        away_team_id = m.get("away_team_id")
 
-        # Här borde vi egentligen veta vilken klubb spelaren tillhörde i matchen
-        # → tills vidare antar vi att clean sheet räknas om matchen hade 0 insläppta
-        clean_sheet = 0
-        if (home_goals == 0) or (away_goals == 0):
-            clean_sheet = 1
+        # Enkel logik: om matchen hade ett lag som höll nollan → målvakten får clean sheet
+        # (Senare kan förbättras genom att kolla exakt vilket lag spelaren tillhörde i matchen)
+        clean_sheet = 1 if (home_goals == 0 or away_goals == 0) else 0
 
         rows.append({
             "player_id": pid,
-            "player_name": pname,
+            "player_name": id_to_name.get(pid),
             "country": id_to_country.get(pid),
             "season": season,
             "clean_sheets": clean_sheet
@@ -128,6 +108,7 @@ def main():
         return
 
     df_result = pd.DataFrame(rows)
+
     grouped = df_result.groupby(["player_id", "season"]).agg(
         clean_sheets=("clean_sheets", "sum")
     ).reset_index()
@@ -150,14 +131,6 @@ def main():
     # 👀 Preview
     print("\n[build_clean_sheets_africa] 🔎 Sample:")
     print(grouped.head(10).to_string(index=False))
-
-    # 👀 Felhantering
-    if unmatched_players:
-        print("\n[build_clean_sheets_africa] ⚠️ Unmatched GK players (not in masterlist):")
-        for name in unmatched_players:
-            print(" -", name)
-    if unmatched_matches:
-        print(f"\n[build_clean_sheets_africa] ⚠️ {len(unmatched_matches)} matches could not be resolved to results")
 
 
 if __name__ == "__main__":
