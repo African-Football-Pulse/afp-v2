@@ -1,95 +1,84 @@
-# src/sections/utils.py
-import json
-from datetime import datetime, timezone
-from typing import Dict, Any
 import os
-
+import json
+from typing import List, Dict
 from src.storage import azure_blob
-from src.producer import role_utils
+import role_utils
 
-CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
-def write_outputs(
-    section_id: str,
-    day: str,
-    league: str,
-    payload: Dict[str, Any],
-    status: str,
-    topic: str = "_",
-    lang: str = "en",
-) -> Dict[str, Any]:
+def load_news_items(feed: str, league: str, day: str) -> List[Dict]:
     """
-    Skriv ut section.json, section.md, section_manifest.json
-    direkt till Azure Blob Storage med azure_blob helpers.
-    Returnera manifest.
-    """
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-
-    base = f"sections/{section_id}/{day}/{league}/{topic}"
-
-    # section.json
-    azure_blob.upload_json(CONTAINER, f"{base}/section.json", payload)
-    print(f"[utils] Uploaded {base}/section.json")
-
-    # section.md
-    title = payload.get("title", section_id)
-    text = payload.get("text", "")
-    md_content = f"### {title}\n\n{text}\n"
-    azure_blob.put_text(CONTAINER, f"{base}/section.md", md_content)
-    print(f"[utils] Uploaded {base}/section.md")
-
-    # manifest
-    manifest = {
-        "section_code": section_id,
-        "type": payload.get("type", "news"),
-        "model": payload.get("model", "gpt-4o-mini"),
-        "created_utc": ts,
-        "league": league,
-        "topic": topic,
-        "date": day,
-        "blobs": {
-            "json": f"{base}/section.json",
-            "md": f"{base}/section.md",
-            "manifest": f"{base}/section_manifest.json",
-        },
-        "metrics": {"length_s": payload.get("length_s", 0)},
-        "sources": payload.get("sources", {}),
-        "lang": lang,
-        "status": status,
-    }
-    azure_blob.upload_json(CONTAINER, f"{base}/section_manifest.json", manifest)
-    print(f"[utils] Uploaded {base}/section_manifest.json")
-
-    return manifest
-
-
-def load_candidates(day: str, news_arg: str = None):
-    """
-    Hämta scored candidates från Azure Blob.
-    Returnerar (candidates, blob_path).
-    """
-    blob_path = news_arg if news_arg else f"producer/candidates/{day}/scored.jsonl"
-    try:
-        text = azure_blob.get_text(CONTAINER, blob_path)
-        candidates = [json.loads(line) for line in text.splitlines() if line.strip()]
-        return candidates, blob_path
-    except Exception as e:
-        print(f"[utils] WARN: could not load candidates from {blob_path} ({e})")
-        return [], blob_path
-
-
-def load_news_items(feed: str, league: str, day: str):
-    """
-    Ladda nyhets-items från curated/news/<feed>/<league>/<day>/items.json
-    Returnerar en lista med items eller [] om inget hittas.
+    Load curated news items from Azure for a given feed/league/day.
     """
     path = f"curated/news/{feed}/{league}/{day}/items.json"
-    try:
-        return azure_blob.get_json(CONTAINER, path)
-    except Exception as e:
-        print(f"[utils] WARN: could not load news items from {path} ({e})")
+    if not azure_blob.exists(CONTAINER, path):
         return []
+    return azure_blob.get_json(CONTAINER, path)
+
+
+def load_candidates(day: str, news_arg: str = None) -> List[Dict]:
+    """
+    Load candidate/scored items for a given day.
+    Priority:
+    1. Explicit path via news_arg
+    2. scored_enriched.jsonl
+    3. scored.jsonl
+    Returns a list of dicts.
+    """
+    import jsonlines
+
+    if news_arg:
+        blob_path = news_arg
+    else:
+        blob_path = f"producer/scored/{day}/scored_enriched.jsonl"
+        if not azure_blob.exists(CONTAINER, blob_path):
+            blob_path = f"producer/scored/{day}/scored.jsonl"
+            if not azure_blob.exists(CONTAINER, blob_path):
+                return []
+
+    if not azure_blob.exists(CONTAINER, blob_path):
+        return []
+
+    text = azure_blob.get_text(CONTAINER, blob_path)
+    items = []
+    with jsonlines.Reader(text.splitlines()) as reader:
+        for obj in reader:
+            items.append(obj)
+    return items
+
+
+def write_outputs(section_code: str, league: str, lang: str, day: str, payload: Dict, path_scope: str = "blob"):
+    """
+    Standardized output writer for sections.
+    Writes JSON, MD, and manifest to Azure.
+    """
+    base_path = f"sections/{section_code}/{day}/{league}/_/"
+
+    # JSON
+    azure_blob.upload_json(CONTAINER, base_path + "section.json", payload)
+
+    # MD
+    if "text" in payload:
+        azure_blob.put_text(CONTAINER, base_path + "section.md", payload["text"])
+
+    # Manifest
+    manifest = {
+        "section_code": section_code,
+        "league": league,
+        "lang": lang,
+        "day": day,
+        "title": payload.get("title", ""),
+        "type": payload.get("type", ""),
+        "sources": payload.get("sources", {}),
+    }
+    azure_blob.upload_json(CONTAINER, base_path + "section_manifest.json", manifest)
+
+    print(f"[utils] Uploaded {base_path}section.json")
+    print(f"[utils] Uploaded {base_path}section.md")
+    print(f"[utils] Uploaded {base_path}section_manifest.json")
+
+    return manifest
 
 
 def get_persona_block(role: str, pod: str):
@@ -98,21 +87,27 @@ def get_persona_block(role: str, pod: str):
     - Läser pods.yaml för role_map.
     - Slår upp persona i personas.json.
     - Bygger ett block som kan användas i GPT-prompt.
+    - Har fallback till 'news_anchor' om inget hittas.
     """
     # Ladda pod config
     pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
-    pod_cfg = pods_cfg.get(pod)
+    pod_cfg = pods_cfg.get(pod, {})
+
+    # Resolve persona_id via role_map
     persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
+    if not persona_id:
+        persona_id = "news_anchor"
 
     # Ladda personas
     personas = role_utils.load_yaml("config/personas.json")
     persona_cfg = personas.get(persona_id, {})
 
-    persona_block = f"""{persona_cfg.get("name")}
-Role: {persona_cfg.get("role")}
-Voice: {persona_cfg.get("voice")}
-Tone: {persona_cfg.get("tone", {}).get("primary", "")}
-Style: {persona_cfg.get("style", "")}
+    # Bygg block
+    persona_block = f"""{persona_cfg.get("name", persona_id)}
+Role: {persona_cfg.get("role", "News Anchor")}
+Voice: {persona_cfg.get("voice", "neutral")}
+Tone: {persona_cfg.get("tone", {}).get("primary", "informative")}
+Style: {persona_cfg.get("style", "clear")}
 """
 
     return persona_id, persona_block
