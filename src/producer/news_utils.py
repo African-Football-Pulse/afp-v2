@@ -11,10 +11,18 @@ def log(msg: str):
 
 
 def load_feeds_config():
-    """Ladda feeds.yaml från containern (Dockerfile COPY)"""
+    """Ladda feeds från config/feeds.yaml (stöd för både feeds: och sources:)"""
     with open("config/feeds.yaml", "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
-    return cfg.get("feeds", [])
+
+    feeds = []
+    if "feeds" in cfg:
+        feeds = cfg.get("feeds", [])
+    elif "sources" in cfg:
+        feeds = [s["name"] for s in cfg.get("sources", []) if s.get("active", True)]
+
+    log(f"Loaded {len(feeds)} feeds from config: {feeds[:5]}{'...' if len(feeds) > 5 else ''}")
+    return feeds
 
 
 def load_curated_news(day: str, league: str = "premier_league"):
