@@ -24,8 +24,6 @@ def fetch_article_text(url: str) -> str:
         resp = requests.get(url, timeout=15, headers={"User-Agent": "AFPBot/1.0"})
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-
-        # Hämta ut all text i <p>-taggar
         text = " ".join(p.get_text(" ", strip=True) for p in soup.find_all("p"))
         return text.strip() if text else None
     except Exception as e:
@@ -35,8 +33,8 @@ def fetch_article_text(url: str) -> str:
 
 def main(top_n: int = 15):
     day = today_str()
-    in_path = f"producer/candidates/{day}/scored.jsonl"
-    out_path = f"producer/candidates/{day}/scored_enriched.jsonl"
+    in_path = f"producer/scored/{day}/scored.jsonl"
+    out_path = f"producer/scored/{day}/scored_enriched.jsonl"
 
     if not azure_blob.exists(CONTAINER, in_path):
         log(f"❌ Missing input: {in_path}")
