@@ -46,8 +46,7 @@ def build_section(args):
             "type": "news",
             "sources": {},
         }
-        utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
-        return
+        return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
 
     # Filtrera på liga
     items = _filter_by_league(items, league)
@@ -58,8 +57,7 @@ def build_section(args):
             "type": "news",
             "sources": {},
         }
-        utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
-        return
+        return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
 
     # Sortera på score (fallande)
     items = sorted(items, key=lambda c: c.get("score", 0), reverse=True)
@@ -94,4 +92,4 @@ def build_section(args):
         "sources": {i: c.get("source", {}) for i, c in enumerate(top3, 1)},
     }
 
-    utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="success", lang=lang)
+    return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="success", lang=lang)
