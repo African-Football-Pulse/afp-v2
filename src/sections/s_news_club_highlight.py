@@ -54,7 +54,7 @@ def build_section(args):
         "instructions": instructions,
     }
 
-    enriched_text = run_gpt(prompt_config, candidate)
+    enriched_text = run_gpt(prompt_config, candidate, system_rules=None)
 
     # Bygg payload
     title = f"Club Highlight – {club}"
