@@ -1,38 +1,74 @@
-📌 Förklaring per steg
+Måste formateras i MD.
+
+📦 Begreppen i AFP
+Raw
+
+Här hamnar exakt det som Collect hittar, utan förädling.
+
+Exempel: RSS-feeds sparas som raw/news/<feed>/<day>/rss.json med metadata om källan.
+
+På samma sätt för matcher och stats: raw/stats/..., raw/matches/... osv.
+
+Alltså: Raw = ofiltrerat insamlingsresultat.
+
+Curated
+
+Här hamnar material som vi bearbetar i Collect för att göra det enklare att använda i nästa steg.
+
+Exempel: från ett RSS-flöde tar vi ut själva artiklarna och skriver dem till curated/news/<feed>/<league>/<day>/items.json.
+
+Tillhörande input_manifest.json pekar ut vilken Curated-fil som gäller för just det feedet och datumet.
+
+Alltså: Curated = rådata förädlad till standardiserad struktur (listor av items, normaliserade fält).
+
+Producer
+
+Här skriver Produce-jobben (t.ex. produce_candidates, produce_scoring).
+
+Exempel: produce_candidates läser curated news och masterlistan, och skriver resultatet till producer/candidates/<day>/candidates.jsonl.
+
+produce_scoring tar in kandidaterna och skriver producer/scored/<day>/scored.jsonl.
+
+Alltså: Producer = det bearbetade material som används för att bygga sektioner.
+
+🔄 Kedjan för News
 
 Collect (rss_multi)
 
-Hämtar RSS-feeds.
+Hämtar 393 artiklar från 17 feeds.
 
-Skriver Raw:
-raw/news/<feed>/<day>/rss.json (metadata).
+Sparar metadata i raw/news/.../rss.json.
 
-Extraherar artiklar → Curated:
-curated/news/<feed>/<league>/<day>/items.json.
+Extraherar artiklar och skriver till curated/news/.../items.json.
 
-Produce Candidates (produce_candidates)
+Produce Candidates
 
-Läser Curated items.json.
+Läser curated/news/.../items.json.
 
-Matchar mot masterlistan (afrikanska spelare).
+Matchar mot masterlistan (51 afrikanska spelare).
 
-Skriver Producer:
-producer/candidates/<day>/candidates.jsonl.
+Skriver resultat till producer/candidates/<day>/candidates.jsonl.
 
-Produce Scoring (produce_scoring)
+Produce Scoring
 
-Läser Producer candidates.jsonl.
+Läser producer/candidates/<day>/candidates.jsonl.
 
-Viktar (recency, novelty, importance).
+Ger viktning (recency, novelty, importance).
 
-Skriver Producer:
-producer/scored/<day>/scored.jsonl.
+Skriver till producer/scored/<day>/scored.jsonl.
 
-Produce Section (produce_section / produce_auto)
+Produce Section (t.ex. Top3 Generic)
 
-Läser Producer scored.jsonl.
+Läser producer/scored/<day>/scored.jsonl.
 
-Bygger sektion (ex. S.NEWS.TOP3).
+Väljer ut top 3 och skriver sektionen i sections/S.NEWS.TOP3/....
 
-Skriver Sections:
-sections/S.NEWS.TOP3/<day>/<league>/{section.md, section.json, section_manifest.json}.
+📌 Slutsats
+
+Raw = dump (vad vi hämtade).
+
+Curated = förädlad standardstruktur (items.json).
+
+Producer = output från produce-stegen (candidates, scored).
+
+Sections = slutresultat som ska in i podden.
