@@ -40,29 +40,25 @@ def build_section(args):
     print(f"[s_news_top3_generic] Bygger Top3 för {league} @ {day}")
     items = _load_scored_items(day)
     if not items:
-        utils.write_outputs(
-            section_code="S.NEWS.TOP3",
-            league=league,
-            day=day,
-            lang=lang,
-            pod=pod,
-            content="No scored news items available.",
-            metadata={"count": 0, "reason": "no_items"},
-        )
+        payload = {
+            "title": "Top 3 African Player News",
+            "text": "No scored news items available.",
+            "type": "news",
+            "sources": {},
+        }
+        utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
         return
 
     # Filtrera på liga
     items = _filter_by_league(items, league)
     if not items:
-        utils.write_outputs(
-            section_code="S.NEWS.TOP3",
-            league=league,
-            day=day,
-            lang=lang,
-            pod=pod,
-            content=f"No scored news items for league {league}.",
-            metadata={"count": 0, "reason": "no_league_items"},
-        )
+        payload = {
+            "title": "Top 3 African Player News",
+            "text": f"No scored news items for league {league}.",
+            "type": "news",
+            "sources": {},
+        }
+        utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
         return
 
     # Sortera på score (fallande)
@@ -91,12 +87,11 @@ def build_section(args):
 
     content = "\n".join(lines)
 
-    utils.write_outputs(
-        section_code="S.NEWS.TOP3",
-        league=league,
-        day=day,
-        lang=lang,
-        pod=pod,
-        content=content,
-        metadata={"count": len(top3), "reason": "success"},
-    )
+    payload = {
+        "title": "Top 3 African Player News",
+        "text": content,
+        "type": "news",
+        "sources": {i: c.get("source", {}) for i, c in enumerate(top3, 1)},
+    }
+
+    utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="success", lang=lang)
