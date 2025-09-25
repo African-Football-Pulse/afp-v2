@@ -18,42 +18,19 @@ def _load_scored_items(day: str) -> List[Dict[str, Any]]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def _filter_by_league(items: List[Dict[str, Any]], league: str) -> List[Dict[str, Any]]:
-    """Filtrera scored items till de som hör till given liga (via player.league_key)"""
-    league_items = []
-    for c in items:
-        player = c.get("player")
-        if not player:
-            continue
-        if player.get("league_key") == league:
-            league_items.append(c)
-    return league_items
-
-
 def build_section(args):
-    """Bygg Top 3 news-sektionen för given liga"""
+    """Bygg Top 3 news-sektionen (global, ingen ligafilter ännu)"""
     day = args.date
     league = args.league
-    lang = getattr(args, "lang", "en")          # fallback till engelska
-    pod = getattr(args, "pod", "default_pod")  # fallback till default_pod
+    lang = getattr(args, "lang", "en")
+    pod = getattr(args, "pod", "default_pod")
 
-    print(f"[s_news_top3_generic] Bygger Top3 för {league} @ {day}")
+    print(f"[s_news_top3_generic] Bygger Top3 (GLOBAL) @ {day}")
     items = _load_scored_items(day)
     if not items:
         payload = {
             "title": "Top 3 African Player News",
             "text": "No scored news items available.",
-            "type": "news",
-            "sources": {},
-        }
-        return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
-
-    # Filtrera på liga
-    items = _filter_by_league(items, league)
-    if not items:
-        payload = {
-            "title": "Top 3 African Player News",
-            "text": f"No scored news items for league {league}.",
             "type": "news",
             "sources": {},
         }
