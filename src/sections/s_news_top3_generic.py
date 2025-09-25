@@ -34,8 +34,8 @@ def build_section(args):
     """Bygg Top 3 news-sektionen för given liga"""
     day = args.date
     league = args.league
-    lang = args.lang
-    pod = args.pod
+    lang = getattr(args, "lang", "en")          # fallback till engelska
+    pod = getattr(args, "pod", "default_pod")  # fallback till default_pod
 
     print(f"[s_news_top3_generic] Bygger Top3 för {league} @ {day}")
     items = _load_scored_items(day)
