@@ -1,8 +1,10 @@
+# src/producer/produce_candidates.py
 import os
 import sys
 import json
 import uuid
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from src.storage import azure_blob
 from src.producer import news_utils
@@ -35,12 +37,28 @@ def load_master_players():
     return players
 
 
+def normalize_date(value: str):
+    """Normalisera publiceringsdatum till ISO8601"""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).astimezone(timezone.utc).isoformat()
+    except Exception:
+        try:
+            return parsedate_to_datetime(value).astimezone(timezone.utc).isoformat()
+        except Exception:
+            return None
+
+
 def candidate_from_news(item, master_players):
     """Bygg en kandidat från en nyhetsitem"""
-    title = (item.get("title") or "").lower()
-    summary = (item.get("summary") or "").lower()
+    title = item.get("title") or ""
+    summary = item.get("summary") or item.get("description") or ""
     src = item.get("source", "unknown")
-    published_utc = item.get("published")
+    published_iso = normalize_date(item.get("published"))
+    url = item.get("link")
+
+    text_blob = f"{title} {summary}".lower()
 
     player = None
     direct_mention = 0.0
@@ -49,11 +67,11 @@ def candidate_from_news(item, master_players):
         name = (mp.get("name") or "").lower()
         club = (mp.get("club") or "").lower()
 
-        if name and name in title + " " + summary:
+        if name and name in text_blob:
             player = mp
             direct_mention = 1.0
             break
-        if club and club in src.lower():
+        if club and club in text_blob:
             player = mp
             direct_mention = 0.4
             break
@@ -63,17 +81,23 @@ def candidate_from_news(item, master_players):
 
     return {
         "id": str(uuid.uuid4()),
-        "player": player,
-        "player_id": player.get("id") if player else None,
-        "club_id": player.get("club_id") if player and player.get("club_id") else None,
+        "player": {
+            "name": player.get("name"),
+            "club": player.get("club"),
+            "id": player.get("id"),
+        },
+        "player_id": player.get("id"),
+        "club_id": player.get("club_id"),
         "event": {"type": "news"},
         "source": {
             "name": src,
-            "url": item.get("link"),
+            "url": url,
         },
+        "title": title,
+        "summary": summary,
+        "published_iso": published_iso,
         "direct_player_mention": direct_mention,
         "event_importance": 0.0,
-        "published_iso": published_utc,
         "recency_score": None,
         "novelty_24h": None,
         "language_match": None,
