@@ -1,91 +1,97 @@
 # src/sections/s_news_top3_generic.py
 import os, json
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import List, Dict, Any
+from datetime import datetime
 
-from src.sections.utils import write_outputs, get_persona_block
 from src.storage import azure_blob
-from src.gpt import run_gpt
+from src.sections import utils
 
-def today_str():
-    return datetime.now(timezone.utc).date().isoformat()
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-def _load_scored_items(league: str, day: str) -> List[Dict[str, Any]]:
-    container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
-    path = f"scored/{day}/{league}/scored.jsonl"
-    if not azure_blob.exists(container, path):
+
+def _load_scored_items(day: str) -> List[Dict[str, Any]]:
+    """Ladda global scored-lista från producer/scored"""
+    path = f"producer/scored/{day}/scored.jsonl"
+    if not azure_blob.exists(CONTAINER, path):
+        print(f"[s_news_top3_generic] ❌ Hittar inte scored: {path}")
         return []
-    text = azure_blob.get_text(container, path)
+    text = azure_blob.get_text(CONTAINER, path)
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
-def _pick_topn_diverse(items: List[Dict[str, Any]], n: int) -> List[Dict[str, Any]]:
-    seen, picked = set(), []
-    for it in sorted(items, key=lambda x: x.get("score", 0), reverse=True):
-        player = it.get("player", {}).get("name")
-        if player and player not in seen:
-            seen.add(player)
-            picked.append(it)
-        if len(picked) >= n:
-            break
-    return picked
 
-def build_section(args=None):
-    league = getattr(args, "league", "premier_league")
-    day = getattr(args, "date", today_str())
-    top_n = int(getattr(args, "top_n", 3))
-    lang = getattr(args, "lang", "en")
-    section_id = getattr(args, "section_code", "S.NEWS.TOP3")
-    role = "news_anchor"
+def _filter_by_league(items: List[Dict[str, Any]], league: str) -> List[Dict[str, Any]]:
+    """Filtrera scored items till de som hör till given liga (via club.league_key)"""
+    league_items = []
+    for c in items:
+        player = c.get("player")
+        if not player:
+            continue
+        if player.get("league_key") == league:
+            league_items.append(c)
+    return league_items
 
-    # 🎯 Persona lookup
-    persona_id, persona_block = get_persona_block(role, getattr(args, "pod"))
 
-    # Ladda scored news
-    items = _load_scored_items(league, day)
+def build_section(day: str, league: str, lang: str, pod: str, **kwargs):
+    print(f"[s_news_top3_generic] Bygger Top3 för {league} @ {day}")
+    items = _load_scored_items(day)
     if not items:
-        payload = {
-            "slug": "top3_news",
-            "title": "Top 3 African Player News",
-            "text": "No scored news items available.",
-            "length_s": 2,
-            "sources": [],
-            "meta": {"role": role, "persona": persona_id},
-            "items": [],
-            "type": "news",
-            "model": "gpt-4o-mini",
-        }
-        return write_outputs(section_id, day, league, payload, status="no_items", lang=lang)
+        utils.write_outputs(
+            section_code="S.NEWS.TOP3",
+            league=league,
+            day=day,
+            lang=lang,
+            pod=pod,
+            content="No scored news items available.",
+            metadata={"count": 0, "reason": "no_items"},
+        )
+        return
 
-    picked = _pick_topn_diverse(items, top_n)
+    # Filtrera på liga
+    items = _filter_by_league(items, league)
+    if not items:
+        utils.write_outputs(
+            section_code="S.NEWS.TOP3",
+            league=league,
+            day=day,
+            lang=lang,
+            pod=pod,
+            content=f"No scored news items for league {league}.",
+            metadata={"count": 0, "reason": "no_league_items"},
+        )
+        return
 
-    # GPT summary for each picked item
-    summaries = []
-    for it in picked:
-        url = it.get("source", {}).get("url")
-        title = it.get("title")
-        prompt_config = {
-            "persona": persona_block,
-            "instructions": f"""Summarize this football news item in 2–3 spoken-style sentences:
-Title: {title}
-URL: {url}"""
-        }
-        ctx = {"title": title, "url": url}
-        system_rules = "You are an assistant generating natural spoken football news summaries."
-        gpt_out = run_gpt(prompt_config, ctx, system_rules)
-        summaries.append(f"- {title} ({it.get('source',{}).get('name')})\n  {gpt_out}")
+    # Sortera på score (fallande)
+    items = sorted(items, key=lambda c: c.get("score", 0), reverse=True)
 
-    body = f"Top {len(picked)} African player news for {league} ({day}):\n" + "\n".join(summaries)
+    # Ta topp 3, försök diversifiera spelare
+    top3 = []
+    seen_players = set()
+    for c in items:
+        pname = c.get("player", {}).get("name")
+        if pname in seen_players:
+            continue
+        top3.append(c)
+        seen_players.add(pname)
+        if len(top3) >= 3:
+            break
 
-    payload = {
-        "slug": "top3_news",
-        "title": "Top 3 African Player News",
-        "text": body,
-        "length_s": len(picked) * 35,
-        "sources": [it.get("source", {}).get("url") for it in picked],
-        "meta": {"role": role, "persona": persona_id},
-        "items": picked,
-        "type": "news",
-        "model": "gpt-4o-mini",
-    }
+    # Bygg markdown-innehåll
+    lines = ["### Top 3 African Player News", ""]
+    for i, c in enumerate(top3, 1):
+        headline = c.get("title", "Untitled")
+        player = c.get("player", {}).get("name", "Unknown")
+        score = c.get("score", 0)
+        source = c.get("source", {}).get("name", "")
+        lines.append(f"{i}. **{headline}** ({player}, {source}, score={score:.2f})")
 
-    return write_outputs(section_id, day, league, payload, status="ok", lang=lang)
+    content = "\n".join(lines)
+
+    utils.write_outputs(
+        section_code="S.NEWS.TOP3",
+        league=league,
+        day=day,
+        lang=lang,
+        pod=pod,
+        content=content,
+        metadata={"count": len(top3), "reason": "success"},
+    )
