@@ -2,7 +2,7 @@ import argparse
 from datetime import datetime
 from src.sections import utils
 from src.producer.gpt import run_gpt
-from src.sections import role_utils
+from src.producer import role_utils
 
 
 def build_section(args):
