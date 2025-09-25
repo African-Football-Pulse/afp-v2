@@ -87,4 +87,25 @@ def main():
     if scored:
         scores = [c["score"] for c in scored]
         players = [c["player"]["name"] for c in scored if c.get("player")]
-        clubs = [c["player"].get("club") for c in scored if c.get("player]()
+        clubs = [c["player"].get("club") for c in scored if c.get("player")]
+
+        print(
+            f"[produce_scoring] Stats → "
+            f"candidates={len(scored)}, "
+            f"unique_players={len(set(players))}, "
+            f"unique_clubs={len(set(clubs))}"
+        )
+        print(
+            f"[produce_scoring] Score distribution → "
+            f"min={min(scores):.2f}, max={max(scores):.2f}, avg={sum(scores)/len(scores):.2f}"
+        )
+
+    text_out = "\n".join(json.dumps(s, ensure_ascii=False) for s in scored)
+    azure_blob.put_text(CONTAINER, out_path, text_out, content_type="application/jsonl")
+
+    print(f"[produce_scoring] Wrote {out_path}")
+    print("[produce_scoring] DONE")
+
+
+if __name__ == "__main__":
+    main()
