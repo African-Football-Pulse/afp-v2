@@ -28,15 +28,18 @@ def build_section(args):
 
     # Välj första candidate för enkelhet (senare kan vi göra logik för variation)
     candidate = candidates[0]
-    player = candidate.get("player", {}).get("name")
-    club = candidate.get("player", {}).get("club")
+    player = candidate.get("player", {}).get("name", "an African player")
+    club = candidate.get("player", {}).get("club", "a Premier League club")
     source = candidate.get("source", "unknown")
 
     # Persona (via role_utils + fallback)
     role = "news_anchor"
     persona_id, persona_block = utils.get_persona_block(role, pod)
-    if not persona_block:
-        persona_id, persona_block = "news_anchor", "Default News Anchor"
+    if not persona_block or not persona_block.strip():
+        persona_id, persona_block = "news_anchor", (
+            "News Anchor\nRole: Default\nVoice: Neutral\n"
+            "Tone: Informative\nStyle: Clear\n"
+        )
 
     # Bygg GPT prompt
     pretty_league = league.replace("_", " ").title()
@@ -48,6 +51,8 @@ def build_section(args):
         f"Do not include scores, raw URLs or metadata. "
         f"Do not add generic closings like 'Stay tuned'."
     )
+    if not instructions or not instructions.strip():
+        instructions = f"Write a short {lang} football news script."
 
     prompt_config = {
         "persona": persona_block,
