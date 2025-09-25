@@ -1,6 +1,6 @@
 import os
 import yaml
-from src.sections import utils
+from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
@@ -11,7 +11,7 @@ def log(msg: str):
 
 
 def load_feeds_config():
-    """Ladda feeds från config/feeds.yaml"""
+    """Ladda feeds.yaml från containern (Dockerfile COPY)"""
     with open("config/feeds.yaml", "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     return cfg.get("feeds", [])
@@ -19,17 +19,25 @@ def load_feeds_config():
 
 def load_curated_news(day: str, league: str = "premier_league"):
     """
-    Ladda alla nyhets-items från curated/news/<feed>/<league>/<day>/items.json
+    Ladda alla nyhets-items från raw/news/<feed>/<day>/rss.json i Azure.
     Returnerar en sammanslagen lista.
     """
     feeds = load_feeds_config()
     news_items = []
     for feed in feeds:
-        items = utils.load_news_items(feed, league, day)
-        if items:
-            log(f"{feed}: {len(items)} items loaded")
-            news_items.extend(items)
+        blob_path = f"raw/news/{feed}/{day}/rss.json"
+        if azure_blob.exists(CONTAINER, blob_path):
+            try:
+                items = azure_blob.get_json(CONTAINER, blob_path)
+                if isinstance(items, list):
+                    log(f"{feed}: {len(items)} items loaded")
+                    news_items.extend(items)
+                else:
+                    log(f"{feed}: invalid format (expected list)")
+            except Exception as e:
+                log(f"{feed}: error loading {blob_path} → {e}")
         else:
-            log(f"{feed}: no items found")
+            log(f"{feed}: no items found at {blob_path}")
+
     log(f"TOTAL: {len(news_items)} items loaded from {len(feeds)} feeds")
     return news_items
