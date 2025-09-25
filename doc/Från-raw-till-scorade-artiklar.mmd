@@ -1,0 +1,22 @@
+flowchart TD
+
+  subgraph Collect["Collect-jobb (insamling)"]
+    A[Raw: rss.json] -->|Extrahera items| B[Curated: items.json]
+  end
+
+  subgraph Produce["Produce-jobb (förädling)"]
+    B --> C[Candidates: candidates.jsonl]
+    C --> D[Scoring: scored.jsonl]
+    D --> E[Sections: section.md/json/manifest]
+  end
+
+  A:::raw
+  B:::curated
+  C:::producer
+  D:::producer
+  E:::sections
+
+  classDef raw fill=#f9f,stroke=#333,stroke-width=1px;
+  classDef curated fill=#bbf,stroke=#333,stroke-width=1px;
+  classDef producer fill=#bfb,stroke=#333,stroke-width=1px;
+  classDef sections fill=#ffb,stroke=#333,stroke-width=1px;
