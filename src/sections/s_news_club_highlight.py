@@ -1,118 +1,96 @@
-# src/sections/s_news_club_highlight.py
-from datetime import datetime, timezone
-from collections import Counter
-import os
+import argparse
+from datetime import datetime
+from src.sections import utils
+from src.producer.gpt import run_gpt
+from src.sections import role_utils
 
-from src.sections.utils import write_outputs, load_candidates, get_persona_block
-from src.gpt import run_gpt
-from src.storage import azure_blob
 
-CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+def build_section(args):
+    """
+    Build a 'Club Highlight' news section:
+    - Picks a candidate item for a club.
+    - Sends context to GPT for enriched narration.
+    - Writes section outputs (json, md, manifest).
+    """
 
-def today_str():
-    return datetime.now(timezone.utc).date().isoformat()
-
-def pick_best_club(candidates, exclude_club=None):
-    counts, clubs = Counter(), {}
-    for c in candidates:
-        club = c.get("player", {}).get("club")
-        if not club:
-            continue
-        counts[club] += 1
-        clubs.setdefault(club, []).append(c)
-    if not counts:
-        return None, []
-    for club, _ in counts.most_common():
-        if club != exclude_club:
-            return club, clubs[club]
-    return None, []
-
-def estimate_length(text: str, target: int) -> int:
-    return min(max(int(len(text.split()) / 2.6), target - 10), target + 10)
-
-def load_last_club(day: str):
-    path = "sections/state/last_club.json"
-    try:
-        data = azure_blob.get_json(CONTAINER, path)
-        if data and data.get("date") != day:
-            return data.get("club")
-    except Exception:
-        pass
-    return None
-
-def save_last_club(day: str, club: str):
-    path = "sections/state/last_club.json"
-    azure_blob.upload_json(CONTAINER, path, {"date": day, "club": club})
-
-def build_section(args=None):
-    league = getattr(args, "league", "premier_league")
-    day = getattr(args, "date", today_str())
+    day = args.date
+    league = args.league
     lang = getattr(args, "lang", "en")
-    section_id = getattr(args, "section_code", "S.NEWS.CLUB_HIGHLIGHT")
-    target = int(getattr(args, "target_length_s", 50))
-    role = "news_anchor"
+    pod = getattr(args, "pod", "default")
 
-    candidates, blob_path = load_candidates(day, args.news[0] if hasattr(args, "news") and args.news else None)
+    print(f"[s_news_club_highlight] Bygger Club Highlight för {league} @ {day}")
+
+    # Ladda kandidater (nu från scored/scored_enriched.jsonl)
+    candidates = utils.load_candidates(day)
     if not candidates:
-        payload = {
-            "slug": "club_highlight",
-            "title": "Club Spotlight",
-            "text": "No club highlights available.",
-            "length_s": 2,
-            "sources": [],
-            "meta": {"role": role, "persona": "AK"},
-            "type": "news",
-            "model": "gpt-4o-mini",
-            "items": [],
-        }
-        return write_outputs(section_id, day, league, payload, status="no_candidates", lang=lang)
+        print("[s_news_club_highlight] ❌ Inga kandidater hittades")
+        return None
 
-    last_club = load_last_club(day)
-    club, picked = pick_best_club(candidates, exclude_club=last_club)
-    if not club:
-        payload = {
-            "slug": "club_highlight",
-            "title": "Club Spotlight",
-            "text": "No club highlights available.",
-            "length_s": 2,
-            "sources": [],
-            "meta": {"role": role, "persona": "AK"},
-            "type": "news",
-            "model": "gpt-4o-mini",
-            "items": [],
-        }
-        return write_outputs(section_id, day, league, payload, status="no_items", lang=lang)
+    # Välj första candidate för enkelhet (senare kan vi göra logik för variation)
+    candidate = candidates[0]
+    player = candidate.get("player", {}).get("name")
+    club = candidate.get("player", {}).get("club")
+    source = candidate.get("source", "unknown")
 
-    # 🎯 Persona lookup
-    persona_id, persona_block = get_persona_block(role, getattr(args, "pod"))
+    # Persona (via role_utils + fallback)
+    role = "news_anchor"
+    persona_id, persona_block = utils.get_persona_block(role, pod)
+    if not persona_block:
+        persona_id, persona_block = "news_anchor", "Default News Anchor"
 
-    # GPT-prompt
-    headlines = "\n".join([f"- {c['source']['name']}: {c['source']['url']}" for c in picked[:3]])
+    # Bygg GPT prompt
+    pretty_league = league.replace("_", " ").title()
+    instructions = (
+        f"You are a sports news anchor. Write a flowing news script in {lang} "
+        f"highlighting one key story from the {pretty_league}. "
+        f"Focus on the player {player} at {club}. "
+        f"Make it engaging, but concise (about 3-4 sentences). "
+        f"Do not include scores, raw URLs or metadata. "
+        f"Do not add generic closings like 'Stay tuned'."
+    )
+
     prompt_config = {
         "persona": persona_block,
-        "instructions": f"""Give a lively spoken-style club spotlight (~150 words, ~45–60s) for {club}.
-Base it on these sources:
-{headlines}
-
-Make it conversational, engaging, and record-ready."""
+        "instructions": instructions,
     }
-    ctx = {"club": club, "candidates": picked}
-    system_rules = "You are an assistant generating natural spoken-style football commentary."
 
-    gpt_output = run_gpt(prompt_config, ctx, system_rules)
-    length_s = estimate_length(gpt_output, target)
+    enriched_text = run_gpt(prompt_config, candidate)
 
+    # Bygg payload
+    title = f"Club Highlight – {club}"
     payload = {
-        "slug": "club_highlight",
-        "title": f"{club} spotlight",
-        "text": gpt_output,
-        "length_s": length_s,
-        "sources": [c["source"]["url"] for c in picked],
-        "meta": {"role": role, "persona": persona_id},
+        "title": title,
+        "text": enriched_text,
         "type": "news",
-        "model": "gpt-4o-mini",
-        "items": picked,
+        "sources": {"source": source},
+        "meta": {
+            "day": day,
+            "league": league,
+            "persona": persona_id,
+            "player": player,
+            "club": club,
+        },
     }
 
-    save_last_club(day, club)
-    return write_outputs(section_id, day, league, payload, status="ok", lang=lang)
+    # Skriv output
+    manifest = utils.write_outputs(
+        section_code="S.NEWS.CLUB_HIGHLIGHT",
+        league=league,
+        lang=lang,
+        day=day,
+        payload=payload,
+        path_scope=getattr(args, "path_scope", "blob"),
+    )
+
+    return manifest
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--date", required=True)
+    parser.add_argument("--league", required=True)
+    parser.add_argument("--pod", required=True)
+    parser.add_argument("--lang", default="en")
+    parser.add_argument("--path-scope", default="blob")
+    args = parser.parse_args()
+    build_section(args)
