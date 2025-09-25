@@ -59,15 +59,15 @@ def build_section(args):
 
     # GPT-prompt
     prompt_config = {
-        "persona": "news_anchor",
-        "instructions": (
-            f"You are a sports news anchor. Write a flowing news script in {lang} "
-            f"about the following top 3 {pretty_league} stories. "
-            f"Each story should be 2–3 sentences, engaging and clear, "
-            f"mentioning the player and club naturally. "
-            f"Do not include scores, raw URLs or metadata. "
-            f"Use the input text as background but rewrite it as a polished news narration."
-        )
+    "persona": "news_anchor",
+    "instructions": (
+        f"You are a sports news anchor. Write a flowing news script in {lang} "
+        f"about the following top 3 {pretty_league} stories. "
+        f"Each story should be 2–3 sentences, engaging and clear, "
+        f"mentioning the player and club naturally. "
+        f"Do not include scores, raw URLs or metadata. "
+        f"Do not add generic closing lines like 'Stay tuned' or 'That's all for today'."
+    )
     }
     ctx = {"articles": top3}
     system_rules = "You are a professional football journalist creating spoken news scripts."
