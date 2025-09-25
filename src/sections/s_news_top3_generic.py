@@ -33,12 +33,12 @@ def build_section(args):
     pretty_league = league.replace("_", " ").title()
     section_title = f"Top 3 {pretty_league} News"
 
-    print(f"[s_news_top3_generic] Bygger Top3 (GLOBAL, enriched om möjligt) @ {day}")
+    print(f"[s_news_top3_generic] Bygger {section_title} @ {day}")
     items = _load_scored_items(day)
     if not items:
         payload = {
             "title": section_title,
-            "text": "No scored news items available.",
+            "text": f"No scored news items available for {pretty_league}.",
             "type": "news",
             "sources": {},
         }
