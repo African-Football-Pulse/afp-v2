@@ -1,24 +1,6 @@
 """
 GPT rendering wrapper for AFP Producer.
 Centralizes all interaction with OpenAI models.
-
-Public API:
-    render_gpt(prompt_config, ctx, system_rules) -> str
-        Main entrypoint for generating text from GPT.
-
-    run_gpt = render_gpt
-        Backwards-compatible alias for older modules.
-
-Expected inputs:
-    - prompt_config: dict
-        Configuration block for this GPT call (e.g. persona, constraints).
-    - ctx: dict
-        Context data (e.g. news items, candidates, metadata).
-    - system_rules: str
-        System-level instructions (role, hard constraints).
-
-Output:
-    - str: Generated text (ready-to-record monologue, dialogue, etc.)
 """
 
 import os
@@ -31,6 +13,8 @@ from typing import Dict, Any
 # --------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="[gpt] %(message)s")
+
+DEBUG = bool(os.getenv("DEBUG_GPT", False))
 
 # --------------------------------------------------------------------
 # OpenAI client
@@ -56,10 +40,9 @@ def _assemble_messages(prompt_config: Dict[str, Any], ctx: Dict[str, Any], syste
     """
     Build chat messages for GPT call.
     """
-    persona_block = prompt_config.get("persona", "")
+    persona_block = prompt_config.get("persona", "news_anchor")
     extra_instructions = prompt_config.get("instructions", "")
 
-    # Merge persona with news/context
     user_prompt = []
     if persona_block:
         user_prompt.append(f"[Persona]\n{persona_block}")
@@ -84,7 +67,11 @@ def render_gpt(prompt_config: Dict[str, Any], ctx: Dict[str, Any], system_rules:
     client = _get_client()
     messages = _assemble_messages(prompt_config, ctx, system_rules)
 
-    logger.info("Calling GPT with persona=%s", prompt_config.get("persona_id", "N/A"))
+    persona = prompt_config.get("persona", "news_anchor")
+    if DEBUG:
+        logger.info("Calling GPT with persona=%s and system_rules=%.50s", persona, system_rules)
+    else:
+        logger.info("Calling GPT with persona=%s", persona)
 
     try:
         resp = client.chat.completions.create(
@@ -95,6 +82,8 @@ def render_gpt(prompt_config: Dict[str, Any], ctx: Dict[str, Any], system_rules:
         )
         text = resp.choices[0].message.content.strip()
         logger.info("Generated text length=%d chars", len(text))
+        if DEBUG:
+            logger.info("Preview: %s", text[:200])
         return text
     except Exception as e:
         logger.error("GPT call failed: %s", e)
@@ -104,5 +93,4 @@ def render_gpt(prompt_config: Dict[str, Any], ctx: Dict[str, Any], system_rules:
 # --------------------------------------------------------------------
 # Backwards compatibility
 # --------------------------------------------------------------------
-# Older modules expect run_gpt(...)
 run_gpt = render_gpt
