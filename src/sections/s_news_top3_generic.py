@@ -1,7 +1,6 @@
 # src/sections/s_news_top3_generic.py
 import os, json
 from typing import List, Dict, Any
-from datetime import datetime
 
 from src.storage import azure_blob
 from src.sections import utils
@@ -20,7 +19,7 @@ def _load_scored_items(day: str) -> List[Dict[str, Any]]:
 
 
 def _filter_by_league(items: List[Dict[str, Any]], league: str) -> List[Dict[str, Any]]:
-    """Filtrera scored items till de som hör till given liga (via club.league_key)"""
+    """Filtrera scored items till de som hör till given liga (via player.league_key)"""
     league_items = []
     for c in items:
         player = c.get("player")
@@ -31,7 +30,13 @@ def _filter_by_league(items: List[Dict[str, Any]], league: str) -> List[Dict[str
     return league_items
 
 
-def build_section(day: str, league: str, lang: str, pod: str, **kwargs):
+def build_section(args):
+    """Bygg Top 3 news-sektionen för given liga"""
+    day = args.date
+    league = args.league
+    lang = args.lang
+    pod = args.pod
+
     print(f"[s_news_top3_generic] Bygger Top3 för {league} @ {day}")
     items = _load_scored_items(day)
     if not items:
@@ -80,8 +85,8 @@ def build_section(day: str, league: str, lang: str, pod: str, **kwargs):
     for i, c in enumerate(top3, 1):
         headline = c.get("title", "Untitled")
         player = c.get("player", {}).get("name", "Unknown")
-        score = c.get("score", 0)
         source = c.get("source", {}).get("name", "")
+        score = c.get("score", 0)
         lines.append(f"{i}. **{headline}** ({player}, {source}, score={score:.2f})")
 
     content = "\n".join(lines)
