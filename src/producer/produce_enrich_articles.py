@@ -18,13 +18,31 @@ def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
 
+BAD_PATTERNS = [
+    "sign up", "newsletter", "cookies", "advert", "subscribe",
+    "by continuing to use", "we use cookies", "follow us", "watch live"
+]
+
+
 def fetch_article_text(url: str) -> str:
     """Hämta och rensa artikeltext från URL"""
     try:
         resp = requests.get(url, timeout=15, headers={"User-Agent": "AFPBot/1.0"})
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-        text = " ".join(p.get_text(" ", strip=True) for p in soup.find_all("p"))
+
+        paragraphs = []
+        for p in soup.find_all("p"):
+            txt = p.get_text(" ", strip=True)
+            if not txt:
+                continue
+            lower = txt.lower()
+            # Filtrera bort puffar, cookies, reklam
+            if any(bad in lower for bad in BAD_PATTERNS):
+                continue
+            paragraphs.append(txt)
+
+        text = " ".join(paragraphs)
         return text.strip() if text else None
     except Exception as e:
         log(f"WARN: failed to fetch {url} ({e})")
