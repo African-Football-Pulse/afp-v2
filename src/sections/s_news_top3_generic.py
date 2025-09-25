@@ -10,8 +10,8 @@ CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 def _load_scored_items(day: str) -> List[Dict[str, Any]]:
     """Försök ladda enriched scored först, annars fallback till scored"""
-    enriched_path = f"producer/candidates/{day}/scored_enriched.jsonl"
-    base_path = f"producer/candidates/{day}/scored.jsonl"
+    enriched_path = f"producer/scored/{day}/scored_enriched.jsonl"
+    base_path = f"producer/scored/{day}/scored.jsonl"
 
     path = enriched_path if azure_blob.exists(CONTAINER, enriched_path) else base_path
     if not azure_blob.exists(CONTAINER, path):
@@ -47,7 +47,7 @@ def build_section(args):
     # Sortera på score
     items = sorted(items, key=lambda c: c.get("score", 0), reverse=True)
 
-    # Ta topp 3
+    # Ta topp 3 (unika spelare)
     top3, seen_players = [], set()
     for c in items:
         pname = c.get("player", {}).get("name")
