@@ -3,7 +3,6 @@ import os
 import json
 import requests
 from datetime import datetime, timezone
-from readability import Document
 from bs4 import BeautifulSoup
 
 from src.storage import azure_blob
@@ -24,11 +23,11 @@ def fetch_article_text(url: str) -> str:
     try:
         resp = requests.get(url, timeout=15, headers={"User-Agent": "AFPBot/1.0"})
         resp.raise_for_status()
-        doc = Document(resp.text)
-        html = doc.summary()
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # Hämta ut all text i <p>-taggar
         text = " ".join(p.get_text(" ", strip=True) for p in soup.find_all("p"))
-        return text.strip()
+        return text.strip() if text else None
     except Exception as e:
         log(f"WARN: failed to fetch {url} ({e})")
         return None
@@ -68,5 +67,4 @@ def main(top_n: int = 15):
 
 
 if __name__ == "__main__":
-    # Tillåt ev. CLI-parametrar senare, men default kör topp 15
     main()
