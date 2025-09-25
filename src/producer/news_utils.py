@@ -27,13 +27,13 @@ def load_feeds_config():
 
 def load_curated_news(day: str, league: str = "premier_league"):
     """
-    Ladda alla nyhets-items från raw/news/<feed>/<day>/rss.json i Azure.
+    Ladda alla nyhets-items från curated/news/<feed>/<league>/<day>/items.json i Azure.
     Returnerar en sammanslagen lista.
     """
     feeds = load_feeds_config()
     news_items = []
     for feed in feeds:
-        blob_path = f"raw/news/{feed}/{day}/rss.json"
+        blob_path = f"curated/news/{feed}/{league}/{day}/items.json"
         if azure_blob.exists(CONTAINER, blob_path):
             try:
                 items = azure_blob.get_json(CONTAINER, blob_path)
@@ -41,7 +41,7 @@ def load_curated_news(day: str, league: str = "premier_league"):
                     log(f"{feed}: {len(items)} items loaded")
                     news_items.extend(items)
                 else:
-                    log(f"{feed}: invalid format (expected list)")
+                    log(f"{feed}: invalid format (expected list in items.json)")
             except Exception as e:
                 log(f"{feed}: error loading {blob_path} → {e}")
         else:
