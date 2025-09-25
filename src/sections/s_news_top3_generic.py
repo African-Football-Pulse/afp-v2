@@ -9,39 +9,46 @@ CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
 def _load_scored_items(day: str) -> List[Dict[str, Any]]:
-    """Ladda global scored-lista från producer/scored"""
-    path = f"producer/scored/{day}/scored.jsonl"
+    """Försök ladda enriched scored först, annars fallback till scored"""
+    enriched_path = f"producer/candidates/{day}/scored_enriched.jsonl"
+    base_path = f"producer/candidates/{day}/scored.jsonl"
+
+    path = enriched_path if azure_blob.exists(CONTAINER, enriched_path) else base_path
     if not azure_blob.exists(CONTAINER, path):
         print(f"[s_news_top3_generic] ❌ Hittar inte scored: {path}")
         return []
+
+    print(f"[s_news_top3_generic] Loading scored items from {path}")
     text = azure_blob.get_text(CONTAINER, path)
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
 def build_section(args):
-    """Bygg Top 3 news-sektionen (global, ingen ligafilter ännu)"""
+    """Bygg Top 3 news-sektionen (globalt, enriched om möjligt)"""
     day = args.date
     league = args.league
     lang = getattr(args, "lang", "en")
     pod = getattr(args, "pod", "default_pod")
 
-    print(f"[s_news_top3_generic] Bygger Top3 (GLOBAL) @ {day}")
+    pretty_league = league.replace("_", " ").title()
+    section_title = f"Top 3 {pretty_league} News"
+
+    print(f"[s_news_top3_generic] Bygger Top3 (GLOBAL, enriched om möjligt) @ {day}")
     items = _load_scored_items(day)
     if not items:
         payload = {
-            "title": "Top 3 African Player News",
+            "title": section_title,
             "text": "No scored news items available.",
             "type": "news",
             "sources": {},
         }
         return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
 
-    # Sortera på score (fallande)
+    # Sortera på score
     items = sorted(items, key=lambda c: c.get("score", 0), reverse=True)
 
-    # Ta topp 3, försök diversifiera spelare
-    top3 = []
-    seen_players = set()
+    # Ta topp 3
+    top3, seen_players = [], set()
     for c in items:
         pname = c.get("player", {}).get("name")
         if pname in seen_players:
@@ -52,18 +59,30 @@ def build_section(args):
             break
 
     # Bygg markdown-innehåll
-    lines = ["### Top 3 African Player News", ""]
+    lines = [f"### {section_title}", ""]
     for i, c in enumerate(top3, 1):
-        headline = c.get("title", "Untitled")
         player = c.get("player", {}).get("name", "Unknown")
-        source = c.get("source", {}).get("name", "")
+        club = c.get("player", {}).get("club", "")
+        title = c.get("title", "Untitled")
+        url = c.get("source", {}).get("url", "")
         score = c.get("score", 0)
-        lines.append(f"{i}. **{headline}** ({player}, {source}, score={score:.2f})")
+
+        # Välj GPT-input (article_text om enriched, annars summary)
+        text_input = c.get("article_text") or c.get("summary") or ""
+
+        lines.append(f"{i}. **{player} – {club}**")
+        lines.append(f"   {title}")
+        if text_input:
+            lines.append(f"   {text_input[:200]}...")  # kort preview
+        if url:
+            lines.append(f"   ({url})")
+        lines.append(f"   Score={score:.2f}")
+        lines.append("")
 
     content = "\n".join(lines)
 
     payload = {
-        "title": "Top 3 African Player News",
+        "title": section_title,
         "text": content,
         "type": "news",
         "sources": {i: c.get("source", {}) for i, c in enumerate(top3, 1)},
