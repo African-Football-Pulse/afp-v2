@@ -2,10 +2,11 @@
 import os, json
 from datetime import datetime, timezone
 from collections import Counter
+from email.utils import parsedate_to_datetime
 
 from src.storage import azure_blob
 
-CONTAINER = os.getenv("BLOB_CONTAINER", "afp")
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
 def today_str():
@@ -33,6 +34,21 @@ def compute_score(c):
     )
 
 
+def parse_datetime(value: str):
+    """Försök tolka datetime i både ISO8601 och RFC2822-format"""
+    dt = None
+    try:
+        dt = datetime.fromisoformat(value)
+    except Exception:
+        try:
+            dt = parsedate_to_datetime(value)
+        except Exception:
+            pass
+    if dt and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def main():
     day = today_str()
     in_path = f"producer/candidates/{day}/candidates.jsonl"
@@ -47,17 +63,17 @@ def main():
     scored = []
 
     for c in candidates:
-        # recency
         recency_score = 0
         if c.get("published_iso"):
-            try:
-                dt = datetime.fromisoformat(c["published_iso"])
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+            dt = parse_datetime(c["published_iso"])
+            if dt:
                 hours = (now - dt).total_seconds() / 3600
-                recency_score = max(0, 1 - hours / 48)
-            except Exception:
-                pass
+                if hours <= 24:
+                    recency_score = 1.0
+                elif hours <= 48:
+                    recency_score = 0.5
+                else:
+                    recency_score = 0.0
 
         c["recency_score"] = recency_score
         c["novelty_24h"] = 1   # TODO: riktig dedupe/novelty
@@ -71,25 +87,4 @@ def main():
     if scored:
         scores = [c["score"] for c in scored]
         players = [c["player"]["name"] for c in scored if c.get("player")]
-        clubs = [c["player"].get("club") for c in scored if c.get("player")]
-
-        print(
-            f"[produce_scoring] Stats → "
-            f"candidates={len(scored)}, "
-            f"unique_players={len(set(players))}, "
-            f"unique_clubs={len(set(clubs))}"
-        )
-        print(
-            f"[produce_scoring] Score distribution → "
-            f"min={min(scores):.2f}, max={max(scores):.2f}, avg={sum(scores)/len(scores):.2f}"
-        )
-
-    text_out = "\n".join(json.dumps(s, ensure_ascii=False) for s in scored)
-    azure_blob.put_text(CONTAINER, out_path, text_out, content_type="application/jsonl")
-
-    print(f"[produce_scoring] Wrote {out_path}")
-    print("[produce_scoring] DONE")
-
-
-if __name__ == "__main__":
-    main()
+        clubs = [c["player"].get("club") for c in scored if c.get("player]()
