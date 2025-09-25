@@ -2,7 +2,7 @@ import os
 import json
 from typing import List, Dict
 from src.storage import azure_blob
-import role_utils
+from src.producer import role_utils
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
