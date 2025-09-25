@@ -52,7 +52,7 @@ def parse_datetime(value: str):
 def main():
     day = today_str()
     in_path = f"producer/candidates/{day}/candidates.jsonl"
-    out_path = f"producer/candidates/{day}/scored.jsonl"
+    out_path = f"producer/scored/{day}/scored.jsonl"
 
     text = azure_blob.get_text(CONTAINER, in_path)
     candidates = [json.loads(line) for line in text.splitlines() if line.strip()]
