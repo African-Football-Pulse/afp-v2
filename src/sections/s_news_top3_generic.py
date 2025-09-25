@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 
 from src.storage import azure_blob
 from src.sections import utils
+from src.producer.gpt import run_gpt
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
@@ -24,7 +25,7 @@ def _load_scored_items(day: str) -> List[Dict[str, Any]]:
 
 
 def build_section(args):
-    """Bygg Top 3 news-sektionen (globalt, enriched om möjligt)"""
+    """Bygg Top 3 news-sektionen via GPT"""
     day = args.date
     league = args.league
     lang = getattr(args, "lang", "en")
@@ -44,10 +45,8 @@ def build_section(args):
         }
         return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
 
-    # Sortera på score
+    # Sortera på score och ta topp 3 (unika spelare)
     items = sorted(items, key=lambda c: c.get("score", 0), reverse=True)
-
-    # Ta topp 3 (unika spelare)
     top3, seen_players = [], set()
     for c in items:
         pname = c.get("player", {}).get("name")
@@ -58,32 +57,26 @@ def build_section(args):
         if len(top3) >= 3:
             break
 
-    # Bygg markdown-innehåll
-    lines = [f"### {section_title}", ""]
-    for i, c in enumerate(top3, 1):
-        player = c.get("player", {}).get("name", "Unknown")
-        club = c.get("player", {}).get("club", "")
-        title = c.get("title", "Untitled")
-        url = c.get("source", {}).get("url", "")
-        score = c.get("score", 0)
+    # GPT-prompt
+    prompt_config = {
+        "persona": "news_anchor",
+        "instructions": (
+            f"You are a sports news anchor. Write a flowing news script in {lang} "
+            f"about the following top 3 {pretty_league} stories. "
+            f"Each story should be 2–3 sentences, engaging and clear, "
+            f"mentioning the player and club naturally. "
+            f"Do not include scores, raw URLs or metadata. "
+            f"Use the input text as background but rewrite it as a polished news narration."
+        )
+    }
+    ctx = {"articles": top3}
+    system_rules = "You are a professional football journalist creating spoken news scripts."
 
-        # Välj GPT-input (article_text om enriched, annars summary)
-        text_input = c.get("article_text") or c.get("summary") or ""
-
-        lines.append(f"{i}. **{player} – {club}**")
-        lines.append(f"   {title}")
-        if text_input:
-            lines.append(f"   {text_input[:200]}...")  # kort preview
-        if url:
-            lines.append(f"   ({url})")
-        lines.append(f"   Score={score:.2f}")
-        lines.append("")
-
-    content = "\n".join(lines)
+    gpt_text = run_gpt(prompt_config, ctx, system_rules)
 
     payload = {
         "title": section_title,
-        "text": content,
+        "text": gpt_text,
         "type": "news",
         "sources": {i: c.get("source", {}) for i, c in enumerate(top3, 1)},
     }
