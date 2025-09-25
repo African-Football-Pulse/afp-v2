@@ -16,10 +16,23 @@ def log(msg: str):
 
 
 def load_master_players():
-    """Ladda masterlistan med afrikanska spelare"""
+    """Ladda masterlistan med afrikanska spelare (lista, inte dict)"""
     blob_path = "players/africa/players_africa_master.json"
     log(f"Loading master players from blob: {blob_path}")
-    return azure_blob.get_json(CONTAINER, blob_path)
+
+    data = azure_blob.get_json(CONTAINER, blob_path)
+    if isinstance(data, dict) and "players" in data:
+        players = data["players"]
+    elif isinstance(data, list):
+        players = data
+    else:
+        players = []
+
+    log(f"Loaded {len(players)} master players")
+    if players:
+        sample = [p.get("name") for p in players[:3]]
+        log(f"Sample players: {sample}")
+    return players
 
 
 def candidate_from_news(item, master_players):
@@ -72,10 +85,9 @@ def main():
     log(f"START day={day} (UTC)")
 
     master_players = load_master_players()
-    log(f"Loaded {len(master_players)} master players")
 
     news_items = news_utils.load_curated_news(day)
-    log(f"Loaded {len(news_items)} news items from Azure")
+    log(f"Loaded {len(news_items)} news items (curated)")
 
     candidates = []
     for item in news_items:
