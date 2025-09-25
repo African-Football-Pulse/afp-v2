@@ -5,8 +5,9 @@ Centralizes all interaction with OpenAI models.
 
 import os
 import logging
+import json
 from openai import OpenAI
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # --------------------------------------------------------------------
 # Logging setup
@@ -36,23 +37,37 @@ def _get_client() -> OpenAI:
 # --------------------------------------------------------------------
 # Prompt assembly
 # --------------------------------------------------------------------
-def _assemble_messages(prompt_config: Dict[str, Any], ctx: Dict[str, Any], system_rules: str):
+def _assemble_messages(prompt_config: Dict[str, Any], ctx: Optional[Any], system_rules: Optional[str]):
     """
     Build chat messages for GPT call.
+    Always returns valid string content for system/user messages.
     """
-    persona_block = prompt_config.get("persona", "news_anchor")
-    extra_instructions = prompt_config.get("instructions", "")
+    persona_block = prompt_config.get("persona") or "news_anchor"
+    extra_instructions = prompt_config.get("instructions") or ""
+
+    # Convert context to string safely
+    ctx_str = ""
+    if ctx:
+        if isinstance(ctx, (dict, list)):
+            try:
+                ctx_str = json.dumps(ctx, ensure_ascii=False, indent=2)
+            except Exception:
+                ctx_str = str(ctx)
+        else:
+            ctx_str = str(ctx)
 
     user_prompt = []
     if persona_block:
         user_prompt.append(f"[Persona]\n{persona_block}")
-    if ctx:
-        user_prompt.append(f"[Context]\n{ctx}")
+    if ctx_str:
+        user_prompt.append(f"[Context]\n{ctx_str}")
     if extra_instructions:
         user_prompt.append(f"[Instructions]\n{extra_instructions}")
 
+    safe_system = system_rules if system_rules and isinstance(system_rules, str) else "You are a helpful assistant."
+
     return [
-        {"role": "system", "content": system_rules},
+        {"role": "system", "content": safe_system},
         {"role": "user", "content": "\n\n".join(user_prompt)},
     ]
 
@@ -60,7 +75,7 @@ def _assemble_messages(prompt_config: Dict[str, Any], ctx: Dict[str, Any], syste
 # --------------------------------------------------------------------
 # Main entrypoint
 # --------------------------------------------------------------------
-def render_gpt(prompt_config: Dict[str, Any], ctx: Dict[str, Any], system_rules: str) -> str:
+def render_gpt(prompt_config: Dict[str, Any], ctx: Optional[Any], system_rules: Optional[str] = None) -> str:
     """
     Generate GPT output for given config, context, and system rules.
     """
