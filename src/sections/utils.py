@@ -26,16 +26,16 @@ def write_outputs(
     manifest_path = os.path.join(base_dir, "section_manifest.json")
 
     # --- Write JSON ---
-    with open(json_path, "w") as f:
-        json.dump(payload, f, indent=2)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
 
     # --- Write Markdown ---
     if isinstance(payload, dict) and "script" in payload:
         md_content = payload["script"]
     else:
-        md_content = f"# Section {section_code}\n\n{json.dumps(payload, indent=2)}"
+        md_content = f"# Section {section_code}\n\n{json.dumps(payload, indent=2, ensure_ascii=False)}"
 
-    with open(md_path, "w") as f:
+    with open(md_path, "w", encoding="utf-8") as f:
         f.write(md_content)
 
     # --- Build manifest ---
@@ -53,8 +53,8 @@ def write_outputs(
         "generated_at": datetime.utcnow().isoformat() + "Z",
     }
 
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     print(f"[utils] Uploaded {manifest_path}")
 
@@ -74,13 +74,16 @@ def get_persona_block(role: str, pod: str):
 
 def load_scored_enriched(day: str, league: str = "premier_league"):
     """
-    Laddar scored_enriched.jsonl från rätt path.
+    Laddar scored_enriched.jsonl från absolut path i containern.
     """
-    path = f"producer/scored/{day}/scored_enriched.jsonl"
+    base_path = os.path.join("/app", "producer", "scored", day)
+    path = os.path.join(base_path, "scored_enriched.jsonl")
+
     if not os.path.exists(path):
         raise FileNotFoundError(f"[utils] Could not find scored_enriched file at {path}")
+
     items = []
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             try:
                 items.append(json.loads(line))
