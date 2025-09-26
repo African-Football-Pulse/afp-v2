@@ -1,170 +1,35 @@
-# src/sections/s_stats_top_performers_round.py
+# src/sections/s_stats_project_status.py
 import os
-from collections import defaultdict
-from src.storage import azure_blob
-from src.producer import stats_utils
 from src.sections import utils
-from src.producer.gpt import run_gpt
-
-CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
-
 
 def build_section(args=None, **kwargs):
-    """
-    Build a Top Performers section for one full round (may span multiple dates).
-    Compatible with both standalone (produce_section) and driver (s_stats_driver).
-    """
-
     season = kwargs.get("season", getattr(args, "season", os.getenv("SEASON", "2025-2026")))
-    league_id = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
-    round_dates = kwargs.get("round_dates", getattr(args, "round_dates", []))
-    section_code = getattr(args, "section", "S.STATS.TOP.PERFORMERS.ROUND")
-    lang = getattr(args, "lang", "en") if args else "en"
+    league = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
+    day = getattr(args, "date", os.getenv("DATE", "unknown"))
+    lang = getattr(args, "lang", "en")
     pod = getattr(args, "pod", "default_pod")
+    section_code = getattr(args, "section", "S.STATS.PROJECT.STATUS")
 
-    # Always provide a valid day
-    day_value = round_dates[-1] if round_dates else getattr(args, "date", os.getenv("DATE", "unknown"))
-
-    # Fetch events and save file in Azure
-    blob_path = stats_utils.save_african_events(
-        season=season, league_id=league_id, round_dates=round_dates, scope="round"
-    )
-    if not blob_path:
-        text = "No events found for this round."
-        payload = {
-            "slug": "top_performers_round",
-            "title": "Top Performers of the Round",
-            "text": text,
-            "length_s": 0,
-            "sources": {},
-            "meta": {"persona": "storyteller"},
-            "type": "stats",
-            "items": [],
-        }
-        manifest = {"script": text, "meta": {"persona": "storyteller"}}
-        return utils.write_outputs(
-            section_code=section_code,
-            day=day_value,
-            league=str(league_id),
-            lang=lang,
-            pod=pod,
-            manifest=manifest,
-            status="empty",
-            payload=payload,
-        )
-
-    events = azure_blob.get_json(CONTAINER, blob_path)
-    if not events:
-        text = "No top performers data available for this round."
-        payload = {
-            "slug": "top_performers_round",
-            "title": "Top Performers of the Round",
-            "text": text,
-            "length_s": 0,
-            "sources": {"events_blob": blob_path},
-            "meta": {"persona": "storyteller"},
-            "type": "stats",
-            "items": [],
-        }
-        manifest = {"script": text, "meta": {"persona": "storyteller"}}
-        return utils.write_outputs(
-            section_code=section_code,
-            day=day_value,
-            league=str(league_id),
-            lang=lang,
-            pod=pod,
-            manifest=manifest,
-            status="empty",
-            payload=payload,
-        )
-
-    # Aggregate stats
-    performers = defaultdict(lambda: {"goals": 0, "assists": 0, "cards": 0, "name": ""})
-    for ev in events:
-        pid = ev["player"]["id"]
-        pname = ev["player"]["name"]
-        performers[pid]["name"] = pname
-        if ev["event_type"] == "goal":
-            performers[pid]["goals"] += 1
-        elif ev["event_type"] == "assist":
-            performers[pid]["assists"] += 1
-        elif ev["event_type"] in ["yellow_card", "red_card"]:
-            performers[pid]["cards"] += 1
-
-    if not performers:
-        text = "No player stats available for this round."
-        payload = {
-            "slug": "top_performers_round",
-            "title": "Top Performers of the Round",
-            "text": text,
-            "length_s": 0,
-            "sources": {"events_blob": blob_path},
-            "meta": {"persona": "storyteller"},
-            "type": "stats",
-            "items": [],
-        }
-        manifest = {"script": text, "meta": {"persona": "storyteller"}}
-        return utils.write_outputs(
-            section_code=section_code,
-            day=day_value,
-            league=str(league_id),
-            lang=lang,
-            pod=pod,
-            manifest=manifest,
-            status="empty",
-            payload=payload,
-        )
-
-    # Sort top 3
-    top_players = sorted(
-        performers.values(),
-        key=lambda x: (x["goals"] + x["assists"]),
-        reverse=True,
-    )[:3]
-
-    # Persona
-    persona_id, persona_block = utils.get_persona_block("storyteller", pod)
-
-    # Build GPT prompt
-    players_str = "\n".join(
-        [
-            f"- {p['name']}: {p['goals']} goals, {p['assists']} assists, {p['cards']} cards"
-            for p in top_players
-        ]
+    title = "Project Status"
+    text = (
+        "We are currently tracking **51 African players** in the Premier League. "
+        "In the coming weeks, we will add around **30 more players**, "
+        "bringing our coverage to roughly 80 players. "
+        "And the journey doesn’t stop there – we will keep adding more names continuously."
     )
 
-    instructions = (
-        f"You are a football storyteller. Write a lively spoken-style recap (~120 words, ~40–50s) in {lang} "
-        f"about the top African performers this round in league {league_id}, season {season}. "
-        f"Here are the stats to use (do not invent numbers):\n\n{players_str}\n\n"
-        f"Make it engaging, natural, and record-ready. Mention names and stats clearly."
-    )
-
-    prompt_config = {"persona": persona_block, "instructions": instructions}
-    enriched_text = run_gpt(prompt_config, {"players": top_players}, system_rules=None)
-
-    # Payload
     payload = {
-        "slug": "top_performers_round",
-        "title": "Top Performers of the Round",
-        "text": enriched_text,
-        "length_s": len(top_players) * 20,
-        "sources": {"events_blob": blob_path},
-        "meta": {"persona": persona_id},
+        "slug": "project_status",
+        "title": title,
+        "text": text,
+        "length_s": int(round(len(text.split()) / 2.6)),
+        "sources": {},
+        "meta": {"persona": "storyteller"},
         "type": "stats",
-        "model": "gpt",
-        "items": top_players,
+        "model": "static",
     }
-
-    manifest = {"script": enriched_text, "meta": {"persona": persona_id}}
+    manifest = {"script": text, "meta": {"persona": "storyteller"}}
 
     return utils.write_outputs(
-        section_code=section_code,
-        day=day_value,
-        league=str(league_id),
-        lang=lang,
-        pod=pod,
-        manifest=manifest,
-        status="success",
-        payload=payload,
+        section_code, day, league, lang, pod, manifest, "success", payload
     )
