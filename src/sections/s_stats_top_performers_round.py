@@ -1,5 +1,4 @@
 # src/sections/s_stats_top_performers_round.py
-
 import os
 from collections import defaultdict
 from src.storage import azure_blob
@@ -7,19 +6,21 @@ from src.producer import stats_utils
 from src.sections import utils
 from src.producer.gpt import run_gpt
 
-CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
 def build_section(args=None, **kwargs):
     """
     Build a Top Performers section for one full round (may span multiple dates).
-    Kompatibel med både standalone (produce_section) och driver (s_stats_driver).
+    Compatible with both standalone (produce_section) and driver (s_stats_driver).
     """
 
     season = kwargs.get("season", getattr(args, "season", os.getenv("SEASON", "2025-2026")))
     league_id = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
     round_dates = kwargs.get("round_dates", getattr(args, "round_dates", []))
     section_code = getattr(args, "section", "S.STATS.TOP.PERFORMERS.ROUND")
+    lang = getattr(args, "lang", "en") if args else "en"
+    pod = getattr(args, "pod", "default_pod")
 
     # Fetch events and save file in Azure
     blob_path = stats_utils.save_african_events(
@@ -37,13 +38,16 @@ def build_section(args=None, **kwargs):
             "type": "stats",
             "items": [],
         }
+        manifest = {"script": text, "meta": {"persona": "storyteller"}}
         return utils.write_outputs(
             section_code=section_code,
             day=round_dates[-1] if round_dates else "",
             league=str(league_id),
+            lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
             payload=payload,
-            status="no_data",
-            lang=getattr(args, "lang", "en"),
         )
 
     events = azure_blob.get_json(CONTAINER, blob_path)
@@ -59,13 +63,16 @@ def build_section(args=None, **kwargs):
             "type": "stats",
             "items": [],
         }
+        manifest = {"script": text, "meta": {"persona": "storyteller"}}
         return utils.write_outputs(
             section_code=section_code,
             day=round_dates[-1] if round_dates else "",
             league=str(league_id),
+            lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
             payload=payload,
-            status="no_data",
-            lang=getattr(args, "lang", "en"),
         )
 
     # Aggregate stats
@@ -93,13 +100,16 @@ def build_section(args=None, **kwargs):
             "type": "stats",
             "items": [],
         }
+        manifest = {"script": text, "meta": {"persona": "storyteller"}}
         return utils.write_outputs(
             section_code=section_code,
             day=round_dates[-1] if round_dates else "",
             league=str(league_id),
+            lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
             payload=payload,
-            status="no_data",
-            lang=getattr(args, "lang", "en"),
         )
 
     # Sort top 3
@@ -109,11 +119,7 @@ def build_section(args=None, **kwargs):
         reverse=True,
     )[:3]
 
-    # Lang & pod
-    lang = getattr(args, "lang", "en") if args else "en"
-    pod = getattr(args, "pod", "default")
-
-    # Persona (storyteller from speaking_roles.yaml)
+    # Persona
     persona_id, persona_block = utils.get_persona_block("storyteller", pod)
 
     # Build GPT prompt
@@ -147,11 +153,15 @@ def build_section(args=None, **kwargs):
         "items": top_players,
     }
 
+    manifest = {"script": enriched_text, "meta": {"persona": persona_id}}
+
     return utils.write_outputs(
         section_code=section_code,
         day=round_dates[-1] if round_dates else "",
         league=str(league_id),
-        payload=payload,
-        status="ok",
         lang=lang,
+        pod=pod,
+        manifest=manifest,
+        status="success",
+        payload=payload,
     )
