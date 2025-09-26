@@ -5,7 +5,6 @@ from collections import defaultdict
 from src.storage import azure_blob
 from src.producer import stats_utils
 from src.sections import utils
-from src.sections.utils import write_outputs
 from src.producer.gpt import run_gpt
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
@@ -42,7 +41,25 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
             performers[pid]["cards"] += 1
 
     if not performers:
-        return None
+        text = "No top performers data available for this round."
+        payload = {
+            "slug": "top_performers_round",
+            "title": "Top Performers of the Round",
+            "text": text,
+            "length_s": 0,
+            "sources": {"events_blob": blob_path},
+            "meta": {"persona": "storyteller"},
+            "type": "stats",
+            "items": [],
+        }
+        return utils.write_outputs(
+            section_code="S.STATS.TOP_PERFORMERS_ROUND",
+            day=round_dates[-1],
+            league=str(league_id),
+            payload=payload,
+            lang=getattr(args, "lang", "en"),
+            status="no_data",
+        )
 
     # Sort top 3
     top_players = sorted(
@@ -89,11 +106,11 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
         "items": top_players,
     }
 
-    return write_outputs(
+    return utils.write_outputs(
         section_code="S.STATS.TOP_PERFORMERS_ROUND",
         day=round_dates[-1],
         league=str(league_id),
         payload=payload,
-        status="ok",
         lang=lang,
+        status="ok",
     )
