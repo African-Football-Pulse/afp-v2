@@ -2,12 +2,7 @@
 import os
 from src.sections import utils
 
-
 def build_section(args=None, **kwargs):
-    """
-    Static status section about project progress.
-    Kompatibel med både standalone och körning via s_stats_driver.
-    """
     season = kwargs.get("season", getattr(args, "season", os.getenv("SEASON", "2025-2026")))
     league = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
     day = getattr(args, "date", os.getenv("DATE", "unknown"))
@@ -20,8 +15,7 @@ def build_section(args=None, **kwargs):
         "We are currently tracking **51 African players** in the Premier League. "
         "In the coming weeks, we will add around **30 more players**, "
         "bringing our coverage to roughly 80 players. "
-        "And the journey doesn’t stop there – we will keep adding more names continuously. "
-        "Stay tuned as the lists grow and become even more complete!"
+        "And the journey doesn’t stop there – we will keep adding more names continuously."
     )
 
     payload = {
@@ -34,16 +28,8 @@ def build_section(args=None, **kwargs):
         "type": "stats",
         "model": "static",
     }
-
     manifest = {"script": text, "meta": {"persona": "storyteller"}}
 
     return utils.write_outputs(
-        section_code=section_code,
-        day=day,
-        league=league,
-        lang=lang,
-        pod=pod,
-        manifest=manifest,
-        status="success",
-        payload=payload,
+        section_code, day, league, lang, pod, manifest, "success", payload
     )
