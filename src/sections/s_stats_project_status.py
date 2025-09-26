@@ -3,13 +3,14 @@ import os
 from src.sections import utils
 
 
-def build_section(args=None):
+def build_section(args=None, **kwargs):
     """
     Static status section about project progress.
+    Kompatibel med både standalone och körning via s_stats_driver.
     """
-    season = getattr(args, "season", os.getenv("SEASON", "2025-2026"))
-    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
-    day = getattr(args, "date", "unknown")
+    season = kwargs.get("season", getattr(args, "season", os.getenv("SEASON", "2025-2026")))
+    league = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
+    day = getattr(args, "date", os.getenv("DATE", "unknown"))
     lang = getattr(args, "lang", "en")
     section_code = getattr(args, "section", "S.STATS.PROJECT_STATUS")
 
