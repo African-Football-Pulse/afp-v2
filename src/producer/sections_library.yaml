@@ -70,3 +70,9 @@ sections:
     runner: build_section
     description: Static project status section
     role: expert
+
+  S.STATS.TOP.CONTRIBUTORS.SEASON:
+    module: s_stats_top_contributors_season
+    runner: build_section
+    description: Top African contributors this season (goals + assists)
+    role: expert
