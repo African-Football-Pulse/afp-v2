@@ -6,6 +6,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 
 def run(cmd):
+    """Kör ett Pythonmodulkommando via subprocess och avbryt vid fel."""
     result = subprocess.run([sys.executable, "-m"] + cmd)
     if result.returncode != 0:
         print(f"[produce_auto] ❌ FEL: {' '.join(cmd)} misslyckades")
@@ -18,7 +19,9 @@ def main():
     lang = "en"
     pod = "PL_daily_africa_en"
 
-    # 1. Produce candidates, scoring, enrich
+    print(f"[produce_auto] 🚀 Startar auto-produce för {league} {today} (weekday={weekday})")
+
+    # 1. Kör core-producer-stegen i följd
     run(["src.producer.produce_candidates"])
     run(["src.producer.produce_scoring"])
     run(["src.producer.produce_enrich_articles"])
@@ -36,10 +39,12 @@ def main():
         league=league,
         lang=lang,
         weekday=weekday,
-        sections=plan,   # för for-loop i jinja
+        sections=plan,   # används för att jinja ska kunna loopa
     )
 
     section_ids = [line.strip() for line in rendered.splitlines() if line.strip()]
+
+    print(f"[produce_auto] 📋 Sektioner från template: {section_ids}")
 
     # 4. Kör sektionerna i turordning
     for section_id in section_ids:
@@ -52,6 +57,8 @@ def main():
         cmd = ["src.producer.produce_section", "--section", section_id] + args
         print(f"[produce_auto] ▶ Kör {section_id} → {' '.join(cmd)}")
         run(cmd)
+
+    print("[produce_auto] ✅ Klar")
 
 if __name__ == "__main__":
     main()
