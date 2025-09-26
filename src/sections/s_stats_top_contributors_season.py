@@ -17,10 +17,13 @@ def build_section(args=None, **kwargs):
 
     # Blob-sökväg till warehouse
     blob_path = "warehouse/metrics/goals_assists_africa.parquet"
+    container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Ladda parquet från Azure Blob utan att skriva till /tmp
+    # Ladda parquet från Azure Blob på korrekt sätt
     try:
-        blob_client = azure_blob._client().get_blob_client(blob_path)
+        svc = azure_blob._client()
+        container_client = svc.get_container_client(container)
+        blob_client = container_client.get_blob_client(blob_path)
         data = blob_client.download_blob().readall()
         df = pd.read_parquet(io.BytesIO(data))
     except Exception as e:
