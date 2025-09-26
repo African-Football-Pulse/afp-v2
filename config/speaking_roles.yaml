@@ -19,3 +19,8 @@ roles:
     en: "ak"
     sw: "ak"
     ar: "oes"
+
+  analyst:
+    en: "jjk"
+    sw: "jjk"
+    ar: "oes"
