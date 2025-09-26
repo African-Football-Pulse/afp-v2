@@ -2,13 +2,17 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from src.sections.utils import write_outputs, load_candidates
+from src.sections import utils
+from src.sections.utils import write_outputs
+from src.producer.gpt import run_gpt
+
 
 def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
+
 def _pick_top_players(candidates: List[Dict[str, Any]], top_n: int = 3) -> List[Dict[str, Any]]:
-    """Plocka toppspelare baserat på score."""
+    """Pick top African players based on score (highest per unique player)."""
     sorted_cands = sorted(
         candidates,
         key=lambda c: c.get("score", 0.0),
@@ -25,54 +29,88 @@ def _pick_top_players(candidates: List[Dict[str, Any]], top_n: int = 3) -> List[
             break
     return picked
 
+
 def build_section(args=None):
     """
-    Bygg en sektion med topp-afrikanska spelare baserat på scored candidates.
-    Skriver ut section.json, section.md och section_manifest.json i mappstruktur.
+    Build a section highlighting top African players based on scored_enriched candidates.
+    Writes section.json, section.md and section_manifest.json.
     """
     league = getattr(args, "league", "premier_league")
     day = getattr(args, "date", today_str())
-    section_id = getattr(args, "section_code", "S.NEWS.TOP_AFRICAN_PLAYERS")
+    pod = getattr(args, "pod", "default")
+    section_code = getattr(args, "section", "S.NEWS.TOP_AFRICAN_PLAYERS")
     top_n = int(getattr(args, "top_n", 3))
+    lang = getattr(args, "lang", "en")
 
-    candidates, blob_path = load_candidates(day, args.news[0] if hasattr(args, "news") and args.news else None)
-
+    # Load scored_enriched candidates
+    candidates = utils.load_scored_enriched(day)
     if not candidates:
         text = "No news items available."
         payload = {
             "slug": "top_african_players",
-            "title": "Top African Players this week",
+            "title": "Top African Players",
             "text": text,
             "length_s": 2,
-            "sources": {"news_input_path": blob_path},
-            "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+            "sources": {},
+            "meta": {"persona": "system"},
             "type": "news",
-            "model": "gpt-4o-mini",
+            "model": "static",
             "items": [],
         }
-        return write_outputs(section_id, day, league, payload, status="no_candidates")
+        return write_outputs(
+            section_code=section_code,
+            day=day,
+            league=league,
+            payload=payload,
+            status="no_candidates",
+            lang=lang,
+        )
 
     picked = _pick_top_players(candidates, top_n=top_n)
 
-    # Bygg text
-    lines = [f"Top {len(picked)} African players in {league} ({day}):"]
-    for c in picked:
-        player = c.get("player", {}).get("name")
-        club = c.get("player", {}).get("club")
-        score = c.get("score", 0.0)
-        lines.append(f"- {player} ({club}), score={score:.2f}")
-    body = "\n".join(lines)
+    # Persona (analyst/expert)
+    persona_id, persona_block = utils.get_persona_block("analyst", pod)
 
+    # Build GPT prompt
+    players_list = ", ".join([c.get("player", {}).get("name", "?") for c in picked])
+    pretty_league = league.replace("_", " ").title()
+    instructions = (
+        f"You are a football analyst. Write a {lang} script highlighting "
+        f"the top {len(picked)} African players today in the {pretty_league}. "
+        f"The players are: {players_list}. "
+        f"Explain briefly why they stood out, in 3–5 sentences overall. "
+        f"Do not include scores, raw URLs or metadata."
+    )
+    prompt_config = {
+        "persona": persona_block,
+        "instructions": instructions,
+    }
+
+    enriched_text = run_gpt(prompt_config, {"players": picked}, system_rules=None)
+
+    # Build payload
     payload = {
         "slug": "top_african_players",
-        "title": "Top African Players this week",
-        "text": body,
-        "length_s": len(picked) * 30,  # antag ca 30 sekunder per spelare
-        "sources": {"news_input_path": blob_path},
-        "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+        "title": "Top African Players",
+        "text": enriched_text,
+        "length_s": len(picked) * 30,  # approx length
+        "sources": {},
+        "meta": {
+            "persona": persona_id,
+            "players": [c.get("player", {}).get("name") for c in picked],
+            "league": league,
+            "day": day,
+        },
         "type": "news",
-        "model": "gpt-4o-mini",
+        "model": "gpt",
         "items": picked,
     }
 
-    return write_outputs(section_id, day, league, payload, status="ok")
+    return write_outputs(
+        section_code=section_code,
+        day=day,
+        league=league,
+        payload=payload,
+        status="ok",
+        lang=lang,
+    )
