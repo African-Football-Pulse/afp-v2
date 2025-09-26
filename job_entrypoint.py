@@ -22,6 +22,8 @@ def export_secrets(secrets_file: str = "/app/secrets/secret.json"):
 
 def build_command():
     job_type = os.environ.get("JOB_TYPE", "").strip()
+    extra_args = sys.argv[1:]  # fånga alla CLI-flaggor som --all, --template etc.
+
     if not job_type:
         log("❌ JOB_TYPE måste anges")
         sys.exit(1)
@@ -29,18 +31,17 @@ def build_command():
     # Standard collect → rss_multi
     if job_type == "collect":
         log("Selected job: COLLECT → rss_multi (default)")
-        return ["python", "-m", "src.collectors.rss_multi"]
+        return ["python", "-m", "src.collectors.rss_multi"] + extra_args
 
     # Standard produce → auto
     if job_type == "produce":
         log("Selected job: PRODUCE (auto) → full pipeline via produce_auto")
-        return ["python", "-m", "src.producer.produce_auto"]
+        return ["python", "-m", "src.producer.produce_auto"] + extra_args
 
     # Tillåt explicit modulväg, t.ex. src.collectors.collect_extract_weekly
     if job_type.startswith("src."):
         log(f"Selected job: custom module → {job_type}")
-        # 🔑 Viktigt: ta med extra CLI-argument
-        return ["python", "-m", job_type] + sys.argv[1:]
+        return ["python", "-m", job_type] + extra_args
 
     # Okänd typ
     log(f"❌ Okänd JOB_TYPE: {job_type}")
