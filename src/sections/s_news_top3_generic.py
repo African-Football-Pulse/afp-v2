@@ -42,6 +42,7 @@ def build_section(args):
             "text": f"No scored news items available for {pretty_league}.",
             "type": "news",
             "sources": {},
+            "meta": {"persona": "system"},
         }
         return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
 
@@ -57,17 +58,20 @@ def build_section(args):
         if len(top3) >= 3:
             break
 
+    # Persona
+    persona_id, persona_block = utils.get_persona_block("news_anchor", pod)
+
     # GPT-prompt
     prompt_config = {
-    "persona": "news_anchor",
-    "instructions": (
-        f"You are a sports news anchor. Write a flowing news script in {lang} "
-        f"about the following top 3 {pretty_league} stories. "
-        f"Each story should be 2–3 sentences, engaging and clear, "
-        f"mentioning the player and club naturally. "
-        f"Do not include scores, raw URLs or metadata. "
-        f"Do not add generic closing lines like 'Stay tuned' or 'That's all for today'."
-    )
+        "persona": persona_block,
+        "instructions": (
+            f"You are a sports news anchor. Write a flowing news script in {lang} "
+            f"about the following top 3 {pretty_league} stories. "
+            f"Each story should be 2–3 sentences, engaging and clear, "
+            f"mentioning the player and club naturally. "
+            f"Do not include scores, raw URLs or metadata. "
+            f"Do not add generic closing lines like 'Stay tuned' or 'That's all for today'."
+        )
     }
     ctx = {"articles": top3}
     system_rules = "You are a professional football journalist creating spoken news scripts."
@@ -79,6 +83,7 @@ def build_section(args):
         "text": gpt_text,
         "type": "news",
         "sources": {i: c.get("source", {}) for i, c in enumerate(top3, 1)},
+        "meta": {"persona": persona_id},
     }
 
     return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="success", lang=lang)
