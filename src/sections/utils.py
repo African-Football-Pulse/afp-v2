@@ -1,7 +1,6 @@
 import os
 import json
 from typing import Dict
-import yaml
 from src.storage import azure_blob
 from src.producer import role_utils
 
@@ -23,7 +22,6 @@ def write_outputs(
     Supports both legacy positional calls and keyword calls.
     """
 
-    # Legacy positional handling
     if args:
         if len(args) == 3:  # (day, league, payload)
             day, league, payload = args
@@ -37,19 +35,15 @@ def write_outputs(
 
     base_path = f"sections/{section_code}/{day}/{league}/_/"
 
-    # Ensure status is also reflected in payload.meta
     if "meta" not in payload:
         payload["meta"] = {}
     payload["meta"]["status"] = status
 
-    # Write section.json
     azure_blob.upload_json(CONTAINER, base_path + "section.json", payload)
 
-    # Write section.md (if text exists)
     if "text" in payload:
         azure_blob.put_text(CONTAINER, base_path + "section.md", payload["text"])
 
-    # Build and write manifest
     manifest = {
         "section_code": section_code,
         "league": league,
@@ -71,17 +65,10 @@ def write_outputs(
 
 
 def get_persona_block(role: str, pod: str):
-    """
-    Resolve persona_id via pods.yaml and fetch corresponding block
-    from speaking_roles.yaml.
-    Returns (persona_id, persona_block).
-    """
-    # Hämta persona_id från pods.yaml
     pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
     pod_cfg = pods_cfg.get(pod, {})
     persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
 
-    # Hämta block från speaking_roles.yaml
     roles_cfg = role_utils.load_yaml("config/speaking_roles.yaml")["roles"]
 
     persona_block = None
@@ -95,25 +82,27 @@ def get_persona_block(role: str, pod: str):
                     persona_block = f"{role_name}:{persona_id}"
 
     if persona_block is None:
-        persona_block = persona_id  # fallback
+        persona_block = persona_id
 
     return persona_id, persona_block
 
 
-def load_scored_enriched(day: str, league: str = "premier_league", base_path: str = "producer/scored"):
+def load_scored_enriched(day: str, league: str = "premier_league", container: str = CONTAINER):
     """
-    Load scored_enriched.jsonl for given day/league.
-    Returns a list of dicts (scored items).
+    Load scored_enriched.jsonl for given day from Azure Blob.
+    Returns a list of dicts.
     """
-    path = f"{base_path}/{day}/scored_enriched.jsonl"
+    blob_path = f"producer/scored/{day}/scored_enriched.jsonl"
+    try:
+        text = azure_blob.get_text(container, blob_path)
+    except Exception as e:
+        raise FileNotFoundError(f"[utils] Could not fetch {blob_path} from Azure Blob: {e}")
+
     items = []
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"[utils] Could not find scored_enriched file at {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                items.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    print(f"[utils] Loaded {len(items)} items from {path}")
+    for line in text.splitlines():
+        try:
+            items.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    print(f"[utils] Loaded {len(items)} items from {blob_path}")
     return items
