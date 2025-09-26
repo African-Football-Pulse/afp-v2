@@ -1,6 +1,6 @@
 # src/sections/s_stats_project_status.py
 import os
-from src.sections.utils import write_outputs
+from src.sections import utils
 
 
 def build_section(args=None):
@@ -28,16 +28,16 @@ def build_section(args=None):
         "text": text,
         "length_s": int(round(len(text.split()) / 2.6)),
         "sources": {},
-        "meta": {"persona": "system"},
+        "meta": {"persona": "storyteller"},
         "type": "stats",
         "model": "static",
     }
 
-    return write_outputs(
+    return utils.write_outputs(
         section_code=section_code,
         day=day,
         league=league,
         payload=payload,
-        status="ok",
         lang=lang,
+        status="ok",
     )
