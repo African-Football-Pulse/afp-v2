@@ -1,14 +1,21 @@
 import os
 import json
-import datetime
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Tuple
 from src.common import blob_io
 from src.producer import role_utils
 
 
-def write_outputs(section_code: str, day: str, league: str, lang: str, pod: str, manifest: Dict[str, Any]):
+def write_outputs(
+    section_code: str,
+    day: str,
+    league: str,
+    lang: str,
+    pod: str,
+    manifest: Dict[str, Any],
+    payload: Dict[str, Any] = None,
+):
     """
-    Skriver ut outputs (JSON, MD, manifest) till blob.
+    Skriver outputs (JSON, MD, manifest) till blob och returnerar manifest.
     """
     if not section_code or not day or not league or not lang:
         raise ValueError("[write_outputs] Missing required arguments")
@@ -25,14 +32,15 @@ def write_outputs(section_code: str, day: str, league: str, lang: str, pod: str,
 
     # Manifest
     manifest_path = base_path + "section_manifest.json"
-    blob_io.upload_json(manifest_path, {
+    manifest_obj = {
         "section": section_code,
         "day": day,
         "league": league,
         "status": "done",
         "lang": lang,
-        "path": base_path
-    })
+        "path": base_path,
+    }
+    blob_io.upload_json(manifest_path, manifest_obj)
 
     print(f"[utils] Uploaded {manifest_path}")
     return {
@@ -42,16 +50,14 @@ def write_outputs(section_code: str, day: str, league: str, lang: str, pod: str,
         "status": "done",
         "lang": lang,
         "path": base_path,
+        "manifest": manifest,
+        "payload": payload,
     }
-
-
-def get_today() -> str:
-    return datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
 
 def get_persona_block(role: str, pod: str) -> Tuple[str, Dict[str, Any]]:
     """
-    Hämtar persona-id och block baserat på roll och pod.
+    Hämtar persona-id och block för en given roll i en pod.
     """
     pod_cfg = role_utils.get_pod_config(pod)
     persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
@@ -59,21 +65,20 @@ def get_persona_block(role: str, pod: str) -> Tuple[str, Dict[str, Any]]:
     return persona_id, persona_block
 
 
-def load_scored_enriched(day: str, league: str = "premier_league") -> List[Dict]:
+def load_scored_enriched(day: str, league: str = "premier_league"):
     """
-    Laddar scored_enriched.jsonl från Azure Blob Storage.
+    Laddar scored_enriched.jsonl från Azure blob.
     """
-    blob_path = f"producer/scored/{day}/scored_enriched.jsonl"
-
-    print(f"[utils] 🔗 Laddar scored_enriched från blob: {blob_path}")
-    data = blob_io.load_blob_as_text(blob_path)
+    path = f"producer/scored/{day}/scored_enriched.jsonl"
+    try:
+        text = blob_io.download_text(path)
+    except Exception as e:
+        raise FileNotFoundError(f"[utils] Could not load scored_enriched from blob: {path}") from e
 
     items = []
-    for line in data.splitlines():
+    for line in text.splitlines():
         try:
             items.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-
-    print(f"[utils] ✅ Laddade {len(items)} items från blob {blob_path}")
     return items
