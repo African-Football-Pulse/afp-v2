@@ -26,8 +26,7 @@ def build_section(args=None, **kwargs):
         blob_client = container_client.get_blob_client(blob_path)
         data = blob_client.download_blob().readall()
         df = pd.read_parquet(io.BytesIO(data))
-    except Exception as e:
-        print(f"[{section_code}] ❌ No warehouse data: {e}")
+    except Exception:
         text = "No data available for top contributors this season."
         payload = {
             "slug": "stats_top_contributors_season",
@@ -41,7 +40,6 @@ def build_section(args=None, **kwargs):
             "items": [],
         }
         manifest = {"script": text, "meta": {"persona": persona_id}}
-        print(f"[{section_code}] ⚡ Output path: sections/{section_code}/{day}/{league}/{pod}")
         return utils.write_outputs(
             section_code, day, league, lang, pod, manifest, "empty", payload
         )
@@ -75,7 +73,6 @@ def build_section(args=None, **kwargs):
             "items": [],
         }
         manifest = {"script": text, "meta": {"persona": persona_id}}
-        print(f"[{section_code}] ⚡ Output path: sections/{section_code}/{day}/{league}/{pod}")
         return utils.write_outputs(
             section_code, day, league, lang, pod, manifest, "empty", payload
         )
@@ -112,7 +109,6 @@ def build_section(args=None, **kwargs):
     }
     manifest = {"script": gpt_output, "meta": {"persona": persona_id}}
 
-    print(f"[{section_code}] ⚡ Output path: sections/{section_code}/{day}/{league}/{pod}")
     return utils.write_outputs(
         section_code, day, league, lang, pod, manifest, "success", payload
     )
