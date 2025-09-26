@@ -3,6 +3,7 @@ import os
 import importlib
 from src.sections import utils
 
+
 def build_section(args, **kwargs):
     """Driver som kör alla stats-sektioner för en given dag/league."""
 
@@ -26,7 +27,7 @@ def build_section(args, **kwargs):
     results = {}
     for sub_code, module_path in subsections.items():
         try:
-            print(f"[{section_code}] ▶️ Kör {sub_code} via {module_path}")
+            print(f"[{section_code}] ▶️ Importerar {module_path} för {sub_code}")
             mod = importlib.import_module(module_path)
 
             # Bygg kwargs för undersektionen
@@ -36,9 +37,16 @@ def build_section(args, **kwargs):
                 "round_dates": kwargs.get("round_dates", []),
             }
 
-            # Kör build_section i undersektionen
+            print(f"[{section_code}] ▶️ Kör {sub_code} med kwargs={sub_kwargs}")
             result = mod.build_section(args, **sub_kwargs)
-            results[sub_code] = {"status": "done", "result": result}
+
+            if result is None:
+                print(f"[{section_code}] ⚠️ {sub_code} returnerade None!")
+                results[sub_code] = {"status": "none"}
+            else:
+                print(f"[{section_code}] ✅ {sub_code} returnerade {type(result)} med nycklar: {list(result.keys())}")
+                results[sub_code] = {"status": "done", "keys": list(result.keys())}
+
         except Exception as e:
             print(f"[{section_code}] ❌ Fel i {sub_code}: {e}")
             results[sub_code] = {"status": "error", "error": str(e)}
@@ -53,8 +61,9 @@ def build_section(args, **kwargs):
         "type": "stats",
         "model": "driver",
         "items": list(results.keys()),
+        "results": results,
     }
-    manifest = {"script": text, "meta": {"subsections": list(subsections.keys())}}
+    manifest = {"script": text, "meta": {"subsections": list(subsections.keys()), "results": results}}
 
     result = utils.write_outputs(
         section_code=section_code,
