@@ -1,9 +1,9 @@
 # src/sections/s_news_top_african_players.py
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from src.sections import utils
-from src.sections.utils import write_outputs
 from src.producer.gpt import run_gpt
 
 
@@ -35,15 +35,16 @@ def build_section(args=None):
     Build a section highlighting top African players based on scored_enriched candidates.
     Writes section.json, section.md and section_manifest.json.
     """
-    league = getattr(args, "league", "premier_league")
-    day = getattr(args, "date", today_str())
-    pod = getattr(args, "pod", "default")
-    section_code = getattr(args, "section", "S.NEWS.TOP_AFRICAN_PLAYERS")
+
+    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+    day = getattr(args, "date", os.getenv("DATE", today_str()))
+    pod = getattr(args, "pod", "default_pod")
+    section_code = getattr(args, "section", "S.NEWS.TOP.AFRICAN.PLAYERS")
     top_n = int(getattr(args, "top_n", 3))
     lang = getattr(args, "lang", "en")
 
     # Load scored_enriched candidates
-    candidates = utils.load_scored_enriched(day)
+    candidates = utils.load_scored_enriched(day, league=league)
     if not candidates:
         text = "No news items available."
         payload = {
@@ -57,13 +58,16 @@ def build_section(args=None):
             "model": "static",
             "items": [],
         }
-        return write_outputs(
+        manifest = {"script": text, "meta": {"persona": "system"}}
+        return utils.write_outputs(
             section_code=section_code,
             day=day,
             league=league,
-            payload=payload,
-            status="no_candidates",
             lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
+            payload=payload,
         )
 
     picked = _pick_top_players(candidates, top_n=top_n)
@@ -106,11 +110,15 @@ def build_section(args=None):
         "items": picked,
     }
 
-    return write_outputs(
+    manifest = {"script": enriched_text, "meta": {"persona": persona_id}}
+
+    return utils.write_outputs(
         section_code=section_code,
         day=day,
         league=league,
-        payload=payload,
-        status="ok",
         lang=lang,
+        pod=pod,
+        manifest=manifest,
+        status="success",
+        payload=payload,
     )
