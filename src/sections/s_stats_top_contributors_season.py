@@ -14,17 +14,19 @@ def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def build_section(args=None):
+def build_section(args=None, **kwargs):
     """
     Build a section presenting the top African players in the Premier League
     based on goals + assists (goal contributions) for the season.
+    Kompatibel med både standalone och körning via s_stats_driver.
     """
 
-    league = getattr(args, "league", "premier_league")
+    season = kwargs.get("season", getattr(args, "season", os.getenv("SEASON", "2025-2026")))
+    league = kwargs.get("league_id", getattr(args, "league", "premier_league"))
     day = getattr(args, "date", today_str())
     pod = getattr(args, "pod", "default")
     lang = getattr(args, "lang", "en")
-    section_code = getattr(args, "section", "S.STATS.TOP_CONTRIBUTORS_SEASON")
+    section_code = getattr(args, "section", "S.STATS.TOP.CONTRIBUTORS.SEASON")
     top_n = int(getattr(args, "top_n", 5))
 
     blob_path = "warehouse/metrics/toplists_africa.parquet"
