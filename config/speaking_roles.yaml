@@ -9,3 +9,8 @@ roles:
     ar:
       expert1: "oes"
       expert2: "kem"
+
+  single_expert:
+    en: "ak"
+    sw: "ak"
+    ar: "oes"
