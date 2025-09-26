@@ -22,6 +22,9 @@ def build_section(args=None, **kwargs):
     lang = getattr(args, "lang", "en") if args else "en"
     pod = getattr(args, "pod", "default_pod")
 
+    # Always provide a valid day
+    day_value = round_dates[-1] if round_dates else getattr(args, "date", os.getenv("DATE", "unknown"))
+
     # Fetch events and save file in Azure
     blob_path = stats_utils.save_african_events(
         season=season, league_id=league_id, round_dates=round_dates, scope="round"
@@ -41,7 +44,7 @@ def build_section(args=None, **kwargs):
         manifest = {"script": text, "meta": {"persona": "storyteller"}}
         return utils.write_outputs(
             section_code=section_code,
-            day=round_dates[-1] if round_dates else "",
+            day=day_value,
             league=str(league_id),
             lang=lang,
             pod=pod,
@@ -66,7 +69,7 @@ def build_section(args=None, **kwargs):
         manifest = {"script": text, "meta": {"persona": "storyteller"}}
         return utils.write_outputs(
             section_code=section_code,
-            day=round_dates[-1] if round_dates else "",
+            day=day_value,
             league=str(league_id),
             lang=lang,
             pod=pod,
@@ -103,7 +106,7 @@ def build_section(args=None, **kwargs):
         manifest = {"script": text, "meta": {"persona": "storyteller"}}
         return utils.write_outputs(
             section_code=section_code,
-            day=round_dates[-1] if round_dates else "",
+            day=day_value,
             league=str(league_id),
             lang=lang,
             pod=pod,
@@ -157,7 +160,7 @@ def build_section(args=None, **kwargs):
 
     return utils.write_outputs(
         section_code=section_code,
-        day=round_dates[-1] if round_dates else "",
+        day=day_value,
         league=str(league_id),
         lang=lang,
         pod=pod,
