@@ -74,7 +74,6 @@ def build_section(args=None):
 
     # Take top N players
     df_top = df.sort_values("goal_contributions", ascending=False).head(top_n).copy()
-
     if df_top.empty:
         text = "No top contributors data available."
         payload = {
@@ -106,7 +105,7 @@ def build_section(args=None):
         [f"- {p['name']} ({p['club']}): {p['contributions']} (Goals: {p['goals']}, Assists: {p['assists']})" for p in players_data]
     )
 
-    # Persona
+    # Persona (storyteller from speaking_roles.yaml via pods.yaml)
     persona_id, persona_block = utils.get_persona_block("storyteller", pod)
 
     # GPT prompt
