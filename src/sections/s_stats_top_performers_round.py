@@ -4,16 +4,20 @@ import os
 from collections import defaultdict
 from src.storage import azure_blob
 from src.producer import stats_utils
-from src.sections import utils as section_utils
+from src.sections import utils
+from src.sections.utils import write_outputs
+from src.producer.gpt import run_gpt
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
-def build_section(season: str, league_id: int, round_dates: list, output_prefix: str):
+
+def build_section(season: str, league_id: int, round_dates: list, output_prefix: str, args=None):
     """
-    Kör Top Performers för en hel omgång (kan vara flera datum).
-    Anropas från s_stats_driver.py.
+    Build a Top Performers section for one full round (may span multiple dates).
+    Called from s_stats_driver.py.
     """
-    # Hämta events och spara fil i Azure
+
+    # Fetch events and save file in Azure
     blob_path = stats_utils.save_african_events(
         season=season, league_id=league_id, round_dates=round_dates, scope="round"
     )
@@ -24,7 +28,7 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
     if not events:
         return None
 
-    # Summera statistik
+    # Aggregate stats
     performers = defaultdict(lambda: {"goals": 0, "assists": 0, "cards": 0, "name": ""})
     for ev in events:
         pid = ev["player"]["id"]
@@ -40,32 +44,56 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
     if not performers:
         return None
 
-    # Sortera topp 3
+    # Sort top 3
     top_players = sorted(
         performers.values(),
         key=lambda x: (x["goals"] + x["assists"]),
         reverse=True
     )[:3]
 
-    # Bygg text
-    lines = [
-        f"- {p['name']} ({p['goals']} mål, {p['assists']} assist, {p['cards']} kort)"
-        for p in top_players
-    ]
-    section_text = "Helgens afrikanska topp-prestationer:\n" + "\n".join(lines)
+    # Lang & pod
+    lang = getattr(args, "lang", "en") if args else "en"
+    pod = getattr(args, "pod", "default")
 
-    manifest = {
-        "season": season,
-        "league_id": league_id,
-        "round_dates": round_dates,
-        "count": len(top_players),
-        "players": [p["name"] for p in top_players],
+    # Persona (storyteller from speaking_roles.yaml)
+    persona_id, persona_block = utils.get_persona_block("storyteller", pod)
+
+    # Build GPT prompt
+    players_str = "\n".join(
+        [
+            f"- {p['name']}: {p['goals']} goals, {p['assists']} assists, {p['cards']} cards"
+            for p in top_players
+        ]
+    )
+
+    instructions = (
+        f"You are a football storyteller. Write a lively spoken-style recap (~120 words, ~40–50s) in {lang} "
+        f"about the top African performers this round in league {league_id}, season {season}. "
+        f"Here are the stats to use (do not invent numbers):\n\n{players_str}\n\n"
+        f"Make it engaging, natural, and record-ready. Mention names and stats clearly."
+    )
+
+    prompt_config = {"persona": persona_block, "instructions": instructions}
+    enriched_text = run_gpt(prompt_config, {"players": top_players}, system_rules=None)
+
+    # Payload
+    payload = {
+        "slug": "top_performers_round",
+        "title": "Top Performers of the Round",
+        "text": enriched_text,
+        "length_s": len(top_players) * 20,
+        "sources": {"events_blob": blob_path},
+        "meta": {"persona": persona_id},
+        "type": "stats",
+        "model": "gpt",
+        "items": top_players,
     }
 
-    return section_utils.write_outputs(
-        container=CONTAINER,
-        prefix=output_prefix,
-        section_id="S.STATS.TOP_PERFORMERS_ROUND",
-        text=section_text,
-        manifest=manifest,
+    return write_outputs(
+        section_code="S.STATS.TOP_PERFORMERS_ROUND",
+        day=round_dates[-1],
+        league=str(league_id),
+        payload=payload,
+        status="ok",
+        lang=lang,
     )
