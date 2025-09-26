@@ -1,40 +1,41 @@
 sections:
-  S.NEWS.TOP3:
+  S.NEWS.TOP3.GENERIC:
     module: s_news_top3_generic
     runner: build_section
     description: Top 3 news items about African players
     role: news_anchor
 
-  S.NEWS.TOP_AFRICAN_PLAYERS:
+  S.NEWS.TOP.AFRICAN.PLAYERS:
     module: s_news_top_african_players
     runner: build_section
     description: Top African players based on news candidates
     role: news_anchor
 
-  S.OPINION.EXPERT_COMMENT:
+  S.OPINION.EXPERT.COMMENT:
     module: s_opinion_expert_comment
     runner: build_section
     description: Expert comment on recent events
     role: expert
 
-  S.OPINION.DUO_EXPERTS:
+  S.OPINION.DUO.EXPERTS:
     module: s_opinion_duo_experts
     runner: build_section
     description: Two experts discussing African football news
+    role: expert
 
-  S.GENERIC.INTRO_POSTMATCH:
+  S.GENERIC.INTRO.POSTMATCH:
     module: s_generic_intro_postmatch
     runner: build_section
     description: Generic intro after a matchday
     role: news_anchor
 
-  S.GENERIC.INTRO_DAILY:
+  S.GENERIC.INTRO.DAILY:
     module: s_generic_intro_daily
     runner: build_section
     description: Generic daily intro section
     role: news_anchor
 
-  S.NEWS.CLUB_HIGHLIGHT:
+  S.NEWS.CLUB.HIGHLIGHT:
     module: s_news_club_highlight
     runner: build_section
     description: Spotlight on one club based on recent news candidates
@@ -46,7 +47,7 @@ sections:
     description: Run all stats sections across all leagues
     role: expert
 
-  S.STATS.TOP_PERFORMERS_ROUND:
+  S.STATS.TOP.PERFORMERS.ROUND:
     module: s_stats_top_performers_round
     runner: build_section
     description: Top performing African players in a round
@@ -58,7 +59,7 @@ sections:
     description: Discipline stats for African players
     role: expert
 
-  S.STATS.GOAL_IMPACT:
+  S.STATS.GOAL.IMPACT:
     module: s_stats_goal_impact
     runner: build_section
     description: Goal impact stats for African players
