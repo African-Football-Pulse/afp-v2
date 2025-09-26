@@ -1,8 +1,11 @@
 roles:
   duo_experts:
-    en_swahili:
+    en:
       expert1: "ak"
       expert2: "jjk"
-    en_arabic:
+    sw:
+      expert1: "ak"
+      expert2: "jjk"
+    ar:
       expert1: "oes"
       expert2: "kem"
