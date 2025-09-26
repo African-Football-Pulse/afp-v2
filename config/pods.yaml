@@ -6,7 +6,7 @@ pods:
     role_map:
       news_anchor: "AK"
       expert: "JJK"
-      storyteller: "AK"   # 👈 Lägg till denna
+      analyst: "JJK"
     publish:
       buzzsprout_podcast_id: 2538204
       buzzsprout_name: "African Football Pulse"
@@ -20,7 +20,7 @@ pods:
     role_map:
       news_anchor: "AK"
       expert: "JJK"
-      storyteller: "AK"   # 👈 Lägg till denna
+      analyst: "JJK"
     publish:
       buzzsprout_podcast_id: 2533393
       buzzsprout_name: "Patrik's Podcast"
