@@ -6,7 +6,8 @@ import json
 import sys
 from pathlib import Path
 
-from src.producer import role_utils   ### NEW
+from src.producer import role_utils
+
 
 def build_section(section_name, args, library):
     if "sections" not in library or section_name not in library["sections"]:
@@ -42,7 +43,7 @@ def main():
     parser.add_argument("--persona-id")
     parser.add_argument("--persona-ids")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--pod", help="Pod key from pods.yaml")   ### NEW
+    parser.add_argument("--pod", help="Pod key from pods.yaml")
     args = parser.parse_args()
 
     # Library
@@ -52,28 +53,40 @@ def main():
 
     section_obj = build_section(args.section, args, library)
 
-    # Kontrollera om sektionen returnerade ett manifest
-    if isinstance(section_obj, dict) and "section_code" in section_obj:
-        print(f"[produce_section] Received manifest from {args.section}")
+    # Acceptera två typer av manifest
+    if isinstance(section_obj, dict):
+        # Normal sektion
+        if "section_code" in section_obj:
+            print(f"[produce_section] Received manifest from {args.section}")
 
-        ### NEW → role-mapping
-        cfg = library["sections"][args.section]
-        role = cfg.get("role")
-        if role:
-            pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
-            if args.pod and args.pod in pods_cfg:
-                persona_id = role_utils.resolve_persona_for_role(pods_cfg[args.pod], role)
-                section_obj.setdefault("meta", {})["persona"] = persona_id
-                print(f"[produce_section] Role '{role}' mapped to persona '{persona_id}'")
-            else:
-                print(f"[produce_section] No pod specified or not found, skipping role mapping")
+            # Role-mapping
+            cfg = library["sections"][args.section]
+            role = cfg.get("role")
+            if role:
+                pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
+                if args.pod and args.pod in pods_cfg:
+                    persona_id = role_utils.resolve_persona_for_role(pods_cfg[args.pod], role)
+                    section_obj.setdefault("meta", {})["persona"] = persona_id
+                    print(f"[produce_section] Role '{role}' mapped to persona '{persona_id}'")
+                else:
+                    print(f"[produce_section] No pod specified or not found, skipping role mapping")
 
-        if args.dry_run:
-            print(json.dumps(section_obj, ensure_ascii=False, indent=2))
+            if args.dry_run:
+                print(json.dumps(section_obj, ensure_ascii=False, indent=2))
+
+        # Driver-sektion
+        elif "manifest" in section_obj:
+            print(f"[produce_section] Received DRIVER manifest from {args.section}")
+            if args.dry_run:
+                print(json.dumps(section_obj, ensure_ascii=False, indent=2))
+
+        else:
+            raise RuntimeError(
+                f"Section {args.section} did not return a valid manifest. Keys: {list(section_obj.keys())}"
+            )
     else:
         raise RuntimeError(
-            f"Section {args.section} did not return a manifest. "
-            f"Got: {type(section_obj)}"
+            f"Section {args.section} did not return a manifest. Got: {type(section_obj)}"
         )
 
 
