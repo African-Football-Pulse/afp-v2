@@ -64,3 +64,9 @@ sections:
     runner: build_section
     description: Goal impact stats for African players
     role: expert
+
+  S.STATS.PROJECT.STATUS:
+    module: s_stats_project_status
+    runner: build_section
+    description: Static project status section
+    role: expert
