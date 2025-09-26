@@ -10,22 +10,63 @@ from src.producer.gpt import run_gpt
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
 
-def build_section(season: str, league_id: int, round_dates: list, output_prefix: str, args=None):
+def build_section(args=None, **kwargs):
     """
     Build a Top Performers section for one full round (may span multiple dates).
-    Called from s_stats_driver.py.
+    Kompatibel med både standalone (produce_section) och driver (s_stats_driver).
     """
+
+    season = kwargs.get("season", getattr(args, "season", os.getenv("SEASON", "2025-2026")))
+    league_id = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
+    round_dates = kwargs.get("round_dates", getattr(args, "round_dates", []))
+    section_code = getattr(args, "section", "S.STATS.TOP_PERFORMERS.ROUND")
 
     # Fetch events and save file in Azure
     blob_path = stats_utils.save_african_events(
         season=season, league_id=league_id, round_dates=round_dates, scope="round"
     )
     if not blob_path:
-        return None
+        text = "No events found for this round."
+        payload = {
+            "slug": "top_performers_round",
+            "title": "Top Performers of the Round",
+            "text": text,
+            "length_s": 0,
+            "sources": {},
+            "meta": {"persona": "storyteller"},
+            "type": "stats",
+            "items": [],
+        }
+        return utils.write_outputs(
+            section_code=section_code,
+            day=round_dates[-1] if round_dates else "",
+            league=str(league_id),
+            payload=payload,
+            status="no_data",
+            lang=getattr(args, "lang", "en"),
+        )
 
     events = azure_blob.get_json(CONTAINER, blob_path)
     if not events:
-        return None
+        text = "No top performers data available for this round."
+        payload = {
+            "slug": "top_performers_round",
+            "title": "Top Performers of the Round",
+            "text": text,
+            "length_s": 0,
+            "sources": {"events_blob": blob_path},
+            "meta": {"persona": "storyteller"},
+            "type": "stats",
+            "items": [],
+        }
+        return utils.write_outputs(
+            section_code=section_code,
+            day=round_dates[-1] if round_dates else "",
+            league=str(league_id),
+            payload=payload,
+            status="no_data",
+            lang=getattr(args, "lang", "en"),
+        )
 
     # Aggregate stats
     performers = defaultdict(lambda: {"goals": 0, "assists": 0, "cards": 0, "name": ""})
@@ -41,7 +82,7 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
             performers[pid]["cards"] += 1
 
     if not performers:
-        text = "No top performers data available for this round."
+        text = "No player stats available for this round."
         payload = {
             "slug": "top_performers_round",
             "title": "Top Performers of the Round",
@@ -53,19 +94,19 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
             "items": [],
         }
         return utils.write_outputs(
-            section_code="S.STATS.TOP_PERFORMERS_ROUND",
-            day=round_dates[-1],
+            section_code=section_code,
+            day=round_dates[-1] if round_dates else "",
             league=str(league_id),
             payload=payload,
-            lang=getattr(args, "lang", "en"),
             status="no_data",
+            lang=getattr(args, "lang", "en"),
         )
 
     # Sort top 3
     top_players = sorted(
         performers.values(),
         key=lambda x: (x["goals"] + x["assists"]),
-        reverse=True
+        reverse=True,
     )[:3]
 
     # Lang & pod
@@ -107,10 +148,10 @@ def build_section(season: str, league_id: int, round_dates: list, output_prefix:
     }
 
     return utils.write_outputs(
-        section_code="S.STATS.TOP_PERFORMERS_ROUND",
-        day=round_dates[-1],
+        section_code=section_code,
+        day=round_dates[-1] if round_dates else "",
         league=str(league_id),
         payload=payload,
-        lang=lang,
         status="ok",
+        lang=lang,
     )
