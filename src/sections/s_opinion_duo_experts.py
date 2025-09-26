@@ -1,14 +1,18 @@
 # src/sections/s_opinion_duo_experts.py
+import os
 import yaml
 from src.sections import utils
-from src.sections.utils import write_outputs
 from src.producer.gpt import run_gpt
+from src.storage import azure_blob
+
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
 def load_duo_experts(lang: str):
-    """Load expert1 and expert2 personas for given language from speaking_roles.yaml."""
-    with open("config/speaking_roles.yaml", "r", encoding="utf-8") as f:
-        roles_cfg = yaml.safe_load(f)
+    """Load expert1 and expert2 personas for given language from speaking_roles.yaml in Azure Blob."""
+    path = "config/speaking_roles.yaml"
+    text = azure_blob.get_text(CONTAINER, path)
+    roles_cfg = yaml.safe_load(text)
 
     duo_cfg = roles_cfg.get("roles", {}).get("duo_experts", {})
     if lang not in duo_cfg:
@@ -20,20 +24,22 @@ def load_duo_experts(lang: str):
 def build_section(args):
     """Produce a duo-expert opinion section with GPT commentary."""
 
-    day = args.date
-    league = args.league or "_"
-    pod = getattr(args, "pod", "default")
+    # Extract arguments with fallbacks
+    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+    day = getattr(args, "date", os.getenv("DATE", "unknown"))
+    pod = getattr(args, "pod", "default_pod")
     lang = getattr(args, "lang", "en")
     section_code = getattr(args, "section", "S.OPINION.DUO.EXPERTS")
 
     # Load scored_enriched candidates
-    candidates = utils.load_scored_enriched(day)
+    candidates = utils.load_scored_enriched(day, league=league)
     if not candidates:
         print(f"[opinion_duo] WARN: No candidates available for {day}")
+        text = "No candidates available."
         payload = {
             "slug": "opinion_duo_experts",
             "title": "Duo Expert Opinion",
-            "text": "No candidates available.",
+            "text": text,
             "length_s": 2,
             "sources": {},
             "meta": {"personas": []},
@@ -41,13 +47,16 @@ def build_section(args):
             "model": "static",
             "items": [],
         }
-        return write_outputs(
+        manifest = {"script": text, "meta": {"personas": []}}
+        return utils.write_outputs(
             section_code=section_code,
             day=day,
             league=league,
-            payload=payload,
-            status="no_candidates",
             lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
+            payload=payload,
         )
 
     # Pick two candidates
@@ -86,11 +95,6 @@ def build_section(args):
         "items": [first_item, second_item],
     }
 
-    return write_outputs(
-        section_code=section_code,
-        day=day,
-        league=league,
-        payload=payload,
-        status="ok",
-        lang=lang,
-    )
+    manifest = {"script": gpt_output, "meta": {"personas": [expert1, expert2]}}
+
+    return utils.w
