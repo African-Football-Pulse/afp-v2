@@ -4,7 +4,6 @@ import os
 import pandas as pd
 from datetime import datetime, timezone
 from src.sections import utils
-from src.sections.utils import write_outputs
 from src.producer.gpt import run_gpt
 from src.storage import azure_blob
 
@@ -50,11 +49,18 @@ def build_section(args=None):
             "text": text,
             "length_s": 0,
             "sources": {"metrics_input_path": blob_path},
-            "meta": {"persona": "system"},
+            "meta": {"persona": "storyteller"},
             "type": "stats",
             "items": [],
         }
-        return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="no_data", lang=lang)
+        return utils.write_outputs(
+            section_code=section_code,
+            day=day,
+            league=league,
+            payload=payload,
+            status="no_data",
+            lang=lang,
+        )
 
     # Check required columns
     required_cols = {"player_id", "player_name", "club", "goal_contributions"}
@@ -66,11 +72,18 @@ def build_section(args=None):
             "text": text,
             "length_s": 0,
             "sources": {"metrics_input_path": blob_path},
-            "meta": {"persona": "system"},
+            "meta": {"persona": "storyteller"},
             "type": "stats",
             "items": [],
         }
-        return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="no_data", lang=lang)
+        return utils.write_outputs(
+            section_code=section_code,
+            day=day,
+            league=league,
+            payload=payload,
+            status="no_data",
+            lang=lang,
+        )
 
     # Take top N players
     df_top = df.sort_values("goal_contributions", ascending=False).head(top_n).copy()
@@ -82,11 +95,18 @@ def build_section(args=None):
             "text": text,
             "length_s": 0,
             "sources": {"metrics_input_path": blob_path},
-            "meta": {"persona": "system"},
+            "meta": {"persona": "storyteller"},
             "type": "stats",
             "items": [],
         }
-        return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="no_data", lang=lang)
+        return utils.write_outputs(
+            section_code=section_code,
+            day=day,
+            league=league,
+            payload=payload,
+            status="no_data",
+            lang=lang,
+        )
 
     # Prepare data
     players_data = []
@@ -131,4 +151,11 @@ def build_section(args=None):
         "items": players_data,
     }
 
-    return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="ok", lang=lang)
+    return utils.write_outputs(
+        section_code=section_code,
+        day=day,
+        league=league,
+        payload=payload,
+        status="ok",
+        lang=lang,
+    )
