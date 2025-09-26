@@ -1,6 +1,8 @@
 import os
 from typing import Dict
+import yaml
 from src.storage import azure_blob
+from src.producer import role_utils
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
@@ -54,19 +56,35 @@ def write_outputs(
     return manifest
 
 
-# --- Persona + Scored helpers ---
-from src.producer import role_utils
-
-
 def get_persona_block(role: str, pod: str):
     """
-    Wrapper for role_utils to fetch persona_id and persona_block
-    for a given role in a given pod.
+    Resolve persona_id via pods.yaml and fetch corresponding block
+    from speaking_roles.yaml.
+    Returns (persona_id, persona_block).
     """
+    # Hämta persona_id från pods.yaml
     pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
     pod_cfg = pods_cfg.get(pod, {})
     persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
-    persona_block = role_utils.resolve_block_for_persona(persona_id)
+
+    # Hämta block från speaking_roles.yaml
+    roles_cfg = role_utils.load_yaml("config/speaking_roles.yaml")["roles"]
+
+    persona_block = None
+    for role_name, langs in roles_cfg.items():
+        for lang_key, val in langs.items():
+            if isinstance(val, dict):
+                # ex: duo_experts -> { expert1: ak, expert2: jjk }
+                if persona_id in val.values():
+                    persona_block = f"{role_name}:{persona_id}"
+            else:
+                # ex: single_expert -> en: ak
+                if persona_id == val:
+                    persona_block = f"{role_name}:{persona_id}"
+
+    if persona_block is None:
+        persona_block = persona_id  # fallback
+
     return persona_id, persona_block
 
 
