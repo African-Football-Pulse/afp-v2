@@ -1,76 +1,28 @@
-import os
-import sys
-import subprocess
-from datetime import datetime
-import yaml
-from jinja2 import Environment, FileSystemLoader
+pods:
+  PL_daily_africa_en:
+    status: off
+    leagues: ["premier_league"]
+    langs: ["en"]
+    role_map:
+      news_anchor: "AK"
+      expert: "JJK"
+      storyteller: "AK"   # 👈 Lägg till denna
+    publish:
+      buzzsprout_podcast_id: 2538204
+      buzzsprout_name: "African Football Pulse"
+      language: "en"
+      explicit: false
 
-def run(cmd):
-    """Kör ett Pythonmodulkommando via subprocess och avbryt vid fel."""
-    result = subprocess.run([sys.executable, "-m"] + cmd)
-    if result.returncode != 0:
-        print(f"[produce_auto] ❌ FEL: {' '.join(cmd)} misslyckades")
-        sys.exit(1)
-
-def load_active_pod():
-    """Ladda pods.yaml och returnera första podd med status=on."""
-    with open("config/pods.yaml", "r") as f:
-        pods_cfg = yaml.safe_load(f)["pods"]
-    for pod_name, pod_cfg in pods_cfg.items():
-        if pod_cfg.get("status") == "on":
-            leagues = pod_cfg.get("leagues", [])
-            langs = pod_cfg.get("langs", [])
-            if not leagues or not langs:
-                raise RuntimeError(f"Pod {pod_name} saknar leagues/langs")
-            return pod_name, leagues[0], langs[0]
-    raise RuntimeError("Ingen aktiv pod (status=on) hittades i pods.yaml")
-
-def main():
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    weekday = datetime.utcnow().weekday()
-
-    pod, league, lang = load_active_pod()
-
-    print(f"[produce_auto] 🚀 Startar auto-produce för pod={pod}, league={league}, lang={lang}, date={today}, weekday={weekday}")
-
-    # 1. Kör core-producer-stegen i följd
-    run(["src.producer.produce_candidates"])
-    run(["src.producer.produce_scoring"])
-    run(["src.producer.produce_enrich_articles"])
-
-    # 2. Ladda produce_plan.yaml
-    with open("produce_plan.yaml", "r") as f:
-        plan = yaml.safe_load(f)
-
-    # 3. Rendera episode.jinja i mode="used"
-    env = Environment(loader=FileSystemLoader("templates"))
-    tmpl = env.get_template("episode.jinja")
-    rendered = tmpl.render(
-        mode="used",
-        date=today,
-        league=league,
-        lang=lang,
-        weekday=weekday,
-        sections=plan,   # används för att jinja ska kunna loopa
-    )
-
-    section_ids = [line.strip() for line in rendered.splitlines() if line.strip()]
-
-    print(f"[produce_auto] 📋 Sektioner från template: {section_ids}")
-
-    # 4. Kör sektionerna i turordning
-    for section_id in section_ids:
-        if section_id not in plan:
-            print(f"[produce_auto] ⚠️ Hoppar över okänd sektion: {section_id}")
-            continue
-
-        task = plan[section_id]
-        args = task.get("args", [])
-        cmd = ["src.producer.produce_section", "--section", section_id, "--league", league, "--pod", pod, "--lang", lang] + args
-        print(f"[produce_auto] ▶ Kör {section_id} → {' '.join(cmd)}")
-        run(cmd)
-
-    print("[produce_auto] ✅ Klar")
-
-if __name__ == "__main__":
-    main()
+  test_patriks_podcast:
+    status: on
+    leagues: ["premier_league"]
+    langs: ["en"]
+    role_map:
+      news_anchor: "AK"
+      expert: "JJK"
+      storyteller: "AK"   # 👈 Lägg till denna
+    publish:
+      buzzsprout_podcast_id: 2533393
+      buzzsprout_name: "Patrik's Podcast"
+      language: "en"
+      explicit: false
