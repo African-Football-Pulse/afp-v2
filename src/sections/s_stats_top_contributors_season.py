@@ -14,6 +14,16 @@ def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def safe_int(value):
+    """Convert value to int, treating NaN/None as 0."""
+    try:
+        if pd.notna(value):
+            return int(value)
+        return 0
+    except Exception:
+        return 0
+
+
 def build_section(args=None, **kwargs):
     """
     Build a section presenting the top African players in the Premier League
@@ -117,14 +127,18 @@ def build_section(args=None, **kwargs):
             {
                 "name": row["player_name"],
                 "club": row["club"],
-                "goals": int(row.get("total_goals", 0)),
-                "assists": int(row.get("total_assists", 0)),
-                "contributions": int(row["goal_contributions"]),
+                "goals": safe_int(row.get("total_goals", 0)),
+                "assists": safe_int(row.get("total_assists", 0)),
+                "contributions": safe_int(row["goal_contributions"]),
             }
         )
 
     players_str = "\n".join(
-        [f"- {p['name']} ({p['club']}): {p['contributions']} (Goals: {p['goals']}, Assists: {p['assists']})" for p in players_data]
+        [
+            f"- {p['name']} ({p['club']}): {p['contributions']} "
+            f"(Goals: {p['goals']}, Assists: {p['assists']})"
+            for p in players_data
+        ]
     )
 
     # Persona (storyteller from speaking_roles.yaml via pods.yaml)
