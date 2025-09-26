@@ -12,10 +12,8 @@ def build_section(args=None, **kwargs):
     league = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
     day = getattr(args, "date", os.getenv("DATE", "unknown"))
     lang = getattr(args, "lang", "en")
+    pod = getattr(args, "pod", "default_pod")
     section_code = getattr(args, "section", "S.STATS.PROJECT.STATUS")
-
-    
-    
 
     title = "Project Status"
     text = (
@@ -37,11 +35,15 @@ def build_section(args=None, **kwargs):
         "model": "static",
     }
 
+    manifest = {"script": text, "meta": {"persona": "storyteller"}}
+
     return utils.write_outputs(
         section_code=section_code,
         day=day,
         league=league,
-        payload=payload,
         lang=lang,
-        status="ok",
+        pod=pod,
+        manifest=manifest,
+        status="success",
+        payload=payload,
     )
