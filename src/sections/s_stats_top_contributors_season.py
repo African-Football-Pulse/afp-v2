@@ -3,8 +3,9 @@
 import os
 import pandas as pd
 from datetime import datetime, timezone
+from src.sections import utils
 from src.sections.utils import write_outputs
-from src.gpt import run_gpt
+from src.producer.gpt import run_gpt
 from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
@@ -16,21 +17,20 @@ def today_str():
 
 def build_section(args=None):
     """
-    Bygger en sektion som presenterar topp 5 afrikanska spelare i Premier League
-    baserat på mål + assist (goal contributions) för hela säsongen.
-
-    Input: warehouse/metrics/toplists_africa.parquet
-    Output: section.json, section.md, section_manifest.json
+    Build a section presenting the top African players in the Premier League
+    based on goals + assists (goal contributions) for the season.
     """
 
     league = getattr(args, "league", "premier_league")
     day = getattr(args, "date", today_str())
-    section_id = getattr(args, "section_code", "S.STATS.TOP_CONTRIBUTORS_SEASON")
+    pod = getattr(args, "pod", "default")
+    lang = getattr(args, "lang", "en")
+    section_code = getattr(args, "section", "S.STATS.TOP_CONTRIBUTORS_SEASON")
     top_n = int(getattr(args, "top_n", 5))
 
     blob_path = "warehouse/metrics/toplists_africa.parquet"
 
-    # Ladda parquet från Azure
+    # Load parquet from Azure
     try:
         tmp_path = "/tmp/toplists_africa.parquet"
         with open(tmp_path, "wb") as f:
@@ -43,67 +43,53 @@ def build_section(args=None):
             )
         df = pd.read_parquet(tmp_path)
     except Exception as e:
-        text = f"Kunde inte läsa toplist-data ({e})"
+        text = f"Could not read toplist data ({e})"
         payload = {
             "slug": "top_contributors_season",
             "title": "Top African Contributors this Season",
             "text": text,
             "length_s": 0,
             "sources": {"metrics_input_path": blob_path},
-            "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+            "meta": {"persona": "system"},
             "type": "stats",
             "items": [],
         }
-        return write_outputs(section_id, day, league, payload, status="no_data")
+        return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="no_data", lang=lang)
 
-    # Self-check: måste finnas rätt kolumner
+    # Check required columns
     required_cols = {"player_id", "player_name", "club", "goal_contributions"}
     if not required_cols.issubset(set(df.columns)):
-        text = f"Saknar förväntade kolumner i toplists_africa.parquet: {required_cols - set(df.columns)}"
+        text = f"Missing expected columns in toplists_africa.parquet: {required_cols - set(df.columns)}"
         payload = {
             "slug": "top_contributors_season",
             "title": "Top African Contributors this Season",
             "text": text,
             "length_s": 0,
             "sources": {"metrics_input_path": blob_path},
-            "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+            "meta": {"persona": "system"},
             "type": "stats",
             "items": [],
         }
-        return write_outputs(section_id, day, league, payload, status="no_data")
+        return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="no_data", lang=lang)
 
-    # Ta topp N på contributions
-    df_top = (
-        df.sort_values("goal_contributions", ascending=False)
-        .head(top_n)
-        .copy()
-    )
-
-    # Self-check: contributions ska vara >= goals+assists om dessa finns
-    if {"total_goals", "total_assists"}.issubset(df_top.columns):
-        for _, row in df_top.iterrows():
-            if row["goal_contributions"] != row["total_goals"] + row["total_assists"]:
-                print(
-                    f"[WARN] Inkonsekvent data för {row['player_name']}: "
-                    f"{row['goal_contributions']} vs "
-                    f"{row['total_goals']}+{row['total_assists']}"
-                )
+    # Take top N players
+    df_top = df.sort_values("goal_contributions", ascending=False).head(top_n).copy()
 
     if df_top.empty:
-        text = "Ingen data hittades för toppspelare baserat på contributions."
+        text = "No top contributors data available."
         payload = {
             "slug": "top_contributors_season",
             "title": "Top African Contributors this Season",
             "text": text,
             "length_s": 0,
             "sources": {"metrics_input_path": blob_path},
-            "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+            "meta": {"persona": "system"},
             "type": "stats",
             "items": [],
         }
-        return write_outputs(section_id, day, league, payload, status="no_data")
+        return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="no_data", lang=lang)
 
-    # Förbered data till GPT
+    # Prepare data
     players_data = []
     for _, row in df_top.iterrows():
         players_data.append(
@@ -117,42 +103,33 @@ def build_section(args=None):
         )
 
     players_str = "\n".join(
-        [
-            f"- {p['name']} ({p['club']}): {p['contributions']} (Goals: {p['goals']}, Assists: {p['assists']})"
-            for p in players_data
-        ]
+        [f"- {p['name']} ({p['club']}): {p['contributions']} (Goals: {p['goals']}, Assists: {p['assists']})" for p in players_data]
     )
 
-    # GPT-prompt
-    prompt_config = {
-        "persona": "Ama K – African football storyteller",
-        "instructions": f"""
-You are Ama K (Ama Kwarteng), a passionate African football storyteller.
+    # Persona
+    persona_id, persona_block = utils.get_persona_block("storyteller", pod)
 
-Give a lively spoken-style season update (~150 words, ~45–60s) 
-for the top {top_n} African players in the Premier League 
-based on goal contributions (goals + assists) so far this season.
-
-Here are the stats to use (do not invent numbers):
-
-{players_str}
-
-Mention their clubs and exact totals (goals and assists). 
-Make it conversational, engaging, and ready to record.
-"""
-    }
-
-    generated_text = run_gpt(prompt_config, model="gpt-4o-mini")
+    # GPT prompt
+    instructions = (
+        f"You are a football storyteller. Write a spoken-style season update (~150 words, ~45–60s) in {lang} "
+        f"about the top {top_n} African players in the {league.replace('_',' ').title()} "
+        f"based on goal contributions (goals + assists) so far this season.\n\n"
+        f"Here are the stats to use (do not invent numbers):\n\n{players_str}\n\n"
+        f"Mention their clubs and exact totals. Make it conversational, engaging, and ready to record."
+    )
+    prompt_config = {"persona": persona_block, "instructions": instructions}
+    enriched_text = run_gpt(prompt_config, {"players": players_data}, system_rules=None)
 
     payload = {
         "slug": "top_contributors_season",
         "title": "Top African Contributors this Season",
-        "text": generated_text,
-        "length_s": 60,
+        "text": enriched_text,
+        "length_s": len(players_data) * 20,
         "sources": {"metrics_input_path": blob_path},
-        "meta": {"persona": "Ama K (Amarachi Kwarteng)"},
+        "meta": {"persona": persona_id},
         "type": "stats",
+        "model": "gpt",
         "items": players_data,
     }
 
-    return write_outputs(section_id, day, league, payload, status="ok")
+    return write_outputs(section_code=section_code, day=day, league=league, payload=payload, status="ok", lang=lang)
