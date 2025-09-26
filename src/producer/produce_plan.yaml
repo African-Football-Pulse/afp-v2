@@ -4,7 +4,7 @@ defaults:
   write_latest: true
 
 tasks:
-  - section: S.NEWS.TOP3
+  - section: S.NEWS.TOP3.GENERIC
     args:
       - --league
       - premier_league
@@ -14,7 +14,7 @@ tasks:
       - --news
       - producer/scored/{{today}}/scored_enriched.jsonl
 
-  - section: S.NEWS.TOP_AFRICAN_PLAYERS
+  - section: S.NEWS.TOP.AFRICAN.PLAYERS
     args:
       - --league
       - premier_league
@@ -24,7 +24,7 @@ tasks:
       - --news
       - producer/scored/{{today}}/scored_enriched.jsonl
 
-  - section: S.OPINION.EXPERT_COMMENT
+  - section: S.OPINION.EXPERT.COMMENT
     args:
       - --league
       - premier_league
@@ -34,7 +34,7 @@ tasks:
       - --news
       - producer/scored/{{today}}/scored_enriched.jsonl
 
-  - section: S.OPINION.DUO_EXPERTS
+  - section: S.OPINION.DUO.EXPERTS
     args:
       - --league
       - premier_league
@@ -44,7 +44,7 @@ tasks:
       - --news
       - producer/scored/{{today}}/scored_enriched.jsonl
       
-  - section: S.GENERIC.INTRO_POSTMATCH
+  - section: S.GENERIC.INTRO.POSTMATCH
     args:
       - --league
       - premier_league
@@ -52,7 +52,7 @@ tasks:
       - sections
       - --write-latest
 
-  - section: S.GENERIC.INTRO_DAILY
+  - section: S.GENERIC.INTRO.DAILY
     args:
       - --league
       - premier_league
@@ -60,7 +60,7 @@ tasks:
       - sections
       - --write-latest
 
-  - section: S.NEWS.CLUB_HIGHLIGHT   # 🔥 ny sektion
+  - section: S.NEWS.CLUB.HIGHLIGHT   # 🔥 ny sektion
     args:
       - --league
       - premier_league
@@ -76,7 +76,7 @@ tasks:
       - sections
       - --write-latest
 
-  - section: S.STATS.PROJECT_STATUS
+  - section: S.STATS.PROJECT.STATUS
     args:
       - --league
       - premier_league
@@ -84,7 +84,7 @@ tasks:
       - sections
       - --write-latest
 
-  - section: S.STATS.TOP_CONTRIBUTORS_SEASON
+  - section: S.STATS.TOP.CONTRIBUTORS.SEASON
     args:
       - --league
       - premier_league
