@@ -12,6 +12,7 @@ def write_outputs(
     lang: str,
     pod: str,
     manifest: Dict[str, Any],
+    status: str = "done",
     payload: Dict[str, Any] = None,
 ):
     """
@@ -36,7 +37,7 @@ def write_outputs(
         "section": section_code,
         "day": day,
         "league": league,
-        "status": "done",
+        "status": status,
         "lang": lang,
         "path": base_path,
     }
@@ -47,7 +48,7 @@ def write_outputs(
         "section": section_code,
         "day": day,
         "league": league,
-        "status": "done",
+        "status": status,
         "lang": lang,
         "path": base_path,
         "manifest": manifest,
