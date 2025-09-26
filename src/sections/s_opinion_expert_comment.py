@@ -15,9 +15,8 @@ def build_section(args):
 
     day = args.date
     league = args.league or "_"
-    pod = getattr(args, "pod", "default")
-    lang = getattr(args, "lang", "en")  # expected values: "en", "sw", "ar"
-    section_code = getattr(args, "section", "S.OPINION.EXPERT_COMMENT")
+    lang = getattr(args, "lang", "en")  # expected: "en", "sw", "ar"
+    section_code = getattr(args, "section", "S.OPINION.EXPERT.COMMENT")
 
     # Load candidates
     candidates = utils.load_scored_enriched(day)
@@ -47,20 +46,17 @@ def build_section(args):
     top_item = candidates[0]
     news_text = top_item.get("text", "")
 
-    # Load role mapping
+    # Load role mapping for single_expert
     roles = load_roles()
     expert_id = roles.get("roles", {}).get("single_expert", {}).get(lang, "expert")
-
-    # Persona (pods.yaml)
-    persona_id, persona_block = utils.get_persona_block("expert", pod)
 
     # GPT setup
     instructions = (
         f"Write a short (~120 words) spoken-style expert comment in {lang} about this news:\n\n{news_text}\n\n"
-        f"Stay natural, insightful, and record-ready. Present it as {expert_id} speaking."
+        f"Stay natural, insightful, and record-ready. Present it as {expert_id.upper()} speaking."
     )
     prompt_config = {
-        "persona": persona_block,
+        "persona": f"single_expert:{expert_id}",
         "instructions": instructions,
     }
     ctx = {"candidates": [top_item]}
@@ -75,8 +71,7 @@ def build_section(args):
         "length_s": int(round(len(gpt_output.split()) / 2.6)),
         "sources": {},
         "meta": {
-            "persona": persona_id,
-            "expert": expert_id,
+            "persona": expert_id,
         },
         "type": "opinion",
         "model": "gpt",
