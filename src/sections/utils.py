@@ -10,84 +10,80 @@ def write_outputs(
     section_code: str,
     day: str,
     league: str,
-    payload: Dict[str, Any],
-    *,
-    status: str = "success",
+    payload: Dict,
     lang: str = "en",
-    path_scope: str = "local",
-    outdir: str = "sections",
-    pod: str = None,
+    status: str = "ok",
 ) -> Dict[str, Any]:
     """
-    Skriver ut JSON/MD/manifest för en sektion och returnerar manifestet.
-    Gör nu argumenten mer toleranta: kräver bara section_code, day, league, payload.
+    Writes outputs (json, md, manifest) for a given section and returns the manifest.
+    Returns {"manifest": manifest} for consistency with produce_section expectations.
     """
+    base_dir = f"sections/{section_code}/{day}/{league}/_"
+    os.makedirs(base_dir, exist_ok=True)
 
-    # fallback om något saknas
-    section_code = section_code or "UNKNOWN.SECTION"
-    day = day or datetime.today().strftime("%Y-%m-%d")
-    league = league or "unknown_league"
-    lang = lang or "en"
+    json_path = os.path.join(base_dir, "section.json")
+    md_path = os.path.join(base_dir, "section.md")
+    manifest_path = os.path.join(base_dir, "section_manifest.json")
 
-    section_path = f"{outdir}/{section_code}/{day}/{league}/_"
+    # --- Write JSON ---
+    with open(json_path, "w") as f:
+        json.dump(payload, f, indent=2)
 
-    os.makedirs(section_path, exist_ok=True)
+    # --- Write Markdown ---
+    if isinstance(payload, dict) and "script" in payload:
+        md_content = payload["script"]
+    else:
+        md_content = f"# Section {section_code}\n\n{json.dumps(payload, indent=2)}"
 
-    # JSON
-    json_path = os.path.join(section_path, "section.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    with open(md_path, "w") as f:
+        f.write(md_content)
 
-    # MD (för snabb läsning)
-    md_path = os.path.join(section_path, "section.md")
-    with open(md_path, "w", encoding="utf-8") as f:
-        if "script" in payload:
-            f.write(payload["script"])
-        else:
-            f.write(f"# {section_code}\n\n(no script generated)\n")
-
-    # Manifest
+    # --- Build manifest ---
     manifest = {
         "section": section_code,
         "day": day,
         "league": league,
         "status": status,
         "lang": lang,
-        "path": section_path,
+        "path": {
+            "json": json_path,
+            "md": md_path,
+            "manifest": manifest_path,
+        },
+        "generated_at": datetime.utcnow().isoformat() + "Z",
     }
 
-    manifest_path = os.path.join(section_path, "section_manifest.json")
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2, ensure_ascii=False)
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
 
     print(f"[utils] Uploaded {manifest_path}")
-    return manifest
+
+    # ✅ Wrappa i {"manifest": manifest}
+    return {"manifest": manifest}
 
 
-def load_scored_enriched(day: str, base_path: str = "producer/scored") -> list[dict]:
+def get_persona_block(role: str, pod: str):
     """
-    Laddar scored_enriched.jsonl för ett visst datum.
+    Wrapper som hämtar persona_id och persona_block för en given roll och pod.
     """
-    path = os.path.join(base_path, day, "scored_enriched.jsonl")
+    pod_cfg = role_utils.get_pod_config(pod)
+    persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
+    persona_block = role_utils.resolve_block_for_persona(persona_id)
+    return persona_id, persona_block
+
+
+def load_scored_enriched(day: str, league: str = "premier_league"):
+    """
+    Laddar scored_enriched.jsonl från rätt path.
+    """
+    path = f"producer/scored/{day}/scored_enriched.jsonl"
     if not os.path.exists(path):
         raise FileNotFoundError(f"[utils] Could not find scored_enriched file at {path}")
-
     items = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r") as f:
         for line in f:
             try:
                 items.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
     return items
-
-
-def get_persona_block(role: str, pod: str):
-    """
-    Wrapper som hämtar persona_id och persona_block för en given roll och pod.
-    Alla sektioner kan fortsätta ropa på utils.get_persona_block.
-    """
-    pod_cfg = role_utils.get_pod_config(pod)
-    persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
-    persona_block = role_utils.resolve_block_for_persona(persona_id)
-    return persona_id, persona_block
