@@ -1,11 +1,12 @@
 # src/sections/s_opinion_expert_comment.py
+import os
 import yaml
 from src.sections import utils
-from src.sections.utils import write_outputs
 from src.producer.gpt import run_gpt
 
 
 def load_roles():
+    """Load speaking roles for single_expert from config/speaking_roles.yaml (local config)."""
     with open("config/speaking_roles.yaml", "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -13,19 +14,22 @@ def load_roles():
 def build_section(args):
     """Produce a single-expert opinion section with GPT commentary."""
 
-    day = args.date
-    league = args.league or "_"
+    # Extract arguments with fallbacks
+    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+    day = getattr(args, "date", os.getenv("DATE", "unknown"))
+    pod = getattr(args, "pod", "default_pod")
     lang = getattr(args, "lang", "en")  # expected: "en", "sw", "ar"
     section_code = getattr(args, "section", "S.OPINION.EXPERT.COMMENT")
 
     # Load candidates
-    candidates = utils.load_scored_enriched(day)
+    candidates = utils.load_scored_enriched(day, league=league)
     if not candidates:
         print(f"[opinion_expert] WARN: No candidates available for {day}")
+        text = "No candidates available."
         payload = {
             "slug": "opinion_expert_comment",
             "title": "Expert Comment",
-            "text": "No candidates available.",
+            "text": text,
             "length_s": 2,
             "sources": {},
             "meta": {"persona": "system"},
@@ -33,13 +37,16 @@ def build_section(args):
             "model": "static",
             "items": [],
         }
-        return write_outputs(
+        manifest = {"script": text, "meta": {"persona": "system"}}
+        return utils.write_outputs(
             section_code=section_code,
             day=day,
             league=league,
-            payload=payload,
-            status="no_candidates",
             lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
+            payload=payload,
         )
 
     # Take top candidate
@@ -78,11 +85,15 @@ def build_section(args):
         "items": [top_item],
     }
 
-    return write_outputs(
+    manifest = {"script": gpt_output, "meta": {"persona": expert_id}}
+
+    return utils.write_outputs(
         section_code=section_code,
         day=day,
         league=league,
-        payload=payload,
-        status="ok",
         lang=lang,
+        pod=pod,
+        manifest=manifest,
+        status="success",
+        payload=payload,
     )
