@@ -1,7 +1,5 @@
 import os
 from src.sections import utils
-from src.producer.gpt import run_gpt  # om GPT används i framtida stats
-from src.storage import azure_blob  # om warehouse behövs
 
 
 def build_section(args, **kwargs):
@@ -14,9 +12,7 @@ def build_section(args, **kwargs):
 
     ran_sections = []
 
-    # Här kan du lägga till logik för att köra olika stats-subsektioner
-    # T.ex. anropa build_section för TOP.CONTRIBUTORS.SEASON eller TOP.PERFORMERS.ROUND
-    # Just nu simulerar vi att vi kör ett par sektioner
+    # Simulerar körning av subsektioner
     try:
         print(f"[{section_code}] Kör S.STATS.TOP.CONTRIBUTORS.SEASON")
         ran_sections.append("S.STATS.TOP.CONTRIBUTORS.SEASON")
@@ -37,11 +33,8 @@ def build_section(args, **kwargs):
         "items": ran_sections,
     }
 
-    # ✅ Loggmarkör för att verifiera att rätt version körs
-    print(f"[{section_code}] Returning manifest via utils.write_outputs (sections: {ran_sections})")
-
-    # Returnera manifest via utils.write_outputs
-    return utils.write_outputs(
+    # ✅ Viktigt: returnera manifestet från write_outputs, inte payload
+    manifest = utils.write_outputs(
         section_code=section_code,
         day=day,
         league=league,
@@ -49,3 +42,6 @@ def build_section(args, **kwargs):
         lang=lang,
         status="ok" if ran_sections else "no_data",
     )
+
+    print(f"[{section_code}] ✅ Returnerar manifest: {manifest.keys()}")
+    return manifest
