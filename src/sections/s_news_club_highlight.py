@@ -1,5 +1,5 @@
 # src/sections/s_news_club_highlight.py
-import argparse
+import os
 from datetime import datetime
 from src.sections import utils
 from src.producer.gpt import run_gpt
@@ -13,15 +13,19 @@ def build_section(args):
     - Writes section outputs (json, md, manifest).
     """
 
-    day = args.date
-    league = args.league
+    # Extract arguments with fallbacks
+    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+    day = getattr(args, "date", os.getenv("DATE", "unknown"))
     lang = getattr(args, "lang", "en")
-    pod = getattr(args, "pod", "default")
+    pod = getattr(args, "pod", "default_pod")
+
+    # Section code
+    section_code = getattr(args, "section", "S.NEWS.CLUB_HIGHLIGHT")
 
     print(f"[s_news_club_highlight] Building Club Highlight for {league} @ {day}")
 
     # Load candidates (from scored_enriched.jsonl)
-    candidates = utils.load_scored_enriched(day)
+    candidates = utils.load_scored_enriched(day, league=league)
     if not candidates:
         print("[s_news_club_highlight] ❌ No candidates found")
         return None
@@ -70,26 +74,18 @@ def build_section(args):
         },
     }
 
-    # Write outputs
-    manifest = utils.write_outputs(
-        section_code=args.section,
+    manifest = {
+        "script": enriched_text,
+        "meta": {"persona": persona_id},
+    }
+
+    return utils.write_outputs(
+        section_code=section_code,
+        day=day,
         league=league,
         lang=lang,
-        day=day,
+        pod=pod,
+        manifest=manifest,
+        status="success",
         payload=payload,
-        path_scope=getattr(args, "path_scope", "blob"),
     )
-
-    return manifest
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--date", required=True)
-    parser.add_argument("--league", required=True)
-    parser.add_argument("--pod", required=True)
-    parser.add_argument("--lang", default="en")
-    parser.add_argument("--path-scope", default="blob")
-    parser.add_argument("--section", required=True)
-    args = parser.parse_args()
-    build_section(args)
