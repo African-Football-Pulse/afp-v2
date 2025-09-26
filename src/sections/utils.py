@@ -1,4 +1,5 @@
 import os
+import json
 from typing import Dict
 import yaml
 from src.storage import azure_blob
@@ -99,9 +100,20 @@ def get_persona_block(role: str, pod: str):
     return persona_id, persona_block
 
 
-def load_scored_enriched(day: str):
+def load_scored_enriched(day: str, league: str = "premier_league", base_path: str = "producer/scored"):
     """
-    Wrapper for role_utils.load_scored_enriched so sections can just call utils.load_scored_enriched.
-    Returns a list of scored_enriched items for the given day.
+    Load scored_enriched.jsonl for given day/league.
+    Returns a list of dicts (scored items).
     """
-    return role_utils.load_scored_enriched(day)
+    path = f"{base_path}/{day}/scored_enriched.jsonl"
+    items = []
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"[utils] Could not find scored_enriched file at {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                items.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    print(f"[utils] Loaded {len(items)} items from {path}")
+    return items
