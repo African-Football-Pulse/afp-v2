@@ -3,16 +3,12 @@ import os
 import yaml
 from src.sections import utils
 from src.producer.gpt import run_gpt
-from src.storage import azure_blob
-
-CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
 def load_duo_experts(lang: str):
-    """Load expert1 and expert2 personas for given language from speaking_roles.yaml in Azure Blob."""
-    path = "config/speaking_roles.yaml"
-    text = azure_blob.get_text(CONTAINER, path)
-    roles_cfg = yaml.safe_load(text)
+    """Load expert1 and expert2 personas for given language from speaking_roles.yaml (local config)."""
+    with open("config/speaking_roles.yaml", "r", encoding="utf-8") as f:
+        roles_cfg = yaml.safe_load(f)
 
     duo_cfg = roles_cfg.get("roles", {}).get("duo_experts", {})
     if lang not in duo_cfg:
@@ -65,36 +61,3 @@ def build_section(args):
     news_text = f"- {first_item.get('text','')}\n- {second_item.get('text','')}"
 
     # Personas (expert duo)
-    expert1, expert2 = load_duo_experts(lang)
-
-    # GPT setup
-    instructions = (
-        f"Create a lively two-voice exchange (~140 words total) in {lang}, "
-        f"between {expert1.upper()} and {expert2.upper()}, "
-        f"based on these stories:\n\n{news_text}\n\n"
-        f"Make it conversational, record-ready, and avoid lists or placeholders."
-    )
-    prompt_config = {
-        "persona": f"duo_experts:{expert1}+{expert2}",
-        "instructions": instructions,
-    }
-    ctx = {"candidates": [first_item, second_item]}
-    system_rules = "You are an assistant generating a natural spoken-style football dialogue."
-
-    gpt_output = run_gpt(prompt_config, ctx, system_rules)
-
-    payload = {
-        "slug": "opinion_duo_experts",
-        "title": "Duo Expert Opinion",
-        "text": gpt_output,
-        "length_s": int(round(len(gpt_output.split()) / 2.6)),
-        "sources": {},
-        "meta": {"personas": [expert1, expert2]},
-        "type": "opinion",
-        "model": "gpt",
-        "items": [first_item, second_item],
-    }
-
-    manifest = {"script": gpt_output, "meta": {"personas": [expert1, expert2]}}
-
-    return utils.w
