@@ -26,10 +26,15 @@ def _load_scored_items(day: str) -> List[Dict[str, Any]]:
 
 def build_section(args):
     """Bygg Top 3 news-sektionen via GPT"""
-    day = args.date
-    league = args.league
+
+    # Extract arguments with fallbacks
+    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+    day = getattr(args, "date", os.getenv("DATE", "unknown"))
     lang = getattr(args, "lang", "en")
     pod = getattr(args, "pod", "default_pod")
+
+    # Section code
+    section_code = getattr(args, "section", "S.NEWS.TOP3.GENERIC")
 
     pretty_league = league.replace("_", " ").title()
     section_title = f"Top 3 {pretty_league} News"
@@ -44,7 +49,17 @@ def build_section(args):
             "sources": {},
             "meta": {"persona": "system"},
         }
-        return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="empty", lang=lang)
+        manifest = {"script": payload["text"], "meta": {"persona": "system"}}
+        return utils.write_outputs(
+            section_code=section_code,
+            day=day,
+            league=league,
+            lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
+            payload=payload,
+        )
 
     # Sortera på score och ta topp 3 (unika spelare)
     items = sorted(items, key=lambda c: c.get("score", 0), reverse=True)
@@ -86,4 +101,15 @@ def build_section(args):
         "meta": {"persona": persona_id},
     }
 
-    return utils.write_outputs("S.NEWS.TOP3", day, league, payload, status="success", lang=lang)
+    manifest = {"script": gpt_text, "meta": {"persona": persona_id}}
+
+    return utils.write_outputs(
+        section_code=section_code,
+        day=day,
+        league=league,
+        lang=lang,
+        pod=pod,
+        manifest=manifest,
+        status="success",
+        payload=payload,
+    )
