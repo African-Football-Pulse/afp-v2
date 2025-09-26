@@ -7,6 +7,7 @@ pods:
       news_anchor: "AK"
       expert: "JJK"
       analyst: "JJK"
+      storyteller: "AK"
     publish:
       buzzsprout_podcast_id: 2538204
       buzzsprout_name: "African Football Pulse"
@@ -21,6 +22,7 @@ pods:
       news_anchor: "AK"
       expert: "JJK"
       analyst: "JJK"
+      storyteller: "AK"
     publish:
       buzzsprout_podcast_id: 2533393
       buzzsprout_name: "Patrik's Podcast"
