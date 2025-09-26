@@ -6,6 +6,7 @@ from src.sections import (
     s_stats_project_status,
     s_stats_top_contributors_season,
 )
+from src.sections import utils  # ✅ Lägg till
 
 CONTAINER = os.getenv("AZURE_CONTAINER", "afp")
 
@@ -60,12 +61,27 @@ def build_section(args=None):
     if ran_sections:
         stats_utils.save_last_stats(state)
 
-    # Returnera manifest
-    return {
-        "section": section_code,
-        "season": season,
-        "league_count": len(league_ids),
-        "ran_sections": ran_sections,
-        "failed_sections": failed_sections,
-        "status": "ok" if ran_sections else "no_data",
+    # ✅ Bygg payload
+    payload = {
+        "slug": "stats_driver",
+        "title": "Stats Driver",
+        "text": f"Ran {len(ran_sections)} stats sections across {len(league_ids)} leagues.",
+        "sources": {},
+        "meta": {
+            "ran_sections": ran_sections,
+            "failed_sections": failed_sections,
+            "season": season,
+        },
+        "type": "stats",
+        "model": "static",
     }
+
+    # ✅ Returnera manifest via utils.write_outputs
+    return utils.write_outputs(
+        section_code=section_code,
+        day=getattr(args, "date", os.getenv("DATE", "")),
+        league=getattr(args, "league", "_"),
+        payload=payload,
+        lang="en",
+        status="ok" if ran_sections else "no_data",
+    )
