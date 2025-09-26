@@ -4,10 +4,11 @@ import yaml
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 import os
+from glob import glob
 
 
 def run(cmd):
-    """Helper to köra subprocess och logga"""
+    """Helper för att köra subprocess och logga"""
     print(f"[produce_auto] ▶️ Kör: {' '.join(cmd)}")
     res = subprocess.run(["python", "-m"] + cmd, capture_output=True, text=True)
     if res.returncode != 0:
@@ -20,7 +21,7 @@ def run(cmd):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--all-sections", action="store_true", help="Kör alla sektioner i sections_library.yaml")
+    parser.add_argument("--all", action="store_true", help="Kör alla sektioner i src/sections/")
     args = parser.parse_args()
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -60,16 +61,18 @@ def main():
     )
     section_ids = [line.strip() for line in rendered.splitlines() if line.strip()]
 
-    if args.all_sections:
-        section_ids = list(plan.keys())
-        print(f"[produce_auto] 🚀 Override: kör ALLA {len(section_ids)} sektioner")
+    # 4. Override: kör alla sektioner i src/sections
+    if args.all:
+        py_files = glob("src/sections/s_*.py")
+        section_ids = [os.path.splitext(os.path.basename(f))[0].upper() for f in py_files]
+        print(f"[produce_auto] 🚀 Override: kör ALLA {len(section_ids)} sektioner från src/sections/")
 
-    print(f"[produce_auto] 📋 Sektioner från template: {section_ids}")
+    print(f"[produce_auto] 📋 Sektioner som ska köras: {section_ids}")
 
-    # 4. Kör sektionerna
+    # 5. Kör sektionerna
     for section_id in section_ids:
         task = plan.get(section_id)
-        if not task:
+        if not task and not args.all:
             print(f"[produce_auto] ⚠️ Hoppar över okänd sektion: {section_id}")
             continue
 
