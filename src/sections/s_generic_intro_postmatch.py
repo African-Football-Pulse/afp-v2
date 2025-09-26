@@ -1,10 +1,14 @@
 # src/sections/s_generic_intro_postmatch.py
 from datetime import datetime
+from src.sections import utils
 from src.sections.utils import write_outputs
 
 
 def build_section(args) -> dict:
     """Produce a postmatch intro section"""
+
+    # Get persona dynamically
+    persona_id, persona_block = utils.get_persona_block("system", args.pod)
 
     try:
         dt = datetime.strptime(args.date, "%Y-%m-%d")
@@ -25,13 +29,13 @@ def build_section(args) -> dict:
         "text": text,
         "length_s": int(round(len(text.split()) / 2.6)),
         "sources": {},
-        "meta": {"persona": "System"},
+        "meta": {"persona": persona_id},
         "type": "generic",
         "model": "static",
     }
 
     return write_outputs(
-        section_id=args.section,
+        section_code=args.section,
         day=args.date,
         league=args.league or "_",
         payload=payload,
