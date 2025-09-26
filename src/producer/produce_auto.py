@@ -1,18 +1,28 @@
-import os
-import sys
+import argparse
 import subprocess
-from datetime import datetime
 import yaml
+from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
+import os
+
 
 def run(cmd):
-    """Kör ett Pythonmodulkommando via subprocess och avbryt vid fel."""
-    result = subprocess.run([sys.executable, "-m"] + cmd)
-    if result.returncode != 0:
-        print(f"[produce_auto] ❌ FEL: {' '.join(cmd)} misslyckades")
-        sys.exit(1)
+    """Helper to köra subprocess och logga"""
+    print(f"[produce_auto] ▶️ Kör: {' '.join(cmd)}")
+    res = subprocess.run(["python", "-m"] + cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(res.stdout)
+        print(res.stderr)
+        raise RuntimeError(f"Fel vid körning: {' '.join(cmd)}")
+    else:
+        print(res.stdout)
+
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--all-sections", action="store_true", help="Kör alla sektioner i sections_library.yaml")
+    args = parser.parse_args()
+
     today = datetime.utcnow().strftime("%Y-%m-%d")
     weekday = datetime.utcnow().weekday()
     league = "premier_league"
@@ -21,16 +31,23 @@ def main():
 
     print(f"[produce_auto] 🚀 Startar auto-produce för {league} {today} (weekday={weekday})")
 
-    # 1. Kör core-producer-stegen i följd
-    run(["src.producer.produce_candidates"])
-    run(["src.producer.produce_scoring"])
-    run(["src.producer.produce_enrich_articles"])
+    # 1. Kör grundstegen
+    run(["src.producer.produce_candidates", "--league", league])
+    run(["src.producer.produce_scoring", "--league", league])
+    run(["src.producer.produce_enrich_articles", "--league", league])
 
     # 2. Ladda produce_plan.yaml
-    with open("src/producer/produce_plan.yaml", "r") as f:
-        plan = yaml.safe_load(f)
+    plan_path = "src/producer/produce_plan.yaml"
+    if not os.path.exists(plan_path):
+        raise RuntimeError(f"Hittar inte produce_plan.yaml på {plan_path}")
 
-    # 3. Rendera episode.jinja i mode="used"
+    with open(plan_path, "r") as f:
+        raw_plan = yaml.safe_load(f)
+
+    # Gör lookup-dict {section_id: task}
+    plan = {task["section"]: task for task in raw_plan.get("tasks", [])}
+
+    # 3. Rendera sektioner från template
     env = Environment(loader=FileSystemLoader("templates"))
     tmpl = env.get_template("episode.jinja")
     rendered = tmpl.render(
@@ -39,26 +56,36 @@ def main():
         league=league,
         lang=lang,
         weekday=weekday,
-        sections=plan,   # används för att jinja ska kunna loopa
+        sections=plan,
     )
-
     section_ids = [line.strip() for line in rendered.splitlines() if line.strip()]
+
+    if args.all_sections:
+        section_ids = list(plan.keys())
+        print(f"[produce_auto] 🚀 Override: kör ALLA {len(section_ids)} sektioner")
 
     print(f"[produce_auto] 📋 Sektioner från template: {section_ids}")
 
-    # 4. Kör sektionerna i turordning
+    # 4. Kör sektionerna
     for section_id in section_ids:
-        if section_id not in plan:
+        task = plan.get(section_id)
+        if not task:
             print(f"[produce_auto] ⚠️ Hoppar över okänd sektion: {section_id}")
             continue
 
-        task = plan[section_id]
-        args = task.get("args", [])
-        cmd = ["src.producer.produce_section", "--section", section_id] + args
-        print(f"[produce_auto] ▶ Kör {section_id} → {' '.join(cmd)}")
+        cmd = [
+            "src.producer.produce_section",
+            "--section", section_id,
+            "--date", today,
+            "--league", league,
+            "--pod", pod,
+            "--path-scope", "blob",
+            "--write-latest",
+        ]
         run(cmd)
 
-    print("[produce_auto] ✅ Klar")
+    print(f"[produce_auto] ✅ Klar")
+
 
 if __name__ == "__main__":
     main()
