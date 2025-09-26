@@ -19,7 +19,7 @@ def build_section(args=None, **kwargs):
     season = kwargs.get("season", getattr(args, "season", os.getenv("SEASON", "2025-2026")))
     league_id = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
     round_dates = kwargs.get("round_dates", getattr(args, "round_dates", []))
-    section_code = getattr(args, "section", "S.STATS.TOP_PERFORMERS.ROUND")
+    section_code = getattr(args, "section", "S.STATS.TOP.PERFORMERS.ROUND")
 
     # Fetch events and save file in Azure
     blob_path = stats_utils.save_african_events(
