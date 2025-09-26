@@ -52,3 +52,22 @@ def write_outputs(
     print(f"[utils] Uploaded {base_path}section_manifest.json")
 
     return manifest
+
+
+# --- Persona + Scored helpers ---
+from src.producer import role_utils
+
+def get_persona_block(role: str, pod: str):
+    """
+    Wrapper for role_utils.get_persona_block so sections can just call utils.get_persona_block.
+    Returns (persona_id, persona_block).
+    """
+    return role_utils.get_persona_block(role, pod)
+
+
+def load_scored_enriched(day: str):
+    """
+    Wrapper for role_utils.load_scored_enriched so sections can just call utils.load_scored_enriched.
+    Returns a list of scored_enriched items for given day.
+    """
+    return role_utils.load_scored_enriched(day)
