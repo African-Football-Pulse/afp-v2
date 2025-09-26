@@ -20,18 +20,94 @@ def load_duo_experts(lang: str):
 def build_section(args):
     """Produce a duo-expert opinion section with GPT commentary."""
 
-    # Extract arguments with fallbacks
-    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
-    day = getattr(args, "date", os.getenv("DATE", "unknown"))
-    pod = getattr(args, "pod", "default_pod")
-    lang = getattr(args, "lang", "en")
-    section_code = getattr(args, "section", "S.OPINION.DUO.EXPERTS")
+    try:
+        # Extract arguments with fallbacks
+        league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+        day = getattr(args, "date", os.getenv("DATE", "unknown"))
+        pod = getattr(args, "pod", "default_pod")
+        lang = getattr(args, "lang", "en")
+        section_code = getattr(args, "section", "S.OPINION.DUO.EXPERTS")
 
-    # Load scored_enriched candidates
-    candidates = utils.load_scored_enriched(day, league=league)
-    if not candidates:
-        print(f"[opinion_duo] WARN: No candidates available for {day}")
-        text = "No candidates available."
+        # Load scored_enriched candidates
+        candidates = utils.load_scored_enriched(day, league=league)
+        if not candidates:
+            print(f"[opinion_duo] WARN: No candidates available for {day}")
+            text = "No candidates available."
+            payload = {
+                "slug": "opinion_duo_experts",
+                "title": "Duo Expert Opinion",
+                "text": text,
+                "length_s": 2,
+                "sources": {},
+                "meta": {"personas": []},
+                "type": "opinion",
+                "model": "static",
+                "items": [],
+            }
+            manifest = {"script": text, "meta": {"personas": []}}
+            return utils.write_outputs(
+                section_code=section_code,
+                day=day,
+                league=league,
+                lang=lang,
+                pod=pod,
+                manifest=manifest,
+                status="empty",
+                payload=payload,
+            )
+
+        # Pick two candidates
+        first_item = candidates[0]
+        second_item = candidates[1] if len(candidates) > 1 else candidates[0]
+        news_text = f"- {first_item.get('text','')}\n- {second_item.get('text','')}"
+
+        # Personas (expert duo)
+        expert1, expert2 = load_duo_experts(lang)
+
+        # GPT setup
+        instructions = (
+            f"Create a lively two-voice exchange (~140 words total) in {lang}, "
+            f"between {expert1.upper()} and {expert2.upper()}, "
+            f"based on these stories:\n\n{news_text}\n\n"
+            f"Make it conversational, record-ready, and avoid lists or placeholders."
+        )
+        prompt_config = {
+            "persona": f"duo_experts:{expert1}+{expert2}",
+            "instructions": instructions,
+        }
+        ctx = {"candidates": [first_item, second_item]}
+        system_rules = "You are an assistant generating a natural spoken-style football dialogue."
+
+        gpt_output = run_gpt(prompt_config, ctx, system_rules)
+
+        payload = {
+            "slug": "opinion_duo_experts",
+            "title": "Duo Expert Opinion",
+            "text": gpt_output,
+            "length_s": int(round(len(gpt_output.split()) / 2.6)),
+            "sources": {},
+            "meta": {"personas": [expert1, expert2]},
+            "type": "opinion",
+            "model": "gpt",
+            "items": [first_item, second_item],
+        }
+
+        manifest = {"script": gpt_output, "meta": {"personas": [expert1, expert2]}}
+
+        return utils.write_outputs(
+            section_code=section_code,
+            day=day,
+            league=league,
+            lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="success",
+            payload=payload,
+        )
+
+    except Exception as e:
+        print(f"[opinion_duo] ❌ Exception: {e}")
+        text = "Error generating duo expert opinion."
         payload = {
             "slug": "opinion_duo_experts",
             "title": "Duo Expert Opinion",
@@ -45,19 +121,12 @@ def build_section(args):
         }
         manifest = {"script": text, "meta": {"personas": []}}
         return utils.write_outputs(
-            section_code=section_code,
-            day=day,
-            league=league,
-            lang=lang,
-            pod=pod,
+            section_code="S.OPINION.DUO.EXPERTS",
+            day=getattr(args, "date", "unknown"),
+            league=getattr(args, "league", "premier_league"),
+            lang=getattr(args, "lang", "en"),
+            pod=getattr(args, "pod", "default_pod"),
             manifest=manifest,
-            status="empty",
+            status="error",
             payload=payload,
         )
-
-    # Pick two candidates
-    first_item = candidates[0]
-    second_item = candidates[1] if len(candidates) > 1 else candidates[0]
-    news_text = f"- {first_item.get('text','')}\n- {second_item.get('text','')}"
-
-    # Personas (expert duo)
