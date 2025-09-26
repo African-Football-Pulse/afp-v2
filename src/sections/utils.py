@@ -1,8 +1,10 @@
 import os
 import json
 from typing import Dict, Any, Tuple
-from src.common import blob_io
+from src.storage import azure_blob
 from src.producer import role_utils
+
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
 
 def write_outputs(
@@ -16,32 +18,43 @@ def write_outputs(
     payload: Dict[str, Any] = None,
 ):
     """
-    Skriver outputs (JSON, MD, manifest) till blob och returnerar manifest.
+    Skriver outputs (JSON, MD, manifest) till Azure Blob och returnerar manifest.
     """
     if not section_code or not day or not league or not lang:
         raise ValueError("[write_outputs] Missing required arguments")
 
-    base_path = f"sections/{section_code}/{day}/{league}/_/"
+    base_path = f"sections/{section_code}/{day}/{league}/{pod}"
 
-    # JSON
-    json_path = base_path + "section.json"
-    blob_io.upload_json(json_path, manifest)
+    # JSON (med manifest + payload)
+    json_path = f"{base_path}/section.json"
+    data = {
+        "section": section_code,
+        "day": day,
+        "league": league,
+        "status": status,
+        "lang": lang,
+        "pod": pod,
+        "manifest": manifest,
+        "payload": payload or {},
+    }
+    azure_blob.upload_json(CONTAINER, json_path, data)
 
-    # MD
-    md_path = base_path + "section.md"
-    blob_io.upload_text(md_path, manifest.get("script", ""))
+    # MD (ren text)
+    md_path = f"{base_path}/section.md"
+    azure_blob.put_text(CONTAINER, md_path, manifest.get("script", ""))
 
-    # Manifest
-    manifest_path = base_path + "section_manifest.json"
+    # Manifest (metadata)
+    manifest_path = f"{base_path}/section_manifest.json"
     manifest_obj = {
         "section": section_code,
         "day": day,
         "league": league,
         "status": status,
         "lang": lang,
+        "pod": pod,
         "path": base_path,
     }
-    blob_io.upload_json(manifest_path, manifest_obj)
+    azure_blob.upload_json(CONTAINER, manifest_path, manifest_obj)
 
     print(f"[utils] Uploaded {manifest_path}")
     return {
@@ -50,6 +63,7 @@ def write_outputs(
         "league": league,
         "status": status,
         "lang": lang,
+        "pod": pod,
         "path": base_path,
         "manifest": manifest,
         "payload": payload,
@@ -72,7 +86,7 @@ def load_scored_enriched(day: str, league: str = "premier_league"):
     """
     path = f"producer/scored/{day}/scored_enriched.jsonl"
     try:
-        text = blob_io.download_text(path)
+        text = azure_blob.get_text(CONTAINER, path)
     except Exception as e:
         raise FileNotFoundError(f"[utils] Could not load scored_enriched from blob: {path}") from e
 
