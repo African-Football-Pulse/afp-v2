@@ -12,7 +12,10 @@ def build_section(args=None, **kwargs):
     league = kwargs.get("league_id", getattr(args, "league", os.getenv("LEAGUE", "premier_league")))
     day = getattr(args, "date", os.getenv("DATE", "unknown"))
     lang = getattr(args, "lang", "en")
-    section_code = getattr(args, "section", "S.STATS.PROJECT_STATUS")
+    section_code = getattr(args, "section", "S.STATS.PROJECT.STATUS")
+
+    
+    
 
     title = "Project Status"
     text = (
