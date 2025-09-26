@@ -1,3 +1,4 @@
+# src/sections/s_stats_top_contributors_season.py
 import os
 import pandas as pd
 from src.sections import utils
@@ -6,13 +7,14 @@ from src.storage import azure_blob
 
 
 def build_section(args, **kwargs):
-    section_code = "S.STATS.TOP.CONTRIBUTORS.SEASON"
+    section_code = getattr(args, "section", "S.STATS.TOP.CONTRIBUTORS.SEASON")
     league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
     day = getattr(args, "date", os.getenv("DATE", "unknown"))
     lang = getattr(args, "lang", "en")
+    pod = getattr(args, "pod", "default_pod")
 
     # Hämta storyteller-roll
-    persona_id, persona_block = utils.get_persona_block("storyteller", args.pod)
+    persona_id, persona_block = utils.get_persona_block("storyteller", pod)
 
     # Blob-sökväg till warehouse
     blob_path = "warehouse/metrics/goals_assists_africa.parquet"
@@ -26,10 +28,11 @@ def build_section(args, **kwargs):
         df = pd.read_parquet(local_tmp)
     except Exception as e:
         print(f"[{section_code}] ❌ No warehouse data: {e}")
+        text = "No data available for top contributors this season."
         payload = {
             "slug": "stats_top_contributors_season",
             "title": "Top Contributors This Season",
-            "text": "No data available for top contributors this season.",
+            "text": text,
             "length_s": 2,
             "sources": {"warehouse": blob_path},
             "meta": {"persona": persona_id},
@@ -37,7 +40,17 @@ def build_section(args, **kwargs):
             "model": "static",
             "items": [],
         }
-        return utils.write_outputs(section_code, day, league, payload, status="no_data", lang=lang)
+        manifest = {"script": text, "meta": {"persona": persona_id}}
+        return utils.write_outputs(
+            section_code=section_code,
+            day=day,
+            league=league,
+            lang=lang,
+            pod=pod,
+            manifest=manifest,
+            status="empty",
+            payload=payload,
+        )
 
     # Senaste säsongen
     if "season" in df.columns:
@@ -88,4 +101,15 @@ def build_section(args, **kwargs):
         "items": top5,
     }
 
-    return utils.write_outputs(section_code, day, league, payload, status="ok", lang=lang)
+    manifest = {"script": gpt_output, "meta": {"persona": persona_id}}
+
+    return utils.write_outputs(
+        section_code=section_code,
+        day=day,
+        league=league,
+        lang=lang,
+        pod=pod,
+        manifest=manifest,
+        status="success",
+        payload=payload,
+    )
