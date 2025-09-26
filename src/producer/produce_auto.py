@@ -27,7 +27,7 @@ def main():
     run(["src.producer.produce_enrich_articles"])
 
     # 2. Ladda produce_plan.yaml
-    with open("produce_plan.yaml", "r") as f:
+    with open("src/producer/produce_plan.yaml", "r") as f:
         plan = yaml.safe_load(f)
 
     # 3. Rendera episode.jinja i mode="used"
