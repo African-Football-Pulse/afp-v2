@@ -57,17 +57,22 @@ def write_outputs(
 # --- Persona + Scored helpers ---
 from src.producer import role_utils
 
+
 def get_persona_block(role: str, pod: str):
     """
-    Wrapper for role_utils.get_persona_block so sections can just call utils.get_persona_block.
-    Returns (persona_id, persona_block).
+    Wrapper for role_utils to fetch persona_id and persona_block
+    for a given role in a given pod.
     """
-    return role_utils.get_persona_block(role, pod)
+    pods_cfg = role_utils.load_yaml("config/pods.yaml")["pods"]
+    pod_cfg = pods_cfg.get(pod, {})
+    persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
+    persona_block = role_utils.resolve_block_for_persona(persona_id)
+    return persona_id, persona_block
 
 
 def load_scored_enriched(day: str):
     """
     Wrapper for role_utils.load_scored_enriched so sections can just call utils.load_scored_enriched.
-    Returns a list of scored_enriched items for given day.
+    Returns a list of scored_enriched items for the given day.
     """
     return role_utils.load_scored_enriched(day)
