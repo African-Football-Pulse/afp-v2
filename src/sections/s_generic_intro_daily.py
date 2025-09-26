@@ -7,8 +7,8 @@ from src.sections.utils import write_outputs
 def build_section(args) -> dict:
     """Produce a daily intro section"""
 
-    # Get persona dynamically
-    persona_id, persona_block = utils.get_persona_block("system", args.pod)
+    # Get persona dynamically (news anchor)
+    persona_id, persona_block = utils.get_persona_block("news_anchor", args.pod)
 
     # Format date
     try:
