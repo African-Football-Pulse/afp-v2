@@ -12,7 +12,7 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
+      - producer/scored/{{today}}/scored_enriched.jsonl
 
   - section: S.NEWS.TOP_AFRICAN_PLAYERS
     args:
@@ -22,7 +22,7 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
+      - producer/scored/{{today}}/scored_enriched.jsonl
 
   - section: S.OPINION.EXPERT_COMMENT
     args:
@@ -32,7 +32,7 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
+      - producer/scored/{{today}}/scored_enriched.jsonl
 
   - section: S.OPINION.DUO_EXPERTS
     args:
@@ -42,8 +42,8 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
-
+      - producer/scored/{{today}}/scored_enriched.jsonl
+      
   - section: S.GENERIC.INTRO_POSTMATCH
     args:
       - --league
@@ -68,7 +68,7 @@ tasks:
       - sections
       - --write-latest
       - --news
-      - producer/candidates/{{today}}/scored.jsonl
+      - producer/scored/{{today}}/scored_enriched.jsonl
 
   - section: S.STATS.DRIVER
     args:
