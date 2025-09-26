@@ -1,70 +1,57 @@
-# src/sections/utils.py
 import os
 import json
-from typing import Dict, Any
-from datetime import datetime
+import datetime
+from typing import Dict, Any, List, Tuple
+from src.common import blob_io
 from src.producer import role_utils
 
 
-def write_outputs(
-    section_code: str,
-    day: str,
-    league: str,
-    payload: Dict,
-    lang: str = "en",
-    status: str = "ok",
-) -> Dict[str, Any]:
+def write_outputs(section_code: str, day: str, league: str, lang: str, pod: str, manifest: Dict[str, Any]):
     """
-    Writes outputs (json, md, manifest) for a given section and returns the manifest.
-    Returns {"manifest": manifest} for consistency with produce_section expectations.
+    Skriver ut outputs (JSON, MD, manifest) till blob.
     """
-    base_dir = f"sections/{section_code}/{day}/{league}/_"
-    os.makedirs(base_dir, exist_ok=True)
+    if not section_code or not day or not league or not lang:
+        raise ValueError("[write_outputs] Missing required arguments")
 
-    json_path = os.path.join(base_dir, "section.json")
-    md_path = os.path.join(base_dir, "section.md")
-    manifest_path = os.path.join(base_dir, "section_manifest.json")
+    base_path = f"sections/{section_code}/{day}/{league}/_/"
 
-    # --- Write JSON ---
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    # JSON
+    json_path = base_path + "section.json"
+    blob_io.upload_json(json_path, manifest)
 
-    # --- Write Markdown ---
-    if isinstance(payload, dict) and "script" in payload:
-        md_content = payload["script"]
-    else:
-        md_content = f"# Section {section_code}\n\n{json.dumps(payload, indent=2, ensure_ascii=False)}"
+    # MD
+    md_path = base_path + "section.md"
+    blob_io.upload_text(md_path, manifest.get("script", ""))
 
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(md_content)
-
-    # --- Build manifest ---
-    manifest = {
+    # Manifest
+    manifest_path = base_path + "section_manifest.json"
+    blob_io.upload_json(manifest_path, {
         "section": section_code,
         "day": day,
         "league": league,
-        "status": status,
+        "status": "done",
         "lang": lang,
-        "path": {
-            "json": json_path,
-            "md": md_path,
-            "manifest": manifest_path,
-        },
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-    }
-
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2, ensure_ascii=False)
+        "path": base_path
+    })
 
     print(f"[utils] Uploaded {manifest_path}")
+    return {
+        "section": section_code,
+        "day": day,
+        "league": league,
+        "status": "done",
+        "lang": lang,
+        "path": base_path,
+    }
 
-    # ✅ Wrappa i {"manifest": manifest}
-    return {"manifest": manifest}
+
+def get_today() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
 
-def get_persona_block(role: str, pod: str):
+def get_persona_block(role: str, pod: str) -> Tuple[str, Dict[str, Any]]:
     """
-    Wrapper som hämtar persona_id och persona_block för en given roll och pod.
+    Hämtar persona-id och block baserat på roll och pod.
     """
     pod_cfg = role_utils.get_pod_config(pod)
     persona_id = role_utils.resolve_persona_for_role(pod_cfg, role)
@@ -72,21 +59,21 @@ def get_persona_block(role: str, pod: str):
     return persona_id, persona_block
 
 
-def load_scored_enriched(day: str, league: str = "premier_league"):
+def load_scored_enriched(day: str, league: str = "premier_league") -> List[Dict]:
     """
-    Laddar scored_enriched.jsonl från absolut path i containern.
+    Laddar scored_enriched.jsonl från Azure Blob Storage.
     """
-    base_path = os.path.join("/app", "producer", "scored", day)
-    path = os.path.join(base_path, "scored_enriched.jsonl")
+    blob_path = f"producer/scored/{day}/scored_enriched.jsonl"
 
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"[utils] Could not find scored_enriched file at {path}")
+    print(f"[utils] 🔗 Laddar scored_enriched från blob: {blob_path}")
+    data = blob_io.load_blob_as_text(blob_path)
 
     items = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                items.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    for line in data.splitlines():
+        try:
+            items.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    print(f"[utils] ✅ Laddade {len(items)} items från blob {blob_path}")
     return items
