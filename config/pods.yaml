@@ -4,10 +4,10 @@ pods:
     leagues: ["premier_league"]
     langs: ["en"]
     role_map:
-      news_anchor: "AK"
-      expert: "JJK"
-      analyst: "JJK"
-      storyteller: "AK"
+      news_anchor: "ak"
+      expert: "jjk"
+      analyst: "jjk"
+      storyteller: "ak"
     publish:
       buzzsprout_podcast_id: 2538204
       buzzsprout_name: "African Football Pulse"
@@ -19,10 +19,10 @@ pods:
     leagues: ["premier_league"]
     langs: ["en"]
     role_map:
-      news_anchor: "AK"
-      expert: "JJK"
-      analyst: "JJK"
-      storyteller: "AK"
+      news_anchor: "ak"
+      expert: "jjk"
+      analyst: "jjk"
+      storyteller: "ak"
     publish:
       buzzsprout_podcast_id: 2533393
       buzzsprout_name: "Patrik's Podcast"
