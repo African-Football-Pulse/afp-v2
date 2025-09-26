@@ -61,10 +61,14 @@ def main():
     )
     section_ids = [line.strip() for line in rendered.splitlines() if line.strip()]
 
-    # 4. Override: kör alla sektioner i src/sections
+    # 4. Override: kör alla sektioner i src/sections med punktnotation
     if args.all:
         py_files = glob("src/sections/s_*.py")
-        section_ids = [os.path.splitext(os.path.basename(f))[0].upper() for f in py_files]
+        section_ids = []
+        for f in py_files:
+            base = os.path.splitext(os.path.basename(f))[0]  # ex: s_stats_driver
+            section_id = base.replace("s_", "S.", 1).replace("_", ".").upper()  # → S.STATS.DRIVER
+            section_ids.append(section_id)
         print(f"[produce_auto] 🚀 Override: kör ALLA {len(section_ids)} sektioner från src/sections/")
 
     print(f"[produce_auto] 📋 Sektioner som ska köras: {section_ids}")
