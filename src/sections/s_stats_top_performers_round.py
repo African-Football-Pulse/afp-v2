@@ -5,7 +5,6 @@ from src.storage import azure_blob
 from src.producer import role_utils
 from src.sections import utils
 from src.warehouse.utils_ids import normalize_ids
-from src.warehouse.utils_mapping import map_ids
 
 
 def build(section_code, args, library):
