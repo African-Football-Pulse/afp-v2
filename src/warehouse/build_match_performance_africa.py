@@ -24,7 +24,12 @@ def build(league: str, season: str):
     events_bytes = azure_blob.get_bytes(CONTAINER, events_path)
     df_events = pd.read_parquet(io.BytesIO(events_bytes))
 
-    # Säkerställ strängformat för player_id
+    # Debug: visa kolumner och några rader
+    print("[DEBUG] Event-kolumner:", df_events.columns.tolist())
+    print("[DEBUG] Exempelrader från events:")
+    print(df_events.head(10).to_dict())
+
+    # Säkerställ strängformat för player_id om kolumnen finns
     if "player_id" in df_events.columns:
         df_events["player_id"] = df_events["player_id"].astype(str)
     else:
