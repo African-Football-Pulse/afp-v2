@@ -17,6 +17,8 @@ def build_section(args=None, **kwargs):
         ("S.STATS.TOP.CONTRIBUTORS.SEASON", "s_stats_top_contributors_season"),
         ("S.STATS.TOP.PERFORMERS.ROUND", "s_stats_top_performers_round"),
         ("S.STATS.PROJECT.STATUS", "s_stats_project_status"),
+        ("S.STATS.DISCIPLINE", "s_stats_discipline"),
+        ("S.STATS.GOAL.IMPACT", "s_stats_goal_impact"),
     ]
 
     results = []
