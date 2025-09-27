@@ -4,13 +4,13 @@ import pandas as pd
 from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
-SEASON = "2025-2026"
+SEASON = "2025-2026"  # default, kan skrivas över via CLI
 
-def build(league: str):
-    print(f"[build_match_performance_africa] ▶️ Startar för liga {league}, säsong {SEASON}")
+def build(league: str, season: str):
+    print(f"[build_match_performance_africa] ▶️ Startar för liga {league}, säsong {season}")
 
     # Ladda players_flat (alla afrikanska spelare)
-    players_path = f"warehouse/base/players_flat/{SEASON}/players_flat.parquet"
+    players_path = f"warehouse/base/players_flat/{season}/players_flat.parquet"
     print(f"[build_match_performance_africa] 📥 Laddar {players_path}")
     players_bytes = azure_blob.get_bytes(CONTAINER, players_path)
     df_players = pd.read_parquet(io.BytesIO(players_bytes))
@@ -19,7 +19,7 @@ def build(league: str):
     print(f"[build_match_performance_africa] 👥 Antal afrikanska spelare: {len(african_players)}")
 
     # Ladda events för aktuell liga
-    events_path = f"warehouse/live/events_flat/{SEASON}/{league}.parquet"
+    events_path = f"warehouse/live/events_flat/{season}/{league}.parquet"
     print(f"[build_match_performance_africa] 📥 Laddar {events_path}")
     events_bytes = azure_blob.get_bytes(CONTAINER, events_path)
     df_events = pd.read_parquet(io.BytesIO(events_bytes))
@@ -86,8 +86,10 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--league", required=True, help="Liga-ID (t.ex. 228)")
+    parser.add_argument("--season", default="2025-2026", help="Säsong (t.ex. 2025-2026)")
     args = parser.parse_args()
-    build(args.league)
+
+    build(args.league, args.season)
 
 if __name__ == "__main__":
     main()
