@@ -1,30 +1,26 @@
 import os
 import sys
 import json
-from datetime import datetime
 import logging
+from datetime import datetime
 
 # -------------------------------------------------------
-# Städa bort spam från SDK:er
+# Logger setup (entrypoint)
 # -------------------------------------------------------
-logging.getLogger("azure").setLevel(logging.WARNING)
-logging.getLogger("azure.storage").setLevel(logging.ERROR)
-logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logger = logging.getLogger("entrypoint")
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[ENTRYPOINT] %(message)s")
+handler.setFormatter(formatter)
+logger.handlers = [handler]
+logger.propagate = False
+logger.setLevel(logging.INFO)
 
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("openai").setLevel(logging.WARNING)
 
-# -------------------------------------------------------
-# Standardloggning
-# -------------------------------------------------------
 def log(msg: str):
     """Standardiserad loggning med timestamp"""
-    print(f"[ENTRYPOINT] {msg}", flush=True)
+    logger.info(msg)
 
 
-# -------------------------------------------------------
-# Exportera secrets
-# -------------------------------------------------------
 def export_secrets(secrets_file: str = "/app/secrets/secret.json"):
     """Exportera hemligheter från JSON till env"""
     try:
@@ -39,13 +35,8 @@ def export_secrets(secrets_file: str = "/app/secrets/secret.json"):
         log(f"⚠️ Fel vid export av secrets: {e}")
 
 
-# -------------------------------------------------------
-# Bygg kommandot
-# -------------------------------------------------------
 def build_command():
     job_type = os.environ.get("JOB_TYPE", "").strip()
-    extra_args = sys.argv[1:]  # fånga alla CLI-flaggor som --all, --template etc.
-
     if not job_type:
         log("❌ JOB_TYPE måste anges")
         sys.exit(1)
@@ -53,26 +44,23 @@ def build_command():
     # Standard collect → rss_multi
     if job_type == "collect":
         log("Selected job: COLLECT → rss_multi (default)")
-        return ["python", "-m", "src.collectors.rss_multi"] + extra_args
+        return ["python", "-m", "src.collectors.rss_multi"]
 
     # Standard produce → auto
     if job_type == "produce":
         log("Selected job: PRODUCE (auto) → full pipeline via produce_auto")
-        return ["python", "-m", "src.producer.produce_auto"] + extra_args
+        return ["python", "-m", "src.producer.produce_auto"]
 
     # Tillåt explicit modulväg, t.ex. src.collectors.collect_extract_weekly
     if job_type.startswith("src."):
         log(f"Selected job: custom module → {job_type}")
-        return ["python", "-m", job_type] + extra_args
+        return ["python", "-m", job_type]
 
     # Okänd typ
     log(f"❌ Okänd JOB_TYPE: {job_type}")
     sys.exit(1)
 
 
-# -------------------------------------------------------
-# Main
-# -------------------------------------------------------
 def main():
     log("Startar job_entrypoint")
     export_secrets(os.environ.get("SECRETS_FILE", "/app/secrets/secret.json"))
