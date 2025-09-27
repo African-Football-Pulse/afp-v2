@@ -2,62 +2,54 @@ import os
 import pandas as pd
 
 from src.storage import azure_blob
-from src.producer import role_utils, stats_utils
-from src.sections import utils
+from src.producer import role_utils, stats_utils, utils
 from src.warehouse.utils_ids import normalize_ids
+from src.warehouse.utils_mapping import map_ids
 
-def build_section(args):
+
+def build_section(args, library):
     section_code = "S.STATS.TOP.PERFORMERS.ROUND"
+
+    # Metadata
     day = args.date
     league = args.league
-    lang = getattr(args, "lang", "en")
+    lang = args.lang
     pod = args.pod
 
-    season = "2025-2026"  # kan göras dynamiskt senare
-    perf_path = f"warehouse/metrics/match_performance_africa/{season}/228.parquet"
+    season = "2025-2026"
+    league_id = "228"  # Premier League (kan göras dynamiskt senare)
 
+    # Ladda parquet med match-performance
+    perf_path = f"warehouse/metrics/match_performance_africa/{season}/{league_id}.parquet"
     try:
-        # Läs parquet från Blob
         perf_bytes = azure_blob.get_bytes(os.getenv("AZURE_STORAGE_CONTAINER", "afp"), perf_path)
         df_perf = pd.read_parquet(pd.io.common.BytesIO(perf_bytes))
     except Exception as e:
         return utils.write_outputs(
             section_code, day, league, lang, pod,
-            {"error": str(e)}, "empty", {}
+            {"error": f"Failed to load performance data: {e}"},
+            "empty", {}
         )
 
     if df_perf.empty:
         return utils.write_outputs(
             section_code, day, league, lang, pod,
-            {"meta": "No data"}, "empty", {}
+            {"error": "No performance data available"},
+            "empty", {}
         )
 
-    # Ta ut toppspelare i senaste omgången (match_id max)
-    latest_match = df_perf["match_id"].max()
-    df_latest = df_perf[df_perf["match_id"] == latest_match]
+    # Ta topp 5 spelare
+    top_players = df_perf.sort_values("score", ascending=False).head(5)
 
-    # Summera poäng
-    top_players = (
-        df_latest.groupby(["player_id", "player_name"])
-        .agg({"score": "sum"})
-        .reset_index()
-        .sort_values("score", ascending=False)
-        .head(3)
+    # Bygg en enkel text
+    performers_text = ", ".join(
+        [f"{row['player_name']} (score {row['score']})" for _, row in top_players.iterrows()]
     )
 
-    if top_players.empty:
-        return utils.write_outputs(
-            section_code, day, league, lang, pod,
-            {"meta": "No performers"}, "empty", {}
-        )
+    # Hämta persona via role_utils (faktiskt existerande kod)
+    persona_id = role_utils.get_role(section_code, default="ak")
 
-    # Bygg text till GPT
-    performers_text = "; ".join(
-        f"{row['player_name']} ({int(row['score'])} pts)"
-        for _, row in top_players.iterrows()
-    )
-
-    persona_id = role_utils.resolve_role("storyteller")
+    # GPT prompt
     prompt = f"Top performing African players in the latest round were: {performers_text}."
 
     script = stats_utils.call_gpt(
