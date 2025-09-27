@@ -7,8 +7,16 @@ jobs:
   build-players-flat:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write    # 👈 krävs för federated login (OIDC)
-      contents: read     # 👈 krävs för att hämta repo-innehåll
+      id-token: write    # 👈 krävs för OIDC (azure/login@v2)
+      contents: read     # 👈 behövs för checkout
+
+    env:
+      # 👇 Alla Azure-variabler som azure_blob.py behöver
+      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+      AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+      # Om du istället använder SAS:
+      # BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
 
     steps:
       - name: Checkout repo
