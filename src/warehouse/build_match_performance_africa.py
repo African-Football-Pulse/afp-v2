@@ -2,99 +2,75 @@ import os
 import io
 import pandas as pd
 from src.storage import azure_blob
+from src.warehouse import utils_mapping
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
-SEASON = "2025-2026"  # default, kan skrivas över via CLI
 
 def build(league: str, season: str):
     print(f"[build_match_performance_africa] ▶️ Startar för liga {league}, säsong {season}")
 
-    # Ladda players_flat (alla afrikanska spelare)
+    # --- Ladda players_flat ---
     players_path = f"warehouse/base/players_flat/{season}/players_flat.parquet"
     print(f"[build_match_performance_africa] 📥 Laddar {players_path}")
     players_bytes = azure_blob.get_bytes(CONTAINER, players_path)
     df_players = pd.read_parquet(io.BytesIO(players_bytes))
-    df_players["id"] = df_players["id"].astype(str)
-    african_players = set(df_players["id"].unique())
+    african_players = set(df_players[df_players["country"].notna()]["id"].astype(str).unique())
     print(f"[build_match_performance_africa] 👥 Antal afrikanska spelare: {len(african_players)}")
 
-    # Ladda events för aktuell liga
+    # --- Ladda events ---
     events_path = f"warehouse/live/events_flat/{season}/{league}.parquet"
     print(f"[build_match_performance_africa] 📥 Laddar {events_path}")
     events_bytes = azure_blob.get_bytes(CONTAINER, events_path)
     df_events = pd.read_parquet(io.BytesIO(events_bytes))
 
-    # Debug: visa kolumner och några rader
-    print("[DEBUG] Event-kolumner:", df_events.columns.tolist())
+    print(f"[DEBUG] Event-kolumner: {list(df_events.columns)}")
     print("[DEBUG] Exempelrader från events:")
     print(df_events.head(10).to_dict())
 
-    # Säkerställ strängformat för player_id om kolumnen finns
-    if "player_id" in df_events.columns:
-        df_events["player_id"] = df_events["player_id"].astype(str)
-    else:
-        print("[build_match_performance_africa] ⚠️ Ingen kolumn 'player_id' hittades i events")
-        return
+    # --- Mappa events till AFP-ID ---
+    df_events = utils_mapping.map_events_to_afp(df_events, season)
 
-    # Filtrera på afrikanska spelare
-    df_events = df_events[df_events["player_id"].isin(african_players)]
-    print(f"[build_match_performance_africa] 🎯 Events efter filter: {len(df_events)}")
+    # --- Filtrera på afrikanska spelare ---
+    df_africa = df_events[df_events["afp_id"].isin(african_players)]
+    print(f"[build_match_performance_africa] 🎯 Events efter filter: {len(df_africa)}")
 
-    if df_events.empty:
+    if df_africa.empty:
         print("[build_match_performance_africa] ⚠️ Inga events för afrikanska spelare hittades.")
         return
 
-    # Poängsätt prestationer
-    def score_event(row):
-        points = 0
-        if row.get("event_type") == "goal":
-            points += 3
-        if row.get("event_type") == "assist":
-            points += 2
-        if row.get("event_type") == "yellow_card":
-            points -= 1
-        if row.get("event_type") == "red_card":
-            points -= 3
-        if row.get("team_result") == "win":
-            points += 1
-        return points
+    # --- Poängsättning ---
+    score_map = {
+        "goal": 3,
+        "assist": 2,
+        "yellow_card": -1,
+        "red_card": -3,
+    }
+    df_africa["score"] = df_africa["event_type"].map(score_map).fillna(0)
 
-    df_events["points"] = df_events.apply(score_event, axis=1)
+    # --- Summera per spelare ---
+    df_scores = df_africa.groupby(["afp_id", "player_name"]).agg(
+        total_score=("score", "sum"),
+        matches=("match_id", "nunique")
+    ).reset_index()
 
-    # Summera per spelare
-    df_perf = (
-        df_events.groupby("player_id")["points"]
-        .sum()
-        .reset_index()
-        .sort_values("points", ascending=False)
-    )
+    # --- Sortera ---
+    df_scores = df_scores.sort_values("total_score", ascending=False)
 
-    # Koppla på namn från players_flat
-    df_perf = df_perf.merge(
-        df_players[["id", "name", "club", "country"]],
-        left_on="player_id",
-        right_on="id",
-        how="left"
-    ).drop(columns=["id"])
-
-    # Output path
-    output_path = f"warehouse/metrics/match_performance_africa.parquet"
-    print(f"[build_match_performance_africa] 💾 Skriver {output_path}")
-
-    buffer = io.BytesIO()
-    df_perf.to_parquet(buffer, engine="pyarrow", index=False)
-    azure_blob.put_bytes(CONTAINER, output_path, buffer.getvalue(), content_type="application/octet-stream")
+    # --- Skriv resultat ---
+    out_path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
+    print(f"[build_match_performance_africa] 💾 Skriver till {out_path}")
+    buf = io.BytesIO()
+    df_scores.to_parquet(buf, index=False)
+    azure_blob.put_bytes(CONTAINER, out_path, buf.getvalue())
 
     print("[build_match_performance_africa] ✅ Klar")
 
-def main():
+
+if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--league", required=True, help="Liga-ID (t.ex. 228)")
-    parser.add_argument("--season", default="2025-2026", help="Säsong (t.ex. 2025-2026)")
+    parser.add_argument("--league", required=True, help="League ID (e.g. 228)")
+    parser.add_argument("--season", required=True, help="Season (e.g. 2025-2026)")
     args = parser.parse_args()
 
     build(args.league, args.season)
-
-if __name__ == "__main__":
-    main()
