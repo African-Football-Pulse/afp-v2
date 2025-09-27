@@ -1,4 +1,4 @@
-name: S01 Build Players Flat
+name: S_01 Build Players Flat
 
 on:
   workflow_dispatch:
