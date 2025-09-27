@@ -6,32 +6,39 @@ from src.producer import role_utils
 from src.sections import utils
 from src.warehouse.utils_ids import normalize_ids
 
+
 def build_section(section_code, args, library):
     league = args.league
     day = args.date
     lang = args.lang
     pod = args.pod
-    season = "2025-2026"  # TODO: kan göras dynamiskt om vi vill
+    season = "2025-2026"  # TODO: dynamiskt om vi vill
 
     # 🎭 Persona
     persona_id = role_utils.get_persona_block("storyteller")
 
     # 📥 Läs parquet-fil från warehouse
+    path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
     try:
-        path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
-        bytes_data = azure_blob.get_bytes(os.getenv("AZURE_STORAGE_CONTAINER", "afp"), path)
+        bytes_data = azure_blob.get_bytes(
+            os.getenv("AZURE_STORAGE_CONTAINER", "afp"), path
+        )
         df = pd.read_parquet(pd.io.common.BytesIO(bytes_data))
     except Exception as e:
         print(f"[{section_code}] ⚠️ Kunde inte läsa parquet {path}: {e}")
         payload = {"text": "No performance data available for this round."}
         manifest = {"error": str(e)}
-        return utils.write_outputs(section_code, day, league, lang, pod, manifest, "empty", payload)
+        return utils.write_outputs(
+            section_code, day, league, lang, pod, manifest, "empty", payload
+        )
 
     if df.empty:
         print(f"[{section_code}] ⚠️ Tom DataFrame i {path}")
         payload = {"text": "No performance data available for this round."}
         manifest = {"info": "empty dataframe"}
-        return utils.write_outputs(section_code, day, league, lang, pod, manifest, "empty", payload)
+        return utils.write_outputs(
+            section_code, day, league, lang, pod, manifest, "empty", payload
+        )
 
     # 🎯 Bearbeta data: välj topp 5 spelare på score
     df = df.sort_values("score", ascending=False).head(5)
