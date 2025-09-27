@@ -3,13 +3,28 @@ import sys
 import json
 from datetime import datetime
 import logging
+
+# -------------------------------------------------------
+# Städa bort spam från SDK:er
+# -------------------------------------------------------
 logging.getLogger("azure").setLevel(logging.WARNING)
 logging.getLogger("azure.storage").setLevel(logging.ERROR)
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+
+# -------------------------------------------------------
+# Standardloggning
+# -------------------------------------------------------
 def log(msg: str):
     """Standardiserad loggning med timestamp"""
     print(f"[ENTRYPOINT] {msg}", flush=True)
 
+
+# -------------------------------------------------------
+# Exportera secrets
+# -------------------------------------------------------
 def export_secrets(secrets_file: str = "/app/secrets/secret.json"):
     """Exportera hemligheter från JSON till env"""
     try:
@@ -23,6 +38,10 @@ def export_secrets(secrets_file: str = "/app/secrets/secret.json"):
     except Exception as e:
         log(f"⚠️ Fel vid export av secrets: {e}")
 
+
+# -------------------------------------------------------
+# Bygg kommandot
+# -------------------------------------------------------
 def build_command():
     job_type = os.environ.get("JOB_TYPE", "").strip()
     extra_args = sys.argv[1:]  # fånga alla CLI-flaggor som --all, --template etc.
@@ -50,12 +69,17 @@ def build_command():
     log(f"❌ Okänd JOB_TYPE: {job_type}")
     sys.exit(1)
 
+
+# -------------------------------------------------------
+# Main
+# -------------------------------------------------------
 def main():
     log("Startar job_entrypoint")
     export_secrets(os.environ.get("SECRETS_FILE", "/app/secrets/secret.json"))
     cmd = build_command()
     log(f"Running: {' '.join(cmd)}")
     os.execvp(cmd[0], cmd)
+
 
 if __name__ == "__main__":
     main()
