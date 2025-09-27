@@ -2,70 +2,72 @@ import os
 import pandas as pd
 
 from src.storage import azure_blob
-from src.producer import role_utils
+from src.producer import role_utils, stats_utils
 from src.sections import utils
 from src.warehouse.utils_ids import normalize_ids
 
-
-def build_section(section_code, args, library):
-    league = args.league
+def build_section(args):
+    section_code = "S.STATS.TOP.PERFORMERS.ROUND"
     day = args.date
-    lang = args.lang
+    league = args.league
+    lang = getattr(args, "lang", "en")
     pod = args.pod
-    season = "2025-2026"  # TODO: dynamiskt om vi vill
 
-    # 🎭 Persona
-    persona_id = role_utils.get_persona_block("storyteller")
+    season = "2025-2026"  # kan göras dynamiskt senare
+    perf_path = f"warehouse/metrics/match_performance_africa/{season}/228.parquet"
 
-    # 📥 Läs parquet-fil från warehouse
-    path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
     try:
-        bytes_data = azure_blob.get_bytes(
-            os.getenv("AZURE_STORAGE_CONTAINER", "afp"), path
-        )
-        df = pd.read_parquet(pd.io.common.BytesIO(bytes_data))
+        # Läs parquet från Blob
+        perf_bytes = azure_blob.get_bytes(os.getenv("AZURE_STORAGE_CONTAINER", "afp"), perf_path)
+        df_perf = pd.read_parquet(pd.io.common.BytesIO(perf_bytes))
     except Exception as e:
-        print(f"[{section_code}] ⚠️ Kunde inte läsa parquet {path}: {e}")
-        payload = {"text": "No performance data available for this round."}
-        manifest = {"error": str(e)}
         return utils.write_outputs(
-            section_code, day, league, lang, pod, manifest, "empty", payload
+            section_code, day, league, lang, pod,
+            {"error": str(e)}, "empty", {}
         )
 
-    if df.empty:
-        print(f"[{section_code}] ⚠️ Tom DataFrame i {path}")
-        payload = {"text": "No performance data available for this round."}
-        manifest = {"info": "empty dataframe"}
+    if df_perf.empty:
         return utils.write_outputs(
-            section_code, day, league, lang, pod, manifest, "empty", payload
+            section_code, day, league, lang, pod,
+            {"meta": "No data"}, "empty", {}
         )
 
-    # 🎯 Bearbeta data: välj topp 5 spelare på score
-    df = df.sort_values("score", ascending=False).head(5)
+    # Ta ut toppspelare i senaste omgången (match_id max)
+    latest_match = df_perf["match_id"].max()
+    df_latest = df_perf[df_perf["match_id"] == latest_match]
 
-    top_players = []
-    for _, row in df.iterrows():
-        top_players.append({
-            "player": row.get("player_name", "Unknown"),
-            "club": row.get("club", "Unknown"),
-            "score": row.get("score", 0),
-            "goals": row.get("goals", 0),
-            "assists": row.get("assists", 0),
-            "yellow_cards": row.get("yellow_cards", 0),
-            "red_cards": row.get("red_cards", 0),
-        })
+    # Summera poäng
+    top_players = (
+        df_latest.groupby(["player_id", "player_name"])
+        .agg({"score": "sum"})
+        .reset_index()
+        .sort_values("score", ascending=False)
+        .head(3)
+    )
 
-    # 📝 Text till sektionen
-    text_lines = ["Top performing African players this round:"]
-    for p in top_players:
-        text_lines.append(
-            f"- {p['player']} ({p['club']}) – Score {p['score']} "
-            f"(Goals: {p['goals']}, Assists: {p['assists']}, "
-            f"YC: {p['yellow_cards']}, RC: {p['red_cards']})"
+    if top_players.empty:
+        return utils.write_outputs(
+            section_code, day, league, lang, pod,
+            {"meta": "No performers"}, "empty", {}
         )
-    text = "\n".join(text_lines)
 
-    payload = {"text": text, "players": top_players}
-    manifest = {"meta": {"persona": persona_id}, "source": path}
+    # Bygg text till GPT
+    performers_text = "; ".join(
+        f"{row['player_name']} ({int(row['score'])} pts)"
+        for _, row in top_players.iterrows()
+    )
 
-    return utils.write_outputs(section_code, day, league, lang, pod, manifest, "success", payload)
+    persona_id = role_utils.resolve_role("storyteller")
+    prompt = f"Top performing African players in the latest round were: {performers_text}."
+
+    script = stats_utils.call_gpt(
+        prompt, lang=lang, persona=persona_id, section=section_code
+    )
+
+    manifest = {"script": script, "meta": {"persona": persona_id}}
+    payload = {"players": top_players.to_dict(orient="records")}
+
+    return utils.write_outputs(
+        section_code, day, league, lang, pod,
+        manifest, "success", payload
+    )
