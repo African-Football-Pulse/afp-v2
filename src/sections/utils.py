@@ -1,10 +1,22 @@
 import os
 import json
+import logging
 from typing import Dict, Any, Tuple
 from src.storage import azure_blob
 from src.producer import role_utils
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+
+# -------------------------------------------------------
+# Logger setup (utils)
+# -------------------------------------------------------
+logger = logging.getLogger("utils")
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[utils] %(message)s")
+handler.setFormatter(formatter)
+logger.handlers = [handler]
+logger.propagate = False
+logger.setLevel(logging.INFO)
 
 
 def write_outputs(
@@ -56,9 +68,9 @@ def write_outputs(
     }
     azure_blob.upload_json(CONTAINER, manifest_path, manifest_obj)
 
-    print(
-        f"[utils] 📤 Wrote outputs for {section_code} → {base_path} "
-        f"(json={json_path}, md={md_path}, manifest={manifest_path}, status={status})"
+    logger.info(
+        "📤 Wrote outputs for %s → %s (json=%s, md=%s, manifest=%s, status=%s)",
+        section_code, base_path, json_path, md_path, manifest_path, status
     )
 
     return {
