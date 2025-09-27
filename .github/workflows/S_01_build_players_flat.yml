@@ -1,35 +1,36 @@
-name: S_01 Build Players Flat
+name: Build Players Flat
 
 on:
-  workflow_dispatch: {}
-  schedule:
-    - cron: "0 4 * * 1"   # varje måndag kl 04:00 UTC (valfritt schema)
+  workflow_dispatch:
 
 jobs:
   build-players-flat:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write    # 👈 krävs för federated login (OIDC)
+      contents: read     # 👈 krävs för att hämta repo-innehåll
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Azure Login
+      - name: Log in to Azure
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build Players Flat
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
-          python -m src.warehouse.build_players_flat
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run build_players_flat
+        run: |
+          python -m src.warehouse.build_players_flat --season 2025-2026
