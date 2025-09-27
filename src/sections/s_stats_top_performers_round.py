@@ -1,85 +1,91 @@
-# src/sections/s_stats_top_performers_round.py
-
-import argparse
-import pandas as pd
-from src.storage import azure_blob
 import os
-from src.utils import write_outputs
+import pandas as pd
+
+from src.storage import azure_blob
+from src.roles import role_utils
+from src.utils_section import SectionWriter
+from src.warehouse.utils_ids import normalize_ids
+from src.warehouse.utils_mapping import map_ids
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-def build(section: str, date: str, league: str, pod: str, path_scope: str, season: str, top_n: int = 3):
-    print(f"[{section}] ▶️ Startar för liga {league}, säsong {season}")
 
-    # Ladda performance-data
-    perf_path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
-    if not azure_blob.exists(CONTAINER, perf_path):
-        print(f"[{section}] ⚠️ Performance-fil saknas: {perf_path}")
-        return {"status": "empty"}
+def build(args, writer: SectionWriter):
+    """
+    Bygger sektionen 'Top performing African players in a round'
+    baserat på warehouse/metrics/match_performance_africa.
+    """
 
-    bytes_data = azure_blob.get_bytes(CONTAINER, perf_path)
-    df = pd.read_parquet(pd.io.common.BytesIO(bytes_data))
+    league = args.league
+    season = args.season if hasattr(args, "season") else "2025-2026"
+
+    path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
+
+    if not azure_blob.exists(CONTAINER, path):
+        writer.log(f"[s_stats_top_performers_round] ⚠️ Hittar inte {path}")
+        writer.set_status("empty")
+        return
+
+    # Ladda parquet
+    writer.log(f"[s_stats_top_performers_round] 📥 Laddar {path}")
+    data_bytes = azure_blob.get_bytes(CONTAINER, path)
+    df = pd.read_parquet(pd.io.common.BytesIO(data_bytes))
 
     if df.empty:
-        print(f"[{section}] ⚠️ Ingen data i {perf_path}")
-        return {"status": "empty"}
+        writer.log("[s_stats_top_performers_round] ⚠️ Tom parquet – inga spelare denna omgång")
+        writer.set_status("empty")
+        return
 
-    print(f"[{section}] 📥 Laddade {len(df)} rader från {perf_path}")
+    # Normalisera IDs (om det finns blandade typer)
+    df["player_id"] = normalize_ids(df["player_id"])
 
-    # Gruppera per spelare (summa score)
-    grouped = df.groupby(["player_id", "player_name"], dropna=False)["score"].sum().reset_index()
-    grouped = grouped.sort_values("score", ascending=False)
+    # Summera score per spelare
+    df_grouped = (
+        df.groupby(["player_id", "player_name"])
+        .agg({"score": "sum"})
+        .reset_index()
+        .sort_values("score", ascending=False)
+    )
 
-    if grouped.empty:
-        print(f"[{section}] ⚠️ Inga spelare med score hittades")
-        return {"status": "empty"}
+    if df_grouped.empty:
+        writer.log("[s_stats_top_performers_round] ⚠️ Inga poäng att visa")
+        writer.set_status("empty")
+        return
 
-    # Ta topp N
-    top_players = grouped.head(top_n)
-    print(f"[{section}] 🏆 Topp {top_n}:")
+    # Ta topp 5 spelare
+    top_players = df_grouped.head(5)
+
+    # Bygg text för sektionen
+    lines = []
     for _, row in top_players.iterrows():
-        print(f"   {row['player_name']} → {row['score']} poäng")
+        lines.append(f"{row['player_name']} – {row['score']} poäng")
 
-    # Bygg utdata (markdown + json)
-    md_lines = ["### Top Performing African Players this Round", ""]
-    for _, row in top_players.iterrows():
-        md_lines.append(f"- **{row['player_name']}**: {row['score']} points")
+    text = "Top performing African players this round:\n" + "\n".join(lines)
 
-    outputs = {
-        "status": "success",
-        "section": section,
-        "date": date,
-        "league": league,
-        "season": season,
-        "players": top_players.to_dict(orient="records"),
-        "markdown": "\n".join(md_lines)
-    }
+    # Skriv ut
+    writer.write(
+        content=text,
+        role=role_utils.resolve("storyteller"),
+        meta={"season": season, "league": league, "count": len(top_players)},
+    )
 
-    # Skriv utdata via utils
-    write_outputs(section, date, league, pod, path_scope, outputs)
-    print(f"[{section}] ✅ Klar – skrev topp {top_n} spelare")
+    writer.set_status("success")
+    writer.log(f"[s_stats_top_performers_round] ✅ Klar – {len(top_players)} spelare med i topplistan")
 
-    return outputs
+
+def main():
+    import argparse
+    from src.utils_args import add_common_args
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--league", required=True)
+    parser.add_argument("--season", required=True)
+    add_common_args(parser)
+
+    args = parser.parse_args()
+    writer = SectionWriter(args)
+    build(args, writer)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--section", required=True)
-    parser.add_argument("--date", required=True)
-    parser.add_argument("--league", required=True)
-    parser.add_argument("--pod", required=True)
-    parser.add_argument("--path-scope", required=True)
-    parser.add_argument("--season", required=True)
-    parser.add_argument("--top-n", type=int, default=3)
-
-    args = parser.parse_args()
-
-    build(
-        section=args.section,
-        date=args.date,
-        league=args.league,
-        pod=args.pod,
-        path_scope=args.path_scope,
-        season=args.season,
-        top_n=args.top_n
-    )
+    main()
