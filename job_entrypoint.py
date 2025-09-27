@@ -64,7 +64,9 @@ def build_command():
 def main():
     log("Startar job_entrypoint")
     export_secrets(os.environ.get("SECRETS_FILE", "/app/secrets/secret.json"))
-    cmd = build_command()
+
+    # Lägg till CLI-argumenten efter modulnamnet
+    cmd = build_command() + sys.argv[1:]
     log(f"Running: {' '.join(cmd)}")
     os.execvp(cmd[0], cmd)
 
