@@ -11,12 +11,13 @@ jobs:
       contents: read     # 👈 behövs för checkout
 
     env:
-      # 👇 Alla Azure-variabler som azure_blob.py behöver
-      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-      AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
-      AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-      # Om du istället använder SAS:
-      # BLOB_CONTAINER_SAS_URL: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+      # 🔑 Standard enligt AFP Best Practice
+      AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_CONTAINER }}
+      BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+      AZURE_CLIENT_ID:         ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID:         ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_SECRET:     ${{ secrets.AZURE_CLIENT_SECRET }}
 
     steps:
       - name: Checkout repo
