@@ -51,7 +51,7 @@ def main():
     parquet_bytes = df.to_parquet(index=False, engine="pyarrow")
 
     # Upload till Azure Blob
-    output_path = "warehouse/base/players_flat.parquet"
+    output_path = "warehouse/base/players_flat/{SEASON}/players_flat.parquet"
     azure_blob.put_bytes(
         container=container,
         blob_path=output_path,
