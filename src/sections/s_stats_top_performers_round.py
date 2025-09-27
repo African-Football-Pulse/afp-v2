@@ -3,7 +3,7 @@ import pandas as pd
 
 from src.storage import azure_blob
 from src.producer import role_utils   # ✅ rätt plats
-from src.utils_section import SectionWriter
+from src.sections.utils import SectionWriter
 from src.warehouse.utils_ids import normalize_ids
 from src.warehouse.utils_mapping import map_ids
 
