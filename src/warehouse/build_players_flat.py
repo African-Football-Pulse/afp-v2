@@ -21,6 +21,10 @@ def build():
     # 🔹 2. Gör om till DataFrame
     df_players = pd.DataFrame(master)
 
+    # 🔹 TEMP FIX: säkerställ att player_id alltid är sträng
+    if "player_id" in df_players.columns:
+        df_players["player_id"] = df_players["player_id"].astype(str)
+
     # 🔹 3. Sätt utdata-path
     output_path = f"warehouse/base/players_flat/{SEASON}/players_flat.parquet"
     print(f"[build_players_flat] 💾 Skriver till {output_path}")
@@ -30,7 +34,12 @@ def build():
     df_players.to_parquet(buffer, index=False)
     buffer.seek(0)
 
-    azure_blob.put_bytes(CONTAINER, output_path, buffer.getvalue(), content_type="application/octet-stream")
+    azure_blob.put_bytes(
+        CONTAINER,
+        output_path,
+        buffer.getvalue(),
+        content_type="application/octet-stream"
+    )
 
     print(f"[build_players_flat] ✅ Klar, {len(df_players)} spelare sparade → {output_path}")
 
