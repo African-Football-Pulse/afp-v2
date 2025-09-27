@@ -1,4 +1,3 @@
-# src/storage/azure_blob.py
 import os
 from datetime import datetime
 
@@ -13,10 +12,23 @@ def _client():
     """
     from urllib.parse import urlparse
     from azure.storage.blob import BlobServiceClient
+    from azure.core.pipeline.policies import HttpLoggingPolicy
+
+    def _disable_http_logging(client: BlobServiceClient):
+        """Stäng av verbose HTTP-loggar (headers, requests, responses)."""
+        try:
+            client._config.logging_policy = HttpLoggingPolicy(
+                log_request_body=False, log_response_body=False
+            )
+            client._config.logging_policy.allowed_header_names = []
+            client._config.logging_policy.allowed_query_params = []
+        except Exception:
+            pass
+        return client
 
     conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     if conn_str:
-        return BlobServiceClient.from_connection_string(conn_str)
+        return _disable_http_logging(BlobServiceClient.from_connection_string(conn_str))
 
     account = os.getenv("AZURE_STORAGE_ACCOUNT")
     key = os.getenv("AZURE_STORAGE_KEY")
@@ -31,26 +43,26 @@ def _client():
             raise RuntimeError("AZURE_STORAGE_ACCOUNT missing and could not be inferred from BLOB_CONTAINER_SAS_URL")
         account_url = f"https://{account}.blob.core.windows.net"
         if u.query:
-            return BlobServiceClient(account_url=account_url + "?" + u.query)
+            return _disable_http_logging(BlobServiceClient(account_url=account_url + "?" + u.query))
 
     if sas_token:
         sas_str = sas_token if sas_token.startswith("?") else f"?{sas_token}"
         if not account:
             raise RuntimeError("AZURE_STORAGE_ACCOUNT missing (required with AZURE_BLOB_SAS)")
         account_url = f"https://{account}.blob.core.windows.net"
-        return BlobServiceClient(account_url=account_url + sas_str)
+        return _disable_http_logging(BlobServiceClient(account_url=account_url + sas_str))
 
     if key:
         if not account:
             raise RuntimeError("AZURE_STORAGE_ACCOUNT missing (required with AZURE_STORAGE_KEY)")
         account_url = f"https://{account}.blob.core.windows.net"
-        return BlobServiceClient(account_url=account_url, credential=key)
+        return _disable_http_logging(BlobServiceClient(account_url=account_url, credential=key))
 
     from azure.identity import DefaultAzureCredential
     if not account:
         raise RuntimeError("AZURE_STORAGE_ACCOUNT missing (no SAS/connection string/key provided)")
     account_url = f"https://{account}.blob.core.windows.net"
-    return BlobServiceClient(account_url=account_url, credential=DefaultAzureCredential())
+    return _disable_http_logging(BlobServiceClient(account_url=account_url, credential=DefaultAzureCredential()))
 
 
 def put_bytes(container: str, blob_path: str, data: bytes, content_type: str = "application/octet-stream"):
@@ -72,7 +84,7 @@ def put_text(container: str, blob_path: str, text: str, content_type: str = "tex
 def get_text(container: str, blob_path: str) -> str:
     svc = _client()
     container_client = svc.get_container_client(container)
-    blob = container_client.get_blob_client(blob_path)   # ✅ fix
+    blob = container_client.get_blob_client(blob_path)
     return blob.download_blob().readall().decode("utf-8")
 
 
@@ -85,7 +97,7 @@ def get_json(container: str, blob_path: str):
 def exists(container: str, blob_path: str) -> bool:
     svc = _client()
     container_client = svc.get_container_client(container)
-    blob = container_client.get_blob_client(blob_path)   # ✅ fix
+    blob = container_client.get_blob_client(blob_path)
     return blob.exists()
 
 
@@ -104,10 +116,10 @@ def upload_json(container: str, blob_path: str, obj, content_type: str = "applic
     data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
     return put_bytes(container, blob_path, data, content_type)
 
+
 def get_bytes(container: str, blob_path: str) -> bytes:
     """Hämta ett blob-innehåll som bytes (utan decode)."""
     svc = _client()
     container_client = svc.get_container_client(container)
     blob = container_client.get_blob_client(blob_path)
     return blob.download_blob().readall()
-
