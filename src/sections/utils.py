@@ -56,7 +56,11 @@ def write_outputs(
     }
     azure_blob.upload_json(CONTAINER, manifest_path, manifest_obj)
 
-    print(f"[utils] Uploaded {manifest_path}")
+    print(
+        f"[utils] 📤 Wrote outputs for {section_code} → {base_path} "
+        f"(json={json_path}, md={md_path}, manifest={manifest_path}, status={status})"
+    )
+
     return {
         "section": section_code,
         "day": day,
