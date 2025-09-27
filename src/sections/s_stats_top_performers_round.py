@@ -6,61 +6,59 @@ from src.producer import role_utils
 from src.sections import utils
 from src.warehouse.utils_ids import normalize_ids
 
-
-def build(section_code, args, library):
-    day = args.date
+def build_section(section_code, args, library):
     league = args.league
+    day = args.date
+    lang = args.lang
     pod = args.pod
-    lang = args.lang if hasattr(args, "lang") else "en"
+    season = "2025-2026"  # TODO: kan göras dynamiskt om vi vill
 
-    # Ladda match performance-data
-    season = "2025-2026"
-    perf_path = f"warehouse/metrics/match_performance_africa/{season}/228.parquet"
-    perf_bytes = azure_blob.get_bytes("afp", perf_path)
-    if not perf_bytes:
-        return utils.write_outputs(section_code, day, league, lang, pod,
-                                   {"script": f"No performance data for {season}"}, "empty", {})
+    # 🎭 Persona
+    persona_id = role_utils.get_persona_block("storyteller")
 
-    df_perf = pd.read_parquet(pd.io.common.BytesIO(perf_bytes))
+    # 📥 Läs parquet-fil från warehouse
+    try:
+        path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
+        bytes_data = azure_blob.get_bytes(os.getenv("AZURE_STORAGE_CONTAINER", "afp"), path)
+        df = pd.read_parquet(pd.io.common.BytesIO(bytes_data))
+    except Exception as e:
+        print(f"[{section_code}] ⚠️ Kunde inte läsa parquet {path}: {e}")
+        payload = {"text": "No performance data available for this round."}
+        manifest = {"error": str(e)}
+        return utils.write_outputs(section_code, day, league, lang, pod, manifest, "empty", payload)
 
-    if df_perf.empty:
-        return utils.write_outputs(section_code, day, league, lang, pod,
-                                   {"script": "No performance data available for this round"}, "empty", {})
+    if df.empty:
+        print(f"[{section_code}] ⚠️ Tom DataFrame i {path}")
+        payload = {"text": "No performance data available for this round."}
+        manifest = {"info": "empty dataframe"}
+        return utils.write_outputs(section_code, day, league, lang, pod, manifest, "empty", payload)
 
-    # Välj top 3 spelare
-    df_top = df_perf.sort_values("score", ascending=False).head(3)
+    # 🎯 Bearbeta data: välj topp 5 spelare på score
+    df = df.sort_values("score", ascending=False).head(5)
 
-    items = []
-    for _, row in df_top.iterrows():
-        items.append({
-            "player": row.get("player_name"),
-            "club": row.get("club"),
-            "score": row.get("score"),
+    top_players = []
+    for _, row in df.iterrows():
+        top_players.append({
+            "player": row.get("player_name", "Unknown"),
+            "club": row.get("club", "Unknown"),
+            "score": row.get("score", 0),
+            "goals": row.get("goals", 0),
+            "assists": row.get("assists", 0),
+            "yellow_cards": row.get("yellow_cards", 0),
+            "red_cards": row.get("red_cards", 0),
         })
 
-    # Bygg text
+    # 📝 Text till sektionen
     text_lines = ["Top performing African players this round:"]
-    for item in items:
-        text_lines.append(f"- {item['player']} ({item['club']}) – {item['score']} pts")
-
+    for p in top_players:
+        text_lines.append(
+            f"- {p['player']} ({p['club']}) – Score {p['score']} "
+            f"(Goals: {p['goals']}, Assists: {p['assists']}, "
+            f"YC: {p['yellow_cards']}, RC: {p['red_cards']})"
+        )
     text = "\n".join(text_lines)
 
-    persona_id, persona_block = utils.get_persona_block("storyteller", pod)
+    payload = {"text": text, "players": top_players}
+    manifest = {"meta": {"persona": persona_id}, "source": path}
 
-    payload = {
-        "slug": "top_performers_round",
-        "title": "Top Performers of the Round",
-        "text": text,
-        "length_s": 45,
-        "sources": [perf_path],
-        "meta": {"persona": persona_id},
-        "type": "stats",
-        "model": "gpt",
-        "items": items,
-    }
-
-    manifest = {"script": text, "meta": {"persona": persona_id}}
-
-    return utils.write_outputs(
-        section_code, day, league, lang, pod, manifest, "success", payload
-    )
+    return utils.write_outputs(section_code, day, league, lang, pod, manifest, "success", payload)
