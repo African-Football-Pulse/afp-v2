@@ -2,6 +2,9 @@ import os
 import sys
 import json
 from datetime import datetime
+import logging
+logging.getLogger("azure").setLevel(logging.WARNING)
+logging.getLogger("azure.storage").setLevel(logging.ERROR)
 
 def log(msg: str):
     """Standardiserad loggning med timestamp"""
