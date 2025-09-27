@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+
 def _client():
     """
     Creates a BlobServiceClient using the best available credential, in order:
@@ -15,13 +16,12 @@ def _client():
     from azure.core.pipeline.policies import HttpLoggingPolicy
 
     def _disable_http_logging(client: BlobServiceClient):
-        """Stäng av verbose HTTP-loggar (headers, requests, responses)."""
+        """Ta bort Azure SDK:s HTTP-loggpolicy helt."""
         try:
-            client._config.logging_policy = HttpLoggingPolicy(
-                log_request_body=False, log_response_body=False
-            )
-            client._config.logging_policy.allowed_header_names = []
-            client._config.logging_policy.allowed_query_params = []
+            client._client._pipeline._impl_policies = [
+                p for p in client._client._pipeline._impl_policies
+                if not isinstance(p, HttpLoggingPolicy)
+            ]
         except Exception:
             pass
         return client
