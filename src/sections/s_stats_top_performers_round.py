@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 from src.storage import azure_blob
-from src.roles import role_utils
+from src.producer import role_utils   # ✅ rätt plats
 from src.utils_section import SectionWriter
 from src.warehouse.utils_ids import normalize_ids
 from src.warehouse.utils_mapping import map_ids
@@ -65,7 +65,7 @@ def build(args, writer: SectionWriter):
     # Skriv ut
     writer.write(
         content=text,
-        role=role_utils.resolve("storyteller"),
+        role=role_utils.resolve("storyteller"),  # ✅ rätt modul
         meta={"season": season, "league": league, "count": len(top_players)},
     )
 
