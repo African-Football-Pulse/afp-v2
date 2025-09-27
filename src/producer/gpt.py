@@ -45,9 +45,9 @@ def _assemble_messages(prompt_config: Dict[str, Any], ctx: Optional[Any], system
     persona_block = prompt_config.get("persona") or "news_anchor"
     extra_instructions = prompt_config.get("instructions") or ""
 
-    # Convert context to string safely
+    # Convert context to string safely (compact, only if DEBUG)
     ctx_str = ""
-    if ctx:
+    if ctx and DEBUG:
         if isinstance(ctx, (dict, list)):
             try:
                 ctx_str = json.dumps(ctx, ensure_ascii=False, indent=2)
@@ -83,10 +83,7 @@ def render_gpt(prompt_config: Dict[str, Any], ctx: Optional[Any], system_rules: 
     messages = _assemble_messages(prompt_config, ctx, system_rules)
 
     persona = prompt_config.get("persona", "news_anchor")
-    if DEBUG:
-        logger.info("Calling GPT with persona=%s and system_rules=%.50s", persona, system_rules)
-    else:
-        logger.info("Calling GPT with persona=%s", persona)
+    logger.info("Calling GPT with persona=%s", persona)
 
     try:
         resp = client.chat.completions.create(
