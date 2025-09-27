@@ -23,24 +23,25 @@ def build_section(args=None, **kwargs):
 
     results = []
     for sub_code, module_name in subsections:
+        print(f"[{section_code}] ▶️ Startar {sub_code}")
         try:
-            print(f"[{section_code}] ▶️ Importerar src.sections.{module_name} för {sub_code}")
             mod = importlib.import_module(f"src.sections.{module_name}")
-
-            # Viktigt: injicera rätt section för undersektionen
             setattr(args, "section", sub_code)
-
             sub_kwargs = {"season": "2025-2026", "league_id": league, "round_dates": []}
-            print(f"[{section_code}] ▶️ Kör {sub_code} med kwargs={sub_kwargs}")
             result = mod.build_section(args, **sub_kwargs)
 
-            print(
-                f"[{section_code}] ✅ {sub_code} returnerade {type(result)} "
-                f"med nycklar: {list(result.keys()) if isinstance(result, dict) else 'N/A'}"
-            )
-            results.append(result)
+            status = result.get("status", "unknown") if isinstance(result, dict) else "unknown"
+            path = result.get("path", "n/a") if isinstance(result, dict) else "n/a"
+
+            print(f"[{section_code}] ✅ {sub_code} klar – status={status}, path={path}")
+            results.append({"section": sub_code, "status": status, "path": path})
         except Exception as e:
             print(f"[{section_code}] ❌ Fel i {sub_code}: {e}")
+            results.append({"section": sub_code, "status": "error", "path": str(e)})
+
+    print("=== [driver] Sammanfattning ===")
+    for r in results:
+        print(f"{r['section']}: {r['status']} ({r['path']})")
 
     # Returnera driverns eget manifest (översikt)
     return utils.write_outputs(
@@ -51,5 +52,5 @@ def build_section(args=None, **kwargs):
         pod=pod,
         manifest=manifest,
         status="success",
-        payload={"subsections": [r for r in results if isinstance(r, dict)]},
+        payload={"subsections": results},
     )
