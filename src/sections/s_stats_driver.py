@@ -1,6 +1,18 @@
 import os
 import importlib
+import logging
 from src.sections import utils
+
+# -------------------------------------------------------
+# Logger setup (driver)
+# -------------------------------------------------------
+logger = logging.getLogger("driver")
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[driver] %(message)s")
+handler.setFormatter(formatter)
+logger.handlers = [handler]
+logger.propagate = False
+logger.setLevel(logging.INFO)
 
 
 def build_section(args=None, **kwargs):
@@ -23,7 +35,7 @@ def build_section(args=None, **kwargs):
 
     results = []
     for sub_code, module_name in subsections:
-        print(f"[{section_code}] ▶️ Startar {sub_code}")
+        logger.info("▶️ Startar %s", sub_code)
         try:
             mod = importlib.import_module(f"src.sections.{module_name}")
             setattr(args, "section", sub_code)
@@ -33,15 +45,15 @@ def build_section(args=None, **kwargs):
             status = result.get("status", "unknown") if isinstance(result, dict) else "unknown"
             path = result.get("path", "n/a") if isinstance(result, dict) else "n/a"
 
-            print(f"[{section_code}] ✅ {sub_code} klar – status={status}, path={path}")
+            logger.info("✅ %s klar – status=%s, path=%s", sub_code, status, path)
             results.append({"section": sub_code, "status": status, "path": path})
         except Exception as e:
-            print(f"[{section_code}] ❌ Fel i {sub_code}: {e}")
+            logger.error("❌ Fel i %s: %s", sub_code, e)
             results.append({"section": sub_code, "status": "error", "path": str(e)})
 
-    print("=== [driver] Sammanfattning ===")
+    logger.info("=== Sammanfattning ===")
     for r in results:
-        print(f"{r['section']}: {r['status']} ({r['path']})")
+        logger.info("%s: %s (%s)", r["section"], r["status"], r["path"])
 
     # Returnera driverns eget manifest (översikt)
     return utils.write_outputs(
