@@ -24,30 +24,16 @@ def build_section(section_code, args, library):
     perf_path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
     try:
         bytes_data = azure_blob.get_bytes(os.getenv("AZURE_STORAGE_CONTAINER", "afp"), perf_path)
+        df = pd.read_parquet(pd.io.common.BytesIO(bytes_data))
     except Exception as e:
         return utils.write_outputs(
-            section_code,
-            day,
-            league,
-            lang,
-            pod,
-            {"error": str(e)},
-            "empty",
-            {},
+            section_code, day, league, lang, pod, {"error": str(e)}, "empty", {}
         )
-
-    df = pd.read_parquet(pd.io.common.BytesIO(bytes_data))
 
     if df.empty:
         return utils.write_outputs(
-            section_code,
-            day,
-            league,
-            lang,
-            pod,
-            {"note": "No performance data available"},
-            "empty",
-            {},
+            section_code, day, league, lang, pod,
+            {"note": "No performance data available"}, "empty", {}
         )
 
     # Sortera efter score
@@ -62,7 +48,6 @@ def build_section(section_code, args, library):
         lines.append(f"- {row['player_name']} ({row['club']}): {row['score']} pts")
 
     text = "\n".join(lines)
-
     manifest = {"script": text, "meta": {"persona": persona_id}}
 
     return utils.write_outputs(
