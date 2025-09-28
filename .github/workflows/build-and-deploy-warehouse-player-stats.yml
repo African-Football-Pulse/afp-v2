@@ -51,6 +51,8 @@ jobs:
               --name "${{ env.ACA_JOB_NAME }}" \
               --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
               --image "$IMAGE_REF" \
+              --registry-server "${{ env.ACR_NAME }}.azurecr.io" \
+              --registry-identity system \
               --set-env-vars \
                 JOB_TYPE="${{ env.JOB_TYPE }}" \
                 BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url
