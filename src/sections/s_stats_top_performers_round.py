@@ -3,7 +3,7 @@ import pandas as pd
 from src.sections import utils
 from src.producer import gpt
 from src.producer import role_utils
-from src.storage import azure_blob
+from src.storage import azure_blobimport io
 
 
 def build_section(args=None, **kwargs):
@@ -32,7 +32,7 @@ def build_section(args=None, **kwargs):
     # 🔹 Läs in metrics parquet för vald liga & säsong
     container = os.getenv("AZURE_STORAGE_CONTAINER", "warehouse")
     blob_path = f"warehouse/metrics/match_performance_africa/{season}/{league_id}.parquet"
-    df = pd.read_parquet(azure_blob.get_bytes(container, blob_path))
+    df = pd.read_parquet(io.BytesIO(azure_blob.get_bytes(container, blob_path)))
 
     if df.empty:
         text = "No performance data available for this round."
