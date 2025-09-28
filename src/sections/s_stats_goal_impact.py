@@ -3,6 +3,7 @@ import io
 import pandas as pd
 from src.storage import azure_blob
 from src.sections import utils
+from src.producer.gpt import run_gpt
 
 def build_section(args=None, **kwargs):
     section_code = getattr(args, "section", "S.STATS.GOAL.IMPACT") if args else "S.STATS.GOAL.IMPACT"
@@ -32,18 +33,30 @@ def build_section(args=None, **kwargs):
         manifest = {"script": text, "meta": {"persona": persona_id}}
         return utils.write_outputs(section_code, day, league, lang, pod, manifest, "success", payload)
 
-    # ✅ Läs parquet som binär
+    # ✅ Läs parquet
     blob_bytes = azure_blob.get_bytes(container, blob_path)
     df = pd.read_parquet(io.BytesIO(blob_bytes))
 
     if df.empty:
         text = "No goal impact data available."
     else:
-        # Sortera på goal_contributions om den finns, annars goals
         sort_col = "goal_contributions" if "goal_contributions" in df.columns else "goals"
         top = df.sort_values(sort_col, ascending=False).head(5)
-        players = [f"{row['player_name']} ({row[sort_col]})" for _, row in top.iterrows()]
-        text = "Top African players by goal impact: " + ", ".join(players)
+
+        # Skapa en enkel summering som GPT får använda som input
+        summary_text = "\n".join(
+            [f"{row['player_name']} – {row[sort_col]} {sort_col}" for _, row in top.iterrows()]
+        )
+
+        instructions = (
+            f"Write a spoken-style summary in {lang}, focusing on the top African players "
+            f"by goal impact this season. Highlight their names and numbers, make it "
+            f"engaging but concise.\n\nData:\n{summary_text}"
+        )
+
+        prompt_config = {"persona": persona_id, "instructions": instructions}
+        gpt_output = run_gpt(prompt_config, {"goal_impact": top.to_dict(orient='records')})
+        text = gpt_output.strip() if gpt_output else "No goal impact commentary available."
 
     payload = {
         "slug": "stats_goal_impact",
@@ -53,7 +66,7 @@ def build_section(args=None, **kwargs):
         "sources": {"warehouse": "metrics"},
         "meta": {"persona": persona_id},
         "type": "stats",
-        "model": "stats",
+        "model": "gpt",
         "items": [],
     }
     manifest = {"script": text, "meta": {"persona": persona_id}}
