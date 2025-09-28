@@ -5,17 +5,6 @@ on:
 
 env:
   AZURE_RESOURCE_GROUP: afp-rg
-  ACR_NAME: afpacr
-  IMAGE_NAME: afp-warehouse
-  IMAGE_TAG: gh-1
-  ACA_JOB_NAME: afp-warehouse-player-stats-job
-  JOB_TYPE: src.warehouse.build_player_match_statsname: Build + Deploy Warehouse Player Stats (ACA)
-
-on:
-  workflow_dispatch:
-
-env:
-  AZURE_RESOURCE_GROUP: afp-rg
   ACA_JOB_NAME: afp-warehouse-player-stats-job
   ACR_NAME: afpacr
   IMAGE_NAME: afp-warehouse
@@ -62,58 +51,3 @@ jobs:
             --set-env-vars \
               JOB_TYPE="${{ env.JOB_TYPE }}" \
               BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url
-
-  ACA_ENVIRONMENT: ${{ secrets.AZURE_CONTAINER_ENVIRONMENT }}
-
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Azure login (federated)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Build image ref
-        run: |
-          echo "IMAGE_REF=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
-          echo "IMAGE_REF=$IMAGE_REF"
-
-      - name: Login to ACR
-        run: az acr login -n ${{ env.ACR_NAME }}
-
-      - name: Docker build & push
-        run: |
-          docker build -t "$IMAGE_REF" -f Dockerfile .
-          docker push "$IMAGE_REF"
-
-      - name: Create or Replace ACA Job (image + env + secrets)
-        run: |
-          az containerapp job create \
-            --name "${{ env.ACA_JOB_NAME }}" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --environment "${{ env.ACA_ENVIRONMENT }}" \
-            --trigger-type Manual \
-            --replica-timeout 1800 \
-            --replica-retry-limit 3 \
-            --replica-completion-count 1 \
-            --parallelism 1 \
-            --cpu 1.0 --memory 2.0Gi \
-            --image "$IMAGE_REF" \
-            --registry-server "${{ env.ACR_NAME }}.azurecr.io" \
-            --registry-identity system \
-            --env-vars \
-              JOB_TYPE="${{ env.JOB_TYPE }}" \
-              BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url \
-            --secrets \
-              blob-container-sas-url="${{ secrets.BLOB_CONTAINER_SAS }}" \
-            --replace
