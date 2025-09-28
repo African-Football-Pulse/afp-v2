@@ -83,7 +83,7 @@ from the latest round in the {league} ({season}). Use the following stats:
 
     return utils.write_outputs(
         section_code,
-        f"sections/{section_code}/{day}/{league_key}/{pod}",
+        f"sections/{section_code}/{day}/{league_id}/{pod}",
         text,
         payload,
         manifest,
