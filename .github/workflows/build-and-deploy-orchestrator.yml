@@ -9,6 +9,8 @@ env:
   ACR_NAME: afpacr
   IMAGE_NAME: afp-orchestrator
   IMAGE_TAG: gh-1
+  SECRET_BLOB_SAS_NAME: blob-container-sas-url
+  JOB_TYPE: orchestrator
 
 jobs:
   build-and-deploy:
@@ -41,11 +43,12 @@ jobs:
           docker build -t "$IMAGE_REF" -f Dockerfile.orchestrator .
           docker push "$IMAGE_REF"
 
-      - name: Update ACA Job (image)
+      - name: Update ACA Job (image + env)
         run: |
           az containerapp job update \
             --name "${{ env.ACA_JOB_NAME }}" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --image "$IMAGE_REF" \
-            --trigger-type Schedule \
-            --cron-expression "0 6 * * *"
+            --set-env-vars \
+              JOB_TYPE="${{ env.JOB_TYPE }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }}
