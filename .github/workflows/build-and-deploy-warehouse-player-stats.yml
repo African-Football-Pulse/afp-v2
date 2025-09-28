@@ -11,6 +11,7 @@ env:
   SECRET_BLOB_SAS_NAME: blob-container-sas-url
   ACA_JOB_NAME: afp-warehouse-player-stats
   JOB_TYPE: src.warehouse.build_player_match_stats
+  ACA_ENVIRONMENT: ${{ secrets.AZURE_CONTAINER_ENVIRONMENT }}
 
 jobs:
   build-and-deploy:
@@ -59,7 +60,7 @@ jobs:
             az containerapp job create \
               --name "${{ env.ACA_JOB_NAME }}" \
               --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-              --environment "${{ secrets.AZURE_CONTAINER_ENVIRONMENT }}" \
+              --environment "${{ env.ACA_ENVIRONMENT }}" \
               --trigger-type Manual \
               --replica-timeout 1800 \
               --replica-retry-limit 3 \
