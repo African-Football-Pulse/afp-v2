@@ -1,10 +1,10 @@
 import os
 import pandas as pd
+import io
 from src.sections import utils
 from src.producer import gpt
 from src.producer import role_utils
 from src.storage import azure_blob
-import io
 
 
 def build_section(args=None, **kwargs):
@@ -40,16 +40,15 @@ def build_section(args=None, **kwargs):
     else:
         # Filtrera på round_dates om de skickas in
         round_dates = kwargs.get("round_dates", [])
-        if round_dates:
+        if round_dates and "date" in df.columns:
             df = df[df["date"].isin(round_dates)]
 
-        # Sortera efter rating och ta top 5
+        # Sortera efter score och ta top 5
         df_sorted = df.sort_values(by="score", ascending=False).head(5)
-
 
         # Bygg sammanfattning för GPT
         top_players = [
-            f"{row['player_name']} ({row['club']}) rating {row['rating']}"
+            f"{row['player_name']} ({row['team']}) score {row['score']}"
             for _, row in df_sorted.iterrows()
         ]
         summary = "; ".join(top_players)
