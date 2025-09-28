@@ -9,7 +9,7 @@ env:
   IMAGE_NAME: afp-warehouse
   IMAGE_TAG: gh-1
   SECRET_BLOB_SAS_NAME: blob-container-sas-url
-  ACA_JOB_NAME: afp-warehouse-player-stats
+  ACA_JOB_NAME: afp-warehouse-player-stats-job
   JOB_TYPE: src.warehouse.build_player_match_stats
   ACA_ENVIRONMENT: ${{ secrets.AZURE_CONTAINER_ENVIRONMENT }}
 
