@@ -1,18 +1,15 @@
 name: Build + Deploy Collect (ACA)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # Endast manuell körning från GitHub
 
 env:
-  # ---- Hårdkodade standardvärden (ändra här vid behov) ----
   AZURE_RESOURCE_GROUP: afp-rg
   ACA_JOB_NAME: afp-collect-job
   ACR_NAME: afpacr
   IMAGE_NAME: afp-runner
   IMAGE_TAG: gh-4
-  # hemligheter i ACA: referenser till KeyVault/Secrets i miljön
   SECRET_BLOB_SAS_NAME: blob-container-sas-url
-  # env till din app
   BLOB_PREFIX: collector/
   JOB_TYPE: collect
 
@@ -20,7 +17,7 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write        # krävs för federerad inloggning
+      id-token: write
       contents: read
 
     steps:
@@ -57,9 +54,3 @@ jobs:
               JOB_TYPE="${{ env.JOB_TYPE }}" \
               BLOB_PREFIX="${{ env.BLOB_PREFIX }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }}
-
-      - name: Start job run
-        run: |
-          az containerapp job start \
-            --name "${{ env.ACA_JOB_NAME }}" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
