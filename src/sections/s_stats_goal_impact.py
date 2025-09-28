@@ -1,4 +1,5 @@
 import os
+import io
 import pandas as pd
 from src.storage import azure_blob
 from src.sections import utils
@@ -12,7 +13,6 @@ def build_section(args=None, **kwargs):
 
     persona_id, _ = utils.get_persona_block("expert", pod)
 
-    # ✅ Input parquet (kan ändras vid behov)
     container = "afp"
     blob_path = "warehouse/metrics/goals_assists_africa.parquet"
 
@@ -32,14 +32,17 @@ def build_section(args=None, **kwargs):
         manifest = {"script": text, "meta": {"persona": persona_id}}
         return utils.write_outputs(section_code, day, league, lang, pod, manifest, "success", payload)
 
-    # ✅ Läs in data
-    df = pd.read_parquet(azure_blob.get_text(container, blob_path))
+    # ✅ Läs parquet som binär
+    blob_bytes = azure_blob.get_bytes(container, blob_path)
+    df = pd.read_parquet(io.BytesIO(blob_bytes))
+
     if df.empty:
         text = "No goal impact data available."
     else:
-        # Förenklad textgenerering — kan utökas
-        top = df.sort_values("goal_contributions", ascending=False).head(5)
-        players = [f"{row['player_name']} ({row['goal_contributions']})" for _, row in top.iterrows()]
+        # Sortera på goal_contributions om den finns, annars goals
+        sort_col = "goal_contributions" if "goal_contributions" in df.columns else "goals"
+        top = df.sort_values(sort_col, ascending=False).head(5)
+        players = [f"{row['player_name']} ({row[sort_col]})" for _, row in top.iterrows()]
         text = "Top African players by goal impact: " + ", ".join(players)
 
     payload = {
@@ -50,7 +53,7 @@ def build_section(args=None, **kwargs):
         "sources": {"warehouse": "metrics"},
         "meta": {"persona": persona_id},
         "type": "stats",
-        "model": "static",
+        "model": "stats",
         "items": [],
     }
     manifest = {"script": text, "meta": {"persona": persona_id}}
