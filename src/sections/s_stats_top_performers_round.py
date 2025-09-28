@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from src.sections import utils
-from src.producer import gpt, role_utils
+from src.producer import gpt
 from src.storage import azure_blob
 
 def build_section(args=None, **kwargs):
@@ -15,11 +15,10 @@ def build_section(args=None, **kwargs):
     # Resolve persona
     persona_id, _ = utils.get_persona_block("storyteller", pod)
 
-    # Hämta league_id (tex 228 för Premier League)
-    from src.warehouse.utils_ids import LEAGUE_IDS
-    league_id = LEAGUE_IDS.get(league)
+    # Hämta league_id via sections-utils
+    league_id = utils.get_league_id(league)
     if not league_id:
-        raise ValueError("league_id is required for Top Performers Round section")
+        raise ValueError(f"league_id could not be resolved for league={league}")
 
     # Hämta parquet från Azure
     container = os.getenv("AZURE_STORAGE_CONTAINER")
