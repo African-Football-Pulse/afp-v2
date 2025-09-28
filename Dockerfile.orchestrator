@@ -1,0 +1,11 @@
+FROM mcr.microsoft.com/azure-cli:2.63.0
+
+# Installera Python (för vårt script)
+RUN apk add --no-cache python3 py3-pip
+WORKDIR /app
+
+# Kopiera in orchestrator-scriptet
+COPY src/orchestrator/run_orchestrator.py /app/run_orchestrator.py
+
+# Default command
+CMD ["python3", "/app/run_orchestrator.py"]
