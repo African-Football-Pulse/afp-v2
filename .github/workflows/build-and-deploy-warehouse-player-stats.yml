@@ -53,9 +53,7 @@ jobs:
               --image "$IMAGE_REF" \
               --set-env-vars \
                 JOB_TYPE="${{ env.JOB_TYPE }}" \
-                BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url \
-              --secrets \
-                blob-container-sas-url="${{ secrets.BLOB_CONTAINER_SAS }}"
+                BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url
           else
             echo "✨ Creating new job..."
             az containerapp job create \
