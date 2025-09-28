@@ -59,7 +59,7 @@ from the latest round in the {league} ({season}). Use the following stats:
 
 {summary}
 """
-        text = gpt.complete(prompt, role="storyteller")
+        text = gpt.generate(prompt, role="storyteller")
 
     payload = {
         "slug": "stats_top_performers_round",
