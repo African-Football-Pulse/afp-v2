@@ -14,9 +14,17 @@ def main():
     container = "afp"
     matches_prefix = "stats/"
 
-    # Optional filters
+    # ✅ Require filters
     filter_season = os.environ.get("SEASON")
     filter_league = os.environ.get("LEAGUE")
+
+    if not filter_season or not filter_league:
+        raise RuntimeError(
+            "❌ Must set SEASON and LEAGUE environment variables "
+            "(example: SEASON=2024-2025 LEAGUE=premier_league)"
+        )
+
+    print(f"[build_matches_events_flat] Starting → season={filter_season}, league={filter_league}")
 
     all_files = azure_blob.list_prefix(container, matches_prefix)
 
@@ -28,15 +36,15 @@ def main():
         and not f.endswith("manifest.json")
     ]
 
-    if filter_season:
-        match_files = [f for f in match_files if f.split("/")[1] == filter_season]
-    if filter_league:
-        match_files = [f for f in match_files if f.split("/")[2] == filter_league]
+    match_files = [f for f in match_files if f.split("/")[1] == filter_season]
+    match_files = [f for f in match_files if f.split("/")[2] == filter_league]
 
     total = len(match_files)
     if total == 0:
         print("[build_matches_events_flat] ⚠️ No match files found with given filters")
         return
+
+    print(f"[build_matches_events_flat] Found {total} match files to process")
 
     # Samla rader per (season, league_id)
     matches_by_group = defaultdict(list)
