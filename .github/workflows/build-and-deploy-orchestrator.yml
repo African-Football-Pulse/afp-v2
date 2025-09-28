@@ -38,7 +38,7 @@ jobs:
 
       - name: Docker build & push
         run: |
-          docker build -t "$IMAGE_REF" -f Dockerfile .
+          docker build -t "$IMAGE_REF" -f Dockerfile.orchestrator .
           docker push "$IMAGE_REF"
 
       - name: Update ACA Job (image)
