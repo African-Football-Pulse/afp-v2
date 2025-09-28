@@ -1,8 +1,10 @@
 import os
 import pandas as pd
+
 from src.sections import utils
-from src.producer import gpt
+from src.producer import gpt, role_utils
 from src.storage import azure_blob
+
 
 def build_section(args=None, **kwargs):
     section_code = getattr(args, "section", "S.STATS.TOP.PERFORMERS.ROUND")
@@ -12,65 +14,51 @@ def build_section(args=None, **kwargs):
     lang = getattr(args, "lang", "en")
     pod = getattr(args, "pod", "default_pod")
 
-    # Resolve persona
-    persona_id, _ = utils.get_persona_block("storyteller", pod)
+    persona_id, _ = role_utils.resolve_role("storyteller", pod)
 
-    # Hämta league_id via sections-utils
-    league_id = utils.get_league_id(league)
-    if not league_id:
-        raise ValueError(f"league_id could not be resolved for league={league}")
+    container = os.getenv("AZURE_CONTAINER", "afp")
+    # 🔑 Bygg sökvägen på samma sätt som goals_assists_africa gör
+    blob_path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
 
-    # Hämta parquet från Azure
-    container = os.getenv("AZURE_STORAGE_CONTAINER")
-    blob_path = f"warehouse/metrics/match_performance_africa/{season}/{league_id}.parquet"
+    # 📥 Läs parquet från Azure
     df = pd.read_parquet(azure_blob.get_bytes(container, blob_path))
 
-    # Säkerställ att kolumner finns
-    for col in ["player_name", "score"]:
-        if col not in df.columns:
-            raise KeyError(f"Missing required column: {col}")
+    # Lite sanity check: ta toppspelare baserat på mål+assist
+    if "goals" in df.columns and "assists" in df.columns:
+        df["contributions"] = df["goals"].fillna(0) + df["assists"].fillna(0)
+    else:
+        df["contributions"] = 0
 
-    # Ta de fem bästa spelarna
     top_players = (
-        df.sort_values("score", ascending=False)
-          .head(5)[["player_name", "score"]]
-          .to_dict(orient="records")
+        df.groupby("player_name")["contributions"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(5)
+        .reset_index()
     )
 
-    # Skapa prompt
-    players_str = ", ".join([f"{p['player_name']} ({p['score']})" for p in top_players])
-    prompt = (
-        f"Highlight the top performers of the round in the {league.replace('_', ' ').title()} "
-        f"for African players in the {season} season. "
-        f"Focus on their match performance scores. Here are the top players: {players_str}"
+    # 📝 Prompt för GPT
+    players_text = ", ".join(
+        [f"{row.player_name} ({row.contributions})" for _, row in top_players.iterrows()]
     )
+    prompt = f"Write a short football commentary about the top performers this round: {players_text}"
 
-    # GPT genererar text
-    text = gpt.render_gpt(prompt, role=persona_id)
+    text = gpt.run_gpt(prompt, role="storyteller")
 
-    # Bygg payload och manifest
     payload = {
         "slug": "stats_top_performers_round",
-        "title": "Top Performers of the Round",
+        "title": "Top Performers This Round",
         "text": text,
         "length_s": int(round(len(text.split()) / 2.6)),
         "sources": {"warehouse": blob_path},
         "meta": {"persona": persona_id},
         "type": "stats",
-        "model": "gpt-4",
-        "items": top_players,
+        "model": "gpt",
+        "items": top_players.to_dict(orient="records"),
     }
+
     manifest = {"script": text, "meta": {"persona": persona_id}}
 
-    # Skriv ut till Azure + lokalt
-    outdir = f"sections/{section_code}/{day}/{league}/{pod}"
-    utils.write_outputs(
-        section_code,
-        outdir,
-        md_text=text,
-        json_data=payload,
-        manifest=manifest,
-        status="success",
+    return utils.write_outputs(
+        section_code, league, season, day, pod, payload, manifest, lang
     )
-
-    return payload
