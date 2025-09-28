@@ -43,35 +43,24 @@ jobs:
           docker build -t "$IMAGE_REF" -f Dockerfile .
           docker push "$IMAGE_REF"
 
-      - name: Create or Update ACA Job (image + env + secrets)
+      - name: Create or Replace ACA Job (image + env + secrets)
         run: |
-          if az containerapp job show --name "${{ env.ACA_JOB_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" > /dev/null 2>&1; then
-            echo "🔄 Updating existing job..."
-            az containerapp job update \
-              --name "${{ env.ACA_JOB_NAME }}" \
-              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-              --image "$IMAGE_REF" \
-              --set-env-vars \
-                JOB_TYPE="${{ env.JOB_TYPE }}" \
-                BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url
-          else
-            echo "✨ Creating new job..."
-            az containerapp job create \
-              --name "${{ env.ACA_JOB_NAME }}" \
-              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-              --environment "${{ env.ACA_ENVIRONMENT }}" \
-              --trigger-type Manual \
-              --replica-timeout 1800 \
-              --replica-retry-limit 3 \
-              --replica-completion-count 1 \
-              --parallelism 1 \
-              --cpu 1.0 --memory 2.0Gi \
-              --image "$IMAGE_REF" \
-              --registry-server "${{ env.ACR_NAME }}.azurecr.io" \
-              --registry-identity system \
-              --env-vars \
-                JOB_TYPE="${{ env.JOB_TYPE }}" \
-                BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url \
-              --secrets \
-                blob-container-sas-url="${{ secrets.BLOB_CONTAINER_SAS }}"
-          fi
+          az containerapp job create \
+            --name "${{ env.ACA_JOB_NAME }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --environment "${{ env.ACA_ENVIRONMENT }}" \
+            --trigger-type Manual \
+            --replica-timeout 1800 \
+            --replica-retry-limit 3 \
+            --replica-completion-count 1 \
+            --parallelism 1 \
+            --cpu 1.0 --memory 2.0Gi \
+            --image "$IMAGE_REF" \
+            --registry-server "${{ env.ACR_NAME }}.azurecr.io" \
+            --registry-identity system \
+            --env-vars \
+              JOB_TYPE="${{ env.JOB_TYPE }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url \
+            --secrets \
+              blob-container-sas-url="${{ secrets.BLOB_CONTAINER_SAS }}" \
+            --replace
