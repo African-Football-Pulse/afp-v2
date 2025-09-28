@@ -79,13 +79,8 @@ from the latest round in the {league} ({season}). Use the following stats:
 
     manifest = {"script": text, "meta": {"persona": persona_id}}
 
-
-
     return utils.write_outputs(
-        section_code,
-        f"sections/{section_code}/{day}/{league_id}/{pod}",
-        text,
-        payload,
-        manifest,
-        status="success",
+        section_code, day, league, lang, pod, manifest, "success", payload
     )
+
+    
