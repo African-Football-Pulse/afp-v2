@@ -1,55 +1,74 @@
 import os
 import pandas as pd
-
-from src.storage import azure_blob
-from src.producer import role_utils
 from src.sections import utils
-from src.warehouse.utils_ids import normalize_ids
+from src.producer import gpt
+from src.storage import azure_blob
 
 
-def build_section(section_code, args, library):
-    """
-    Top performing African players in the latest round.
-    Data hämtas från warehouse/metrics/match_performance_africa.
-    """
-
-    # Parametrar
-    day = args.date
-    league = args.league
+def build_section(args=None, **kwargs):
+    section_code = getattr(args, "section", "S.STATS.TOP.PERFORMERS.ROUND")
+    league = getattr(args, "league", os.getenv("LEAGUE", "premier_league"))
+    season = getattr(args, "season", os.getenv("SEASON", "2025-2026"))
+    day = getattr(args, "date", os.getenv("DATE", "unknown"))
     lang = getattr(args, "lang", "en")
-    pod = getattr(args, "pod", "_")
-    season = os.getenv("SEASON", "2025-2026")
+    pod = getattr(args, "pod", "default_pod")
 
-    # Bygg sökväg till parquet
-    perf_path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
-    try:
-        bytes_data = azure_blob.get_bytes(os.getenv("AZURE_STORAGE_CONTAINER", "afp"), perf_path)
-        df = pd.read_parquet(pd.io.common.BytesIO(bytes_data))
-    except Exception as e:
-        return utils.write_outputs(
-            section_code, day, league, lang, pod, {"error": str(e)}, "empty", {}
-        )
+    persona_id, _ = utils.get_persona_block("storyteller", pod)
+
+    # 🔹 Läs in data från metrics (match performance)
+    container = os.getenv("AZURE_STORAGE_CONTAINER", "warehouse")
+    blob_path = f"warehouse/metrics/match_performance_africa/{season}/{utils.league_to_id(league)}.parquet"
+    df = pd.read_parquet(azure_blob.get_bytes(container, blob_path))
 
     if df.empty:
-        return utils.write_outputs(
-            section_code, day, league, lang, pod,
-            {"note": "No performance data available"}, "empty", {}
-        )
+        text = "No performance data available for this round."
+    else:
+        # 🔹 Begränsa till senaste runda om round_dates finns
+        round_dates = kwargs.get("round_dates", [])
+        if round_dates:
+            df = df[df["date"].isin(round_dates)]
 
-    # Sortera efter score
-    top_players = df.sort_values("score", ascending=False).head(5)
+        # 🔹 Sortera på rating eller annan prestandamått
+        df_sorted = df.sort_values(by="rating", ascending=False).head(5)
 
-    # Persona
-    persona_id = role_utils.resolve_role("storyteller")
+        # 🔹 Förbered sammanfattning
+        top_players = [
+            f"{row['player_name']} ({row['club']}) rating {row['rating']}"
+            for _, row in df_sorted.iterrows()
+        ]
+        summary = "; ".join(top_players)
 
-    # Bygg text
-    lines = ["Top performing African players this round:"]
-    for _, row in top_players.iterrows():
-        lines.append(f"- {row['player_name']} ({row['club']}): {row['score']} pts")
+        # 🔹 Skicka till GPT för textgenerering
+        prompt = f"""
+Write a short, engaging sports commentary in {lang} about the top 5 African players
+from the latest round in the {league} ({season}). Use the following stats:
 
-    text = "\n".join(lines)
+{summary}
+"""
+        text = gpt.complete(prompt, role="storyteller")
+
+    payload = {
+        "slug": "stats_top_performers_round",
+        "title": "Top Performers This Round",
+        "text": text,
+        "length_s": int(round(len(text.split()) / 2.6)),
+        "sources": {"warehouse": blob_path},
+        "meta": {"persona": persona_id},
+        "type": "stats",
+        "model": "gpt",
+        "items": [],
+    }
+
     manifest = {"script": text, "meta": {"persona": persona_id}}
 
-    return utils.write_outputs(
-        section_code, day, league, lang, pod, manifest, "success", top_players.to_dict()
-    )
+    return {
+        "section": section_code,
+        "day": day,
+        "league": league,
+        "status": "success",
+        "lang": lang,
+        "pod": pod,
+        "path": f"sections/{section_code}/{day}/{league}/{pod}",
+        "manifest": manifest,
+        "payload": payload,
+    }
