@@ -33,26 +33,30 @@ def build_section(args=None, **kwargs):
     parquet_bytes = azure_blob.get_bytes(container, blob_path)
     df = pd.read_parquet(io.BytesIO(parquet_bytes))
 
-    # enkel ranking: topp 5 spelare efter rating (om kolumn finns)
-    if "rating" in df.columns:
-        top_df = df.sort_values("rating", ascending=False).head(5)
-    else:
-        # fallback: sortera på mål om rating saknas
-        top_df = df.sort_values("goals", ascending=False).head(5)
+    if df.empty:
+        raise ValueError(f"No data found in {blob_path}")
+
+    # summera score per spelare
+    grouped = (
+        df.groupby(["player_id", "player_name", "team"], dropna=False)["score"]
+        .sum()
+        .reset_index()
+    )
+
+    # topp 5 baserat på score
+    top_df = grouped.sort_values("score", ascending=False).head(5)
 
     performers = []
     for _, row in top_df.iterrows():
         performers.append(
             {
                 "player_name": row.get("player_name", "Unknown"),
-                "club": row.get("club", "Unknown"),
-                "rating": row.get("rating", None),
-                "goals": row.get("goals", 0),
-                "assists": row.get("assists", 0),
+                "team": row.get("team", "Unknown"),
+                "score": row.get("score", 0),
             }
         )
 
-    # generera text via GPT
+    # GPT prompt
     role = role_utils.resolve_role("storyteller")
     prompt = (
         f"Highlight the top performers of the round in the {league_key.replace('_',' ').title()} "
