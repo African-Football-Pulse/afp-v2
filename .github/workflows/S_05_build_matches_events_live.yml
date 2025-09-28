@@ -1,30 +1,52 @@
-name: S_05_build_matches_events_live
+name: S_05 Build Matches + Events Live
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * MON"   # måndag kl 06 UTC → varje vecka
+    inputs:
+      season:
+        description: "Vilken säsong ska köras (ex. 2024-2025)"
+        required: true
+      league:
+        description: "Vilken liga ska köras (ex. premier_league)"
+        required: true
 
 jobs:
   build-matches-events-live:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write    # 👈 krävs för OIDC (azure/login@v2)
+      contents: read     # 👈 behövs för checkout
+
+    env:
+      # Azure-variabler för azure_blob.py
+      AZURE_STORAGE_ACCOUNT:   ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+      BLOB_CONTAINER_SAS_URL:  ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+      # Inputs till Python-scriptet
+      SEASON: ${{ github.event.inputs.season }}
+      LEAGUE: ${{ github.event.inputs.league }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run build_matches_events_live
-        env:
-          JOB_TYPE: src.warehouse.build_matches_events_live
-          SECRETS_FILE: /home/runner/work/afp-v2/secrets/secret.json
-          SEASON: "2025-2026"
-          LEAGUE_ID: "228"
-          DAYS: "7"
         run: |
-          python -m src.job_entrypoint
+          python -m src.warehouse.live.build_matches_events_flat
