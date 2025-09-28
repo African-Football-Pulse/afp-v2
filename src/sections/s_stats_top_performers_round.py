@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 from src.sections import utils
-from src.producer import gpt, role_utils
+from src.producer import gpt
 from src.storage import azure_blob
 
 
@@ -14,21 +14,21 @@ def build_section(args=None, **kwargs):
     lang = getattr(args, "lang", "en")
     pod = getattr(args, "pod", "default_pod")
 
-    persona_id, _ = role_utils.resolve_role("storyteller", pod)
+    # ✅ Hämta persona på samma sätt som de andra sektionerna
+    persona_id, _ = utils.get_persona_block("storyteller", pod)
 
     container = os.getenv("AZURE_CONTAINER", "afp")
-    # 🔑 Bygg sökvägen på samma sätt som goals_assists_africa gör
     blob_path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
 
     # 📥 Läs parquet från Azure
     df = pd.read_parquet(azure_blob.get_bytes(container, blob_path))
 
-    # Lite sanity check: ta toppspelare baserat på mål+assist
-    if "goals" in df.columns and "assists" in df.columns:
-        df["contributions"] = df["goals"].fillna(0) + df["assists"].fillna(0)
-    else:
-        df["contributions"] = 0
+    # Bygg contributions (fallback om kolumner saknas)
+    goals = df["goals"] if "goals" in df.columns else 0
+    assists = df["assists"] if "assists" in df.columns else 0
+    df["contributions"] = goals.fillna(0) + assists.fillna(0)
 
+    # Topp 5 spelare
     top_players = (
         df.groupby("player_name")["contributions"]
         .sum()
@@ -37,11 +37,11 @@ def build_section(args=None, **kwargs):
         .reset_index()
     )
 
-    # 📝 Prompt för GPT
+    # 📝 GPT-prompt
     players_text = ", ".join(
         [f"{row.player_name} ({row.contributions})" for _, row in top_players.iterrows()]
     )
-    prompt = f"Write a short football commentary about the top performers this round: {players_text}"
+    prompt = f"Give a lively commentary about the top African performers this round: {players_text}"
 
     text = gpt.run_gpt(prompt, role="storyteller")
 
