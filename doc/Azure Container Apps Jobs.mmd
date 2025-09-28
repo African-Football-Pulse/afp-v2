@@ -1,12 +1,21 @@
 flowchart TD
-    A[Collect (ACA Job, cron)] --> B[Warehouse Live (ACA Job)]
-    B --> C[Produce (ACA Job)]
-    C --> D[Assemble (ACA Job)]
-    D --> E[Render (ACA Job)]
-    E --> F[Mix (ACA Job)]
-    F --> G[Publish (ACA Job)]
 
-    subgraph "Azure Container Apps Jobs"
+    A[Collect (ACA Job, cron)]
+    B[Warehouse Live (ACA Job)]
+    C[Produce (ACA Job)]
+    D[Assemble (ACA Job)]
+    E[Render (ACA Job)]
+    F[Mix (ACA Job)]
+    G[Publish (ACA Job)]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+
+    subgraph AzureContainerAppsJobs
         A
         B
         C
@@ -15,19 +24,3 @@ flowchart TD
         F
         G
     end
-
-    classDef collect fill:#4caf50,stroke:#333,stroke-width:2px,color:#fff
-    classDef warehouse fill:#2196f3,stroke:#333,stroke-width:2px,color:#fff
-    classDef produce fill:#9c27b0,stroke:#333,stroke-width:2px,color:#fff
-    classDef assemble fill:#ff9800,stroke:#333,stroke-width:2px,color:#fff
-    classDef render fill:#795548,stroke:#333,stroke-width:2px,color:#fff
-    classDef mix fill:#607d8b,stroke:#333,stroke-width:2px,color:#fff
-    classDef publish fill:#f44336,stroke:#333,stroke-width:2px,color:#fff
-
-    class A collect
-    class B warehouse
-    class C produce
-    class D assemble
-    class E render
-    class F mix
-    class G publish
