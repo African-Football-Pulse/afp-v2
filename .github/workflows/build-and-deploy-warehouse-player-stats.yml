@@ -58,7 +58,6 @@ jobs:
                 blob-container-sas-url="${{ secrets.BLOB_CONTAINER_SAS }}"
           else
             echo "✨ Creating new job..."
-      
             az containerapp job create \
               --name "${{ env.ACA_JOB_NAME }}" \
               --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
@@ -70,6 +69,8 @@ jobs:
               --parallelism 1 \
               --cpu 1.0 --memory 2.0Gi \
               --image "$IMAGE_REF" \
+              --registry-server "${{ env.ACR_NAME }}.azurecr.io" \
+              --registry-identity system \
               --env-vars \
                 JOB_TYPE="${{ env.JOB_TYPE }}" \
                 BLOB_CONTAINER_SAS_URL=secretref:blob-container-sas-url \
