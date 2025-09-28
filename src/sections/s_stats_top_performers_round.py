@@ -1,4 +1,5 @@
 import os
+import io
 import pandas as pd
 from src.sections import utils
 from src.producer import gpt, role_utils
@@ -28,8 +29,9 @@ def build_section(args=None, **kwargs):
     container = os.getenv("AZURE_CONTAINER", "afp-data")
     blob_path = f"warehouse/metrics/match_performance_africa/{season}/{league_id}.parquet"
 
-    # läs parquet från Azure
-    df = pd.read_parquet(azure_blob.get_bytes(container, blob_path))
+    # ✅ läs parquet via BytesIO
+    parquet_bytes = azure_blob.get_bytes(container, blob_path)
+    df = pd.read_parquet(io.BytesIO(parquet_bytes))
 
     # enkel ranking: topp 5 spelare efter rating (om kolumn finns)
     if "rating" in df.columns:
