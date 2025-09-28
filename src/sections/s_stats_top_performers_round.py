@@ -15,8 +15,17 @@ def build_section(args=None, **kwargs):
     lang = getattr(args, "lang", "en")
     pod = getattr(args, "pod", "default_pod")
 
+    # 🔑 Fallback-map för league_id
     if not league_id:
-        raise ValueError("league_id is required for Top Performers Round section")
+        league_map = {
+            "premier_league": "228",
+            "championship": "229",
+            # lägg till fler ligor här vid behov
+        }
+        league_id = league_map.get(league)
+
+    if not league_id:
+        raise ValueError(f"league_id could not be resolved for league={league}")
 
     persona_id, _ = utils.get_persona_block("storyteller", pod)
 
@@ -28,7 +37,7 @@ def build_section(args=None, **kwargs):
     if df.empty:
         text = "No performance data available for this round."
     else:
-        # Filtrera på senaste round_dates om de skickas in
+        # Filtrera på round_dates om de skickas in
         round_dates = kwargs.get("round_dates", [])
         if round_dates:
             df = df[df["date"].isin(round_dates)]
