@@ -44,7 +44,8 @@ def build_section(args=None, **kwargs):
             df = df[df["date"].isin(round_dates)]
 
         # Sortera efter rating och ta top 5
-        df_sorted = df.sort_values(by="rating", ascending=False).head(5)
+        df_sorted = df.sort_values(by="score", ascending=False).head(5)
+
 
         # Bygg sammanfattning för GPT
         top_players = [
