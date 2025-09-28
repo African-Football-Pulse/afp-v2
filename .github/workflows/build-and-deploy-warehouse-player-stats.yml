@@ -59,12 +59,14 @@ jobs:
             az containerapp job create \
               --name "${{ env.ACA_JOB_NAME }}" \
               --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-              --environment ${{ secrets.AZURE_CONTAINER_ENVIRONMENT }} \
-              --image "$IMAGE_REF" \
+              --environment "${{ secrets.AZURE_CONTAINER_ENVIRONMENT }}" \
+              --trigger-type Manual \
               --replica-timeout 1800 \
               --replica-retry-limit 3 \
               --replica-completion-count 1 \
+              --parallelism 1 \
               --cpu 1.0 --memory 2.0Gi \
+              --image "$IMAGE_REF" \
               --env-vars \
                 JOB_TYPE="${{ env.JOB_TYPE }}" \
                 BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }}
