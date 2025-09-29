@@ -4,7 +4,8 @@ from src.collectors import collect_match_details
 from src.storage import azure_blob
 
 def today_str():
-    return datetime.now(timezone.utc).date().isoformat()
+    # return datetime.now(timezone.utc).date().isoformat()   # 2025-09-29
+    return datetime.now(timezone.utc).strftime("%d-%m-%Y")  # 29-09-2025
 
 def run_all(with_api=True):
     """Loopar över alla aktiva ligor och hämtar matchdetaljer baserat på veckans manifest."""
