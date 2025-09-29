@@ -1,35 +1,14 @@
-name: Test Blob Access
+import os
+from azure.storage.blob import BlobClient
 
-on:
-  workflow_dispatch:   # körs manuellt
+account = "afpstoragepilot"
+container = "afp"
+blob_name = "stats/2025-2026/228/954472.json"  # byt till något du vet finns
+sas_token = os.environ["BLOB_CONTAINER_SAS_URL"]
 
-env:
-  AZURE_RESOURCE_GROUP: afp-rg
-  STORAGE_ACCOUNT: afpstoragepilot
-  CONTAINER_NAME: afp
-  SAS_SECRET_NAME: BLOB_CONTAINER_SAS_URL
+url = f"https://{account}.blob.core.windows.net/{container}/{blob_name}?{sas_token}"
+print("🔗 URL:", url)
 
-jobs:
-  test-blob:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Azure login (federated)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Test blob list
-        run: |
-          echo "🔑 Testing SAS-token against container ${{ env.CONTAINER_NAME }}"
-          az storage blob list \
-            --account-name ${{ env.STORAGE_ACCOUNT }} \
-            --container-name ${{ env.CONTAINER_NAME }} \
-            --sas-token "${{ secrets[env.SAS_SECRET_NAME] }}" \
-            --num-results 5 \
-            --output table
+blob = BlobClient.from_blob_url(url)
+data = blob.download_blob().readall()
+print("✅ Blob size:", len(data))
