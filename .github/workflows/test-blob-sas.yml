@@ -1,0 +1,52 @@
+name: Test Blob SAS Access
+
+on:
+  workflow_dispatch:   # Manuell körning
+
+env:
+  STORAGE_ACCOUNT: afpstoragepilot
+  CONTAINER: afp
+  BLOB_NAME: assembler/episodes/2025-08-28/premier_league/daily/en/episode_manifest.json
+  SAS_SECRET_NAME: BLOB_CONTAINER_SAS_URL   # pekar på secret i GitHub
+
+jobs:
+  test-blob:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Azure Storage SDK
+        run: pip install azure-storage-blob
+
+      - name: Test SAS-token
+        env:
+          SAS_TOKEN: ${{ secrets.BLOB_CONTAINER_SAS_URL }}
+        run: |
+          echo "🔑 Testing SAS-token against ${{ env.STORAGE_ACCOUNT }}/${{ env.CONTAINER }}/${{ env.BLOB_NAME }}"
+
+          python - <<'EOF'
+          import os
+          from azure.storage.blob import BlobClient
+
+          account = os.environ["STORAGE_ACCOUNT"]
+          container = os.environ["CONTAINER"]
+          blob_name = os.environ["BLOB_NAME"]
+          sas_token = os.environ.get("SAS_TOKEN")
+
+          if not sas_token:
+              raise RuntimeError("❌ Missing SAS_TOKEN secret")
+
+          url = f"https://{account}.blob.core.windows.net/{container}/{blob_name}?{sas_token}"
+          print("🔗 URL:", url)
+
+          try:
+              blob = BlobClient.from_blob_url(url)
+              data = blob.download_blob().readall()
+              print(f"✅ Blob size: {len(data)} bytes")
+              print("✅ SAS-token works!")
+          except Exception as e:
+              print("❌ ERROR accessing blob:", e)
+              raise
+          EOF
