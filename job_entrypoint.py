@@ -61,9 +61,20 @@ def build_command():
     sys.exit(1)
 
 
+def debug_env():
+    """Logga relevanta environment-variabler (delvis maskerade)"""
+    prefixes = ("AFP", "AZURE", "SOCCERDATA", "BUZZSPROUT", "ELEVENLABS", "BLOB", "JOB_TYPE")
+    for k, v in os.environ.items():
+        if k.startswith(prefixes):
+            val = v if len(v) < 12 else v[:6] + "..."
+            log(f"ENV {k}={val}")
+
+
 def main():
     log("Startar job_entrypoint")
     export_secrets(os.environ.get("SECRETS_FILE", "/app/secrets/secret.json"))
+
+    debug_env()  # 👈 Debug-utskrift av relevanta env-vars
 
     # Lägg till CLI-argumenten efter modulnamnet
     cmd = build_command() + sys.argv[1:]
