@@ -51,5 +51,4 @@ jobs:
             --image "$IMAGE_REF" \
             --set-env-vars \
               JOB_TYPE="${{ env.JOB_TYPE }}" \
-              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }} \
-              ${EXTRA_ENV}
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }}
