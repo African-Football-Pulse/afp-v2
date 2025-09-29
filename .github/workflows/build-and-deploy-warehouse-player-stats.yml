@@ -10,7 +10,7 @@ env:
   IMAGE_NAME: afp-warehouse
   IMAGE_TAG: gh-1
   JOB_TYPE: src.warehouse.build_player_match_stats
-  SECRET_BLOB_SAS_NAME: blob-container-sas-url   # samma secret som collect använder
+  SECRET_BLOB_SAS_NAME: blob-container-sas-url
 
 jobs:
   build-and-deploy:
@@ -43,7 +43,7 @@ jobs:
           docker build -t "$IMAGE_REF" -f Dockerfile .
           docker push "$IMAGE_REF"
 
-      - name: Update ACA Job (image + env + secrets)
+      - name: Update ACA Job (image + env)
         run: |
           az containerapp job update \
             --name "${{ env.ACA_JOB_NAME }}" \
@@ -51,6 +51,15 @@ jobs:
             --image "$IMAGE_REF" \
             --set-env-vars \
               JOB_TYPE="${{ env.JOB_TYPE }}" \
-              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }} \
-            --secrets "secret.json=${{ secrets.SECRET_JSON }}" \
-            --secret-volume-mount "/app/secrets"
+              AFP_OPENAI_SECRETKEY=${{ secrets.AFP_OPENAI_SECRETKEY }} \
+              AZURE_STORAGE_ACCOUNT=${{ secrets.AZURE_STORAGE_ACCOUNT }} \
+              AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }} \
+              AZURE_STORAGE_CONTAINER=${{ secrets.AZURE_CONTAINER }} \
+              AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }} \
+              AZURE_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+              AZURE_TENANT_ID=${{ secrets.AZURE_TENANT_ID }} \
+              AZURE_CLIENT_SECRET=${{ secrets.AZURE_CLIENT_SECRET }} \
+              SOCCERDATA_AUTH_KEY=${{ secrets.SOCCERDATA_AUTH_KEY }} \
+              BUZZSPROUT_API_TOKEN=${{ secrets.BUZZSPROUT_API_TOKEN }} \
+              ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }} \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }}
