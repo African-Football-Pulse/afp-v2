@@ -6,7 +6,6 @@ on:
 env:
   STORAGE_ACCOUNT: afpstoragepilot
   CONTAINER_NAME: afp
-  SAS_SECRET_NAME: BLOB_CONTAINER_SAS_URL
 
 jobs:
   test-sas:
@@ -15,7 +14,7 @@ jobs:
       - name: Extract SAS token from URL
         id: prep
         run: |
-          RAW_SAS="${{ secrets[env.SAS_SECRET_NAME] }}"
+          RAW_SAS="${{ secrets.BLOB_CONTAINER_SAS_URL }}"
           # Plocka bort allt fram till första "?"
           CLEAN_SAS="${RAW_SAS#*\?}"
           echo "CLEAN_SAS=$CLEAN_SAS" >> $GITHUB_ENV
