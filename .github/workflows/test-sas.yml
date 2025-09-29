@@ -1,0 +1,29 @@
+name: Test SAS Token
+
+on:
+  workflow_dispatch:   # körs manuellt
+
+env:
+  STORAGE_ACCOUNT: afpstoragepilot
+  CONTAINER_NAME: afp
+  SAS_SECRET_NAME: BLOB_CONTAINER_SAS_URL
+
+jobs:
+  test-sas:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo SAS token (redacted length)
+        run: |
+          echo "Secret length: ${#BLOB_SAS}"
+        env:
+          BLOB_SAS: ${{ secrets[env.SAS_SECRET_NAME] }}
+
+      - name: Test blob list
+        run: |
+          echo "🔑 Testing SAS-token against container ${{ env.CONTAINER_NAME }}"
+          az storage blob list \
+            --account-name ${{ env.STORAGE_ACCOUNT }} \
+            --container-name ${{ env.CONTAINER_NAME }} \
+            --sas-token "${{ secrets[env.SAS_SECRET_NAME] }}" \
+            --num-results 5 \
+            --output table
