@@ -27,7 +27,7 @@ def main():
     df = load_seasons_flat()
 
     # Filtrera på innevarande säsong och aktiva ligor
-    active = df[(df["season"] == CURRENT_SEASON) & (df["is_active"] == True)]
+    active = df[df["is_active"] == True]
 
     print(f"▶️ Hittade {len(active)} aktiva ligor för {CURRENT_SEASON}")
 
