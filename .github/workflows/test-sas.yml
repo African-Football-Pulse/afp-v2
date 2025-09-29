@@ -1,4 +1,4 @@
-name: Test SAS Token
+name: Debug SAS Token
 
 on:
   workflow_dispatch:   # körs manuellt
@@ -9,21 +9,17 @@ env:
   SAS_SECRET_NAME: BLOB_CONTAINER_SAS_URL
 
 jobs:
-  test-sas:
+  debug-sas:
     runs-on: ubuntu-latest
     steps:
-      - name: Echo SAS token (redacted length)
+      - name: Inspect SAS token
         run: |
-          echo "Secret length: ${#BLOB_SAS}"
-        env:
-          BLOB_SAS: ${{ secrets[env.SAS_SECRET_NAME] }}
-
-      - name: Test blob list
-        run: |
-          echo "🔑 Testing SAS-token against container ${{ env.CONTAINER_NAME }}"
-          az storage blob list \
-            --account-name ${{ env.STORAGE_ACCOUNT }} \
-            --container-name ${{ env.CONTAINER_NAME }} \
-            --sas-token "${{ secrets[env.SAS_SECRET_NAME] }}" \
-            --num-results 5 \
-            --output table
+          RAW_SAS="${{ secrets[env.SAS_SECRET_NAME] }}"
+          echo "Secret length: ${#RAW_SAS}"
+          echo "First 10 chars: ${RAW_SAS:0:10}"
+          echo "Last 10 chars: ${RAW_SAS: -10}"
+          if [[ "$RAW_SAS" == \?* ]]; then
+            echo "⚠️ Secret starts with a ?"
+          else
+            echo "✅ Secret does NOT start with a ?"
+          fi
