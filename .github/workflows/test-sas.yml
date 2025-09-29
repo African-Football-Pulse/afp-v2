@@ -1,7 +1,7 @@
-name: Debug SAS Token
+name: Test SAS Token (fixed)
 
 on:
-  workflow_dispatch:   # körs manuellt
+  workflow_dispatch:
 
 env:
   STORAGE_ACCOUNT: afpstoragepilot
@@ -9,17 +9,26 @@ env:
   SAS_SECRET_NAME: BLOB_CONTAINER_SAS_URL
 
 jobs:
-  debug-sas:
+  test-sas:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect SAS token
+      - name: Extract SAS token from URL
+        id: prep
         run: |
           RAW_SAS="${{ secrets[env.SAS_SECRET_NAME] }}"
-          echo "Secret length: ${#RAW_SAS}"
-          echo "First 10 chars: ${RAW_SAS:0:10}"
-          echo "Last 10 chars: ${RAW_SAS: -10}"
-          if [[ "$RAW_SAS" == \?* ]]; then
-            echo "⚠️ Secret starts with a ?"
-          else
-            echo "✅ Secret does NOT start with a ?"
-          fi
+          # Plocka bort allt fram till första "?"
+          CLEAN_SAS="${RAW_SAS#*\?}"
+          echo "CLEAN_SAS=$CLEAN_SAS" >> $GITHUB_ENV
+          echo "Secret length: ${#CLEAN_SAS}"
+          echo "First 10 chars: ${CLEAN_SAS:0:10}"
+          echo "Last 10 chars: ${CLEAN_SAS: -10}"
+
+      - name: Test blob list
+        run: |
+          echo "🔑 Testing SAS-token against container ${{ env.CONTAINER_NAME }}"
+          az storage blob list \
+            --account-name ${{ env.STORAGE_ACCOUNT }} \
+            --container-name ${{ env.CONTAINER_NAME }} \
+            --sas-token "$CLEAN_SAS" \
+            --num-results 5 \
+            --output table
