@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from src.sections import utils
 from src.producer.gpt import run_gpt
+from src.tools.used_news_filter import filter_used, mark_as_used  # 👈 nytt import
 
 
 def build_section(args):
@@ -28,6 +29,12 @@ def build_section(args):
     candidates = utils.load_scored_enriched(day, league=league)
     if not candidates:
         print("[s_news_club_highlight] ❌ No candidates found")
+        return None
+
+    # 👇 filtrera bort artiklar som redan är använda
+    candidates = filter_used(candidates, day, league)
+    if not candidates:
+        print("[s_news_club_highlight] ❌ All candidates already used")
         return None
 
     # Pick first candidate (later: add variation logic)
@@ -79,7 +86,7 @@ def build_section(args):
         "meta": {"persona": persona_id},
     }
 
-    return utils.write_outputs(
+    result = utils.write_outputs(
         section_code=section_code,
         day=day,
         league=league,
@@ -89,3 +96,8 @@ def build_section(args):
         status="success",
         payload=payload,
     )
+
+    # 👇 markera den valda artikeln som använd
+    mark_as_used([candidate], day, league, section=section_code)
+
+    return result
