@@ -1,0 +1,30 @@
+flowchart TD
+
+  subgraph BASE["🟦 BASE (One-time setup)"]
+    TEAMS[teams_flat.parquet]
+    PLAYERS[players_flat.parquet]
+    LEAGUES[leagues_flat.parquet]
+  end
+
+  subgraph PERSEASON["🟨 PER SEASON (Once per year)"]
+    SEASONS[seasons_flat.parquet]
+    HISTORIC[Optional: Add historic season script]
+  end
+
+  subgraph WEEKLY["🟩 WEEKLY (Each round)"]
+    COLLECT[Collect fullseason matches.json]
+    MANIFEST[Build manifests]
+    EXTRACT[Extract player + match events]
+    EVENTS[events_flat/{season}/{league}.parquet]
+    PSTATS[player_match_stats.parquet]
+  end
+
+  %% Relations
+  TEAMS --> COLLECT
+  PLAYERS --> COLLECT
+  LEAGUES --> SEASONS
+  SEASONS --> COLLECT
+  COLLECT --> MANIFEST
+  MANIFEST --> EXTRACT
+  EXTRACT --> EVENTS
+  EXTRACT --> PSTATS
