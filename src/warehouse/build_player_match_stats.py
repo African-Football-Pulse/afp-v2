@@ -1,9 +1,8 @@
-# src/warehouse/build_player_match_stats.py
-
 import json
 import pandas as pd
 from io import BytesIO
 from src.storage import azure_blob
+from src.warehouse import utils_ids  # 🔑 använd utils istället för lokal normalize_id
 
 
 def load_json_from_blob(container: str, path: str):
@@ -21,11 +20,6 @@ def load_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
         .readall()
     )
     return pd.read_parquet(BytesIO(blob_bytes), engine="pyarrow")
-
-
-def normalize_id(series: pd.Series) -> pd.Series:
-    """Konvertera ID-kolumner från float/NaN till str utan decimal."""
-    return series.fillna(0).astype(int).astype(str)
 
 
 def main():
@@ -66,10 +60,8 @@ def main():
             print(f"[build_player_match_stats] ⚠️ Kunde inte läsa {path}: {e}")
             continue
 
-        # Normalisera ID-kolumner
-        df["player_id"] = normalize_id(df["player_id"])
-        if "assist_id" in df.columns:
-            df["assist_id"] = normalize_id(df["assist_id"])
+        # 🔑 Normalisera ID-kolumner med utils
+        df = utils_ids.normalize_ids(df, cols=["player_id", "assist_id"])
 
         # Filtrera på spelare i masterlistan
         df = df[df["player_id"].isin(player_ids)]
