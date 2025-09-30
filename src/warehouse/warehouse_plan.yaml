@@ -49,7 +49,7 @@ tasks:
   - id: M3
     job: src.warehouse.build_clean_sheets_africa
     description: Build clean sheets metrics parquet
-    enabled: true
+    enabled: false
 
   - id: M4
     job: src.warehouse.build_match_performance_africa
