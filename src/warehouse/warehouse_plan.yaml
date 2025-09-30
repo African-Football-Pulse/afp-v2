@@ -2,11 +2,11 @@ tasks:
   # --- BASE ---
   - job: src.warehouse.build_matches_events_all
     description: Build matches + events parquet
-    enabled: true
+    enabled: false
 
   - job: src.warehouse.collect_extract_weekly
     description: Extract player events from matches
-    enabled: false
+    enabled: true
 
   - job: src.warehouse.build_player_match_stats
     description: Build player match stats parquet
