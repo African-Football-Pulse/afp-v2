@@ -64,4 +64,4 @@ tasks:
   - id: M6
     job: src.warehouse.build_cards_africa
     description: Build cards metrics parquet
-    enabled: true
+    enabled: false
