@@ -1,6 +1,7 @@
 import pandas as pd
+from io import BytesIO
 from src.storage import azure_blob
-from src.warehouse import utils_ids  # 🔑 importera din utils
+from src.warehouse import utils_ids  # 🔑 återanvänd normalize_ids
 
 CONTAINER = "afp"
 
@@ -9,7 +10,7 @@ def main():
     input_path = "warehouse/base/player_match_stats.parquet"
     output_path = "warehouse/base/player_totals.parquet"
 
-    # Ladda matchstats
+    # 🔄 Ladda player_match_stats
     print(f"[build_player_totals] 🔄 Laddar {input_path}")
     blob_bytes = (
         azure_blob._client()
@@ -18,16 +19,20 @@ def main():
         .download_blob()
         .readall()
     )
-    df = pd.read_parquet(pd.io.common.BytesIO(blob_bytes), engine="pyarrow")
+    df = pd.read_parquet(BytesIO(blob_bytes), engine="pyarrow")
 
     if df.empty:
         print("[build_player_totals] ⚠️ Inga rader hittades i player_match_stats.parquet")
         return
 
-    # Normalisera ID-kolumner
+    # 🔑 Normalisera ID-kolumner
     df = utils_ids.normalize_ids(df, cols=["player_id"])
 
-    # Summera per spelare
+    # 🛠 Konvertera minutes_played till numerisk (sum ska summera, inte konkatenera strängar)
+    if "minutes_played" in df.columns:
+        df["minutes_played"] = pd.to_numeric(df["minutes_played"], errors="coerce").fillna(0).astype(int)
+
+    # 📊 Summera per spelare
     totals = df.groupby("player_id").agg(
         apps=("match_id", "nunique"),
         goals=("goals", "sum"),
