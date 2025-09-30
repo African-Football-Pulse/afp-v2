@@ -54,7 +54,7 @@ tasks:
   - id: M4
     job: src.warehouse.build_match_performance_africa
     description: Build match performance metrics parquet
-    enabled: true
+    enabled: false
 
   - id: M5
     job: src.warehouse.build_toplists_africa
