@@ -2,31 +2,41 @@ tasks:
   # --- BASE ---
   - job: src.warehouse.build_matches_events_all
     description: Build matches + events parquet
+    enabled: true
 
   - job: src.warehouse.collect_extract_weekly
     description: Extract player events from matches
+    enabled: false
 
   - job: src.warehouse.build_player_match_stats
     description: Build player match stats parquet
+    enabled: false
 
   - job: src.warehouse.build_player_totals
     description: Build player totals parquet
+    enabled: false
 
   - job: src.warehouse.build_countries_flat
     description: Build countries parquet
+    enabled: false
 
   # --- METRICS ---
   - job: src.warehouse.build_goals_africa
     description: Build goals metrics parquet
+    enabled: false
 
   - job: src.warehouse.build_assists_africa
     description: Build assists metrics parquet
+    enabled: false
 
   - job: src.warehouse.build_clean_sheets
     description: Build clean sheets metrics parquet
+    enabled: false
 
   - job: src.warehouse.build_form_index
     description: Build form index parquet
+    enabled: false
 
   - job: src.warehouse.build_milestones
     description: Build milestones metrics parquet
+    enabled: false
