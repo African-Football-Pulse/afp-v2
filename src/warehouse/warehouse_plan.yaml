@@ -1,0 +1,32 @@
+tasks:
+  # --- BASE ---
+  - job: src.warehouse.build_matches_events_all
+    description: Build matches + events parquet
+
+  - job: src.warehouse.collect_extract_weekly
+    description: Extract player events from matches
+
+  - job: src.warehouse.build_player_match_stats
+    description: Build player match stats parquet
+
+  - job: src.warehouse.build_player_totals
+    description: Build player totals parquet
+
+  - job: src.warehouse.build_countries_flat
+    description: Build countries parquet
+
+  # --- METRICS ---
+  - job: src.warehouse.build_goals_africa
+    description: Build goals metrics parquet
+
+  - job: src.warehouse.build_assists_africa
+    description: Build assists metrics parquet
+
+  - job: src.warehouse.build_clean_sheets
+    description: Build clean sheets metrics parquet
+
+  - job: src.warehouse.build_form_index
+    description: Build form index parquet
+
+  - job: src.warehouse.build_milestones
+    description: Build milestones metrics parquet
