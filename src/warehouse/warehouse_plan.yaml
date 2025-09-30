@@ -22,7 +22,7 @@ tasks:
 
   - job: src.warehouse.build_player_match_stats
     description: Build player match stats parquet
-    enabled: false
+    enabled: true
 
   - job: src.warehouse.build_player_totals
     description: Build player totals parquet
