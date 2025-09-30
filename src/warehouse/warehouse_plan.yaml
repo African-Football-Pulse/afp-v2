@@ -38,13 +38,13 @@ tasks:
   - id: B9
     job: src.warehouse.build_countries_flat
     description: Build countries flat parquet
-    enabled: true
+    enabled: false
 
   # --- METRICS ---
   - id: M1
     job: src.warehouse.build_goals_assists_africa
     description: Build goals + assists metrics parquet
-    enabled: false
+    enabled: true
 
   - id: M3
     job: src.warehouse.build_clean_sheets_africa
