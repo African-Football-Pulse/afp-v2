@@ -4,7 +4,8 @@ import os
 import io
 import pandas as pd
 from src.storage import azure_blob
-from src.utils.normalize import normalize_ids  # om ni har lagt normalize_ids i utils
+from src.warehouse.utils_ids import normalize_ids
+
 
 
 CONTAINER = "afp"
