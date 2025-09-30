@@ -1,0 +1,72 @@
+flowchart TD
+  subgraph RAW["RAW (JSON-filer)"]
+    A1["A1 players_africa_master.json"]
+    A2["A2 players_africa_history.json"]
+    A3["A3 player_history_<league>.json"]
+    A4["A4 teams/<league>/<team>.json"]
+    A5["A5 leagues.yaml / leagues.json"]
+    A6["A6 seasons_<league>.json"]
+    A7["A7 stats/<season>/<league>/<match>.json"]
+    A8["A8 stats/<season>/<league>/players/<player>.json"]
+    A9["A9 stats/players/<player>/totals.json"]
+    A10["A10 africa_fifa_codes.json"]
+  end
+
+  subgraph BASE["BASE Layer (Parquet)"]
+    B1["B1 players_flat.parquet"]
+    B2["B2 teams_flat.parquet"]
+    B3["B3 leagues_flat.parquet"]
+    B4["B4 seasons_flat.parquet"]
+    B5["B5 matches_flat.parquet"]
+    B6["B6 events_flat.parquet"]
+    B7["B7 player_match_stats.parquet"]
+    B8["B8 player_totals.parquet"]
+    B9["B9 countries_flat.parquet"]
+  end
+
+  subgraph METRICS["METRICS Layer (Parquet)"]
+    M1["M1 goals_africa.parquet"]
+    M2["M2 assists_africa.parquet"]
+    M3["M3 clean_sheets_africa.parquet"]
+    M4["M4 form_index.parquet"]
+    M5["M5 milestones.parquet"]
+  end
+
+  subgraph CONTENT["CONTENT (Sektioner)"]
+    C1["C1 S.STATS.GOALSCORERS"]
+    C2["C2 S.STATS.ASSISTS"]
+    C3["C3 S.STATS.CLEAN_SHEETS"]
+    C4["C4 S.STATS.FORM"]
+    C5["C5 S.STATS.MILESTONES"]
+  end
+
+  A1 --> B1
+  A2 --> B1
+  A3 --> B1
+  A4 --> B2
+  A5 --> B3
+  A6 --> B4
+  A7 --> B5
+  A7 --> B6
+  A8 --> B7
+  A9 --> B8
+  A10 --> B9
+
+  B1 --> M1
+  B6 --> M1
+  B7 --> M1
+  B1 --> M2
+  B6 --> M2
+  B7 --> M2
+  B5 --> M3
+  B6 --> M3
+  B7 --> M3
+  B6 --> M4
+  B7 --> M4
+  B8 --> M5
+
+  M1 --> C1
+  M2 --> C2
+  M3 --> C3
+  M4 --> C4
+  M5 --> C5
