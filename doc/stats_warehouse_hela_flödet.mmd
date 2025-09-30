@@ -1,48 +1,115 @@
+# 🗂 Warehouse Flow – African Football Pulse
+
+Detta dokument beskriver hela Warehouse-flödet för AFP.  
+Varje artefakt (RAW, BASE, METRICS, CONTENT) har en unik **ID** (A#, B#, M#, C#) som används i kod, dokumentation och planfiler.
+
+---
+
+## 🔑 Principer
+- **RAW (A#)** = JSON-filer direkt från källor.  
+- **BASE (B#)** = Flattenade tabeller (`_flat`) eller grundläggande stats/aggregat.  
+- **METRICS (M#)** = KPI:er och insiktslager.  
+- **CONTENT (C#)** = Sektioner i pipeline (markdown/json/manifest).  
+
+---
+
+## 📊 ID-Tabell
+
+### RAW (JSON)
+| ID  | Fil/Path                              | Beskrivning |
+|-----|---------------------------------------|-------------|
+| A1  | `players_africa_master.json`          | Masterlista afrikanska spelare |
+| A2  | `players_africa_history.json`         | Historik över afrikanska spelare |
+| A3  | `player_history_<league>.json`        | Spelarhistorik per liga |
+| A4  | `teams/<league>/<team>.json`          | Lagdata (raw) |
+| A5  | `leagues.yaml` / `leagues.json`       | Ligor (raw) |
+| A6  | `seasons_<league>.json`               | Säsongsinfo (raw) |
+| A7  | `stats/<season>/<league>/<match>.json` | Matchdata (raw) |
+| A8  | `stats/<season>/<league>/players/<player>.json` | Spelarstatistik per match (raw) |
+| A9  | `stats/players/<player>/totals.json`  | Totals per spelare (raw) |
+| A10 | `africa_fifa_codes.json`              | Landskoder (FIFA) |
+
+### BASE (Parquet)
+| ID  | Fil/Path                                | Beskrivning |
+|-----|-----------------------------------------|-------------|
+| B1  | `warehouse/base/players_flat.parquet`   | Flattenade spelare (id, namn, klubb, land) |
+| B2  | `warehouse/base/teams_flat.parquet`     | Flattenade lag |
+| B3  | `warehouse/base/leagues_flat.parquet`   | Flattenade ligor |
+| B4  | `warehouse/base/seasons_flat.parquet`   | Flattenade säsonger |
+| B5  | `warehouse/base/matches_flat.parquet`   | Flattenade matcher |
+| B6  | `warehouse/base/events_flat.parquet`    | Flattenade events (mål, kort, assist) |
+| B7  | `warehouse/base/player_match_stats.parquet` | Stats per spelare och match |
+| B8  | `warehouse/base/player_totals.parquet`  | Totals per spelare (apps, mål, minuter) |
+| B9  | `warehouse/base/countries_flat.parquet` | Flattenade landskoder |
+
+### METRICS (Parquet)
+| ID  | Fil/Path                                   | Beskrivning |
+|-----|--------------------------------------------|-------------|
+| M1  | `warehouse/metrics/goals_africa.parquet`   | Totala mål per spelare/land/säsong |
+| M2  | `warehouse/metrics/assists_africa.parquet` | Totala assists |
+| M3  | `warehouse/metrics/clean_sheets_africa.parquet` | Clean sheets |
+| M4  | `warehouse/metrics/form_index.parquet`     | Formindex (rolling window) |
+| M5  | `warehouse/metrics/milestones.parquet`     | Milstolpar (50 mål, 100 matcher etc) |
+
+### CONTENT (Sektioner)
+| ID  | Sektion-ID                   | Beskrivning |
+|-----|------------------------------|-------------|
+| C1  | `S.STATS.GOALSCORERS`        | Toppmålskyttar |
+| C2  | `S.STATS.ASSISTS`            | Topp-assist |
+| C3  | `S.STATS.CLEAN_SHEETS`       | Clean sheets |
+| C4  | `S.STATS.FORM`               | Formkurva |
+| C5  | `S.STATS.MILESTONES`         | Milstolpar |
+
+---
+
+## 🗺 Flödesdiagram (Mermaid)
+
+```mermaid
 flowchart TD
 
   %% RAW LAYER
   subgraph RAW["RAW (JSON-filer)"]
-    A1["players_africa_master.json"]
-    A2["players_africa_history.json"]
-    A3["player_history_<league>.json"]
-    A4["teams/<league>/<team>.json"]
-    A5["leagues.yaml / leagues.json"]
-    A6["seasons_<league>.json"]
-    A7["stats/<season>/<league>/<match>.json"]
-    A8["stats/<season>/<league>/players/<player>.json"]
-    A9["stats/players/<player>/totals.json"]
-    A10["africa_fifa_codes.json"]
+    A1["A1 players_africa_master.json"]
+    A2["A2 players_africa_history.json"]
+    A3["A3 player_history_<league>.json"]
+    A4["A4 teams/<league>/<team>.json"]
+    A5["A5 leagues.yaml / leagues.json"]
+    A6["A6 seasons_<league>.json"]
+    A7["A7 stats/<season>/<league>/<match>.json"]
+    A8["A8 stats/<season>/<league>/players/<player>.json"]
+    A9["A9 stats/players/<player>/totals.json"]
+    A10["A10 africa_fifa_codes.json"]
   end
 
   %% BASE LAYER
   subgraph BASE["BASE Layer (Parquet)"]
-    B1["players_flat.parquet\n(id, name, country, aliases, club_history, sources)"]
-    B2["teams_flat.parquet\n(team_id, name, league_id, stadium, country)"]
-    B3["leagues_flat.parquet\n(league_id, name, country, is_cup)"]
-    B4["seasons_flat.parquet\n(league_id, season, is_active)"]
-    B5["matches_flat.parquet\n(match_id, date, league_id, home_id, away_id, score, odds)"]
-    B6["events_flat.parquet\n(event_id, match_id, player_id, type, minute, assist_player_id)"]
-    B7["player_match_stats.parquet\n(player_id, league_id, season, apps, goals, assists, cards, subs)"]
-    B8["player_totals.parquet\n(player_id, apps, goals, assists, cards, subs)"]
-    B9["countries_flat.parquet\n(FIFA_code, country_name)"]
+    B1["B1 players_flat.parquet"]
+    B2["B2 teams_flat.parquet"]
+    B3["B3 leagues_flat.parquet"]
+    B4["B4 seasons_flat.parquet"]
+    B5["B5 matches_flat.parquet"]
+    B6["B6 events_flat.parquet"]
+    B7["B7 player_match_stats.parquet"]
+    B8["B8 player_totals.parquet"]
+    B9["B9 countries_flat.parquet"]
   end
 
   %% METRICS LAYER
   subgraph METRICS["METRICS Layer (Parquet)"]
-    M1["goals_africa.parquet\n(player_id, country, season, total_goals)"]
-    M2["assists_africa.parquet\n(player_id, country, season, total_assists)"]
-    M3["clean_sheets_africa.parquet\n(player_id, country, season, clean_sheets)"]
-    M4["form_index.parquet\n(player_id, country, rolling_window, form_score)"]
-    M5["milestones.parquet\n(player_id, country, type, threshold, reached_flag)"]
+    M1["M1 goals_africa.parquet"]
+    M2["M2 assists_africa.parquet"]
+    M3["M3 clean_sheets_africa.parquet"]
+    M4["M4 form_index.parquet"]
+    M5["M5 milestones.parquet"]
   end
 
   %% CONTENT LAYER
-  subgraph CONTENT["CONTENT (Sektioner i pipeline)"]
-    C1["S.STATS.GOALSCORERS"]
-    C2["S.STATS.ASSISTS"]
-    C3["S.STATS.CLEAN_SHEETS"]
-    C4["S.STATS.FORM"]
-    C5["S.STATS.MILESTONES"]
+  subgraph CONTENT["CONTENT (Sektioner)"]
+    C1["C1 S.STATS.GOALSCORERS"]
+    C2["C2 S.STATS.ASSISTS"]
+    C3["C3 S.STATS.CLEAN_SHEETS"]
+    C4["C4 S.STATS.FORM"]
+    C5["C5 S.STATS.MILESTONES"]
   end
 
   %% Connections RAW -> BASE
