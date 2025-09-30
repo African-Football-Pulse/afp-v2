@@ -1,71 +1,90 @@
-import os
+# src/warehouse/build_match_performance_africa.py
+
 import pandas as pd
+import numpy as np
 from src.storage import azure_blob
-from src.warehouse.utils_mapping import map_events_to_afp, load_players_flat
-from src.warehouse.utils_ids import normalize_ids
 
-CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+CONTAINER = "afp"
 
-def build(league: str, season: str):
-    print(f"[build_match_performance_africa] ▶️ Startar för liga {league}, säsong {season}")
+def compute_form_score(row):
+    """Beräkna enkel match rating per spelare."""
+    goals = row.get("goals", 0)
+    assists = row.get("assists", 0)
+    yc = row.get("yellow_cards", 0)
+    rc = row.get("red_cards", 0)
+    minutes = row.get("minutes_played", 0)
 
-    # Ladda players_flat
-    players_path = f"warehouse/base/players_flat/{season}/players_flat.parquet"
-    print(f"[build_match_performance_africa] 📥 Laddar {players_path}")
-    players_bytes = azure_blob.get_bytes(CONTAINER, players_path)
-    df_players = pd.read_parquet(pd.io.common.BytesIO(players_bytes))
+    return (
+        (3 * goals)
+        + (2 * assists)
+        - (1 * yc)
+        - (3 * rc)
+        + (minutes / 90.0)
+    )
 
-    # Filtrera fram afrikanska spelare
-    african_players = set(df_players[df_players["country"].notna()]["id"].unique())
-    print(f"[build_match_performance_africa] 👥 Antal afrikanska spelare: {len(african_players)}")
+def rolling_form(df, window):
+    """Beräkna rullande snitt per spelare över angivet window."""
+    return (
+        df.groupby("player_id")["form_score"]
+        .rolling(window, min_periods=1)
+        .mean()
+        .reset_index(level=0, drop=True)
+    )
 
-    # Ladda events
-    events_path = f"warehouse/live/events_flat/{season}/{league}.parquet"
-    print(f"[build_match_performance_africa] 📥 Laddar {events_path}")
-    events_bytes = azure_blob.get_bytes(CONTAINER, events_path)
-    df_events = pd.read_parquet(pd.io.common.BytesIO(events_bytes))
+def main():
+    input_path = "warehouse/base/player_match_stats.parquet"
+    output_path = "warehouse/metrics/match_performance_africa.parquet"
 
-    print(f"[DEBUG] Event-kolumner: {list(df_events.columns)}")
-    print("[DEBUG] Exempelrader från events:")
-    print(df_events.head(10).to_dict())
+    print(f"[build_match_performance_africa] 🔄 Laddar {input_path}")
+    blob_bytes = (
+        azure_blob._client()
+        .get_container_client(CONTAINER)
+        .get_blob_client(input_path)
+        .download_blob()
+        .readall()
+    )
+    df = pd.read_parquet(pd.io.common.BytesIO(blob_bytes), engine="pyarrow")
 
-    # Normalisera ID-kolumner
-    df_events = normalize_ids(df_events)
+    if df.empty:
+        print("[build_match_performance_africa] ⚠️ Ingen data i player_match_stats")
+        return
 
-    # Mappa mot AFP-ID
-    df_events = map_events_to_afp(df_events)
+    # Beräkna form score
+    df["form_score"] = df.apply(compute_form_score, axis=1)
 
-    # Filtrera på afrikanska spelare
-    df_africa = df_events[df_events["afp_id"].isin(african_players)].copy()
+    # Sortera för rolling
+    df = df.sort_values(by=["player_id", "season", "match_id"])
 
-    if df_africa.empty:
-        print("[build_match_performance_africa] ⚠️ Inga events för afrikanska spelare hittades.")
-    else:
-        print(f"[build_match_performance_africa] 🎯 Events efter filter: {len(df_africa)}")
+    # Lägg på rullande snitt
+    df["form_score_5"] = rolling_form(df, 5)
+    df["form_score_10"] = rolling_form(df, 10)
+    df["form_score_20"] = rolling_form(df, 20)
 
-        # Scoring-regler
-        score_map = {
-            "goal": 3,
-            "assist": 2,
-            "yellow_card": -1,
-            "red_card": -3,
-        }
-        df_africa["score"] = df_africa["event_type"].map(score_map).fillna(0)
+    # Long-term form (3 senaste säsonger)
+    df["long_term_form"] = (
+        df.groupby("player_id")["form_score"]
+        .transform(lambda x: x.tail(min(len(x), 60)).mean())  # ca 20 matcher/säsong × 3
+    )
 
-    # Skriv output
-    out_path = f"warehouse/metrics/match_performance_africa/{season}/{league}.parquet"
-    print(f"[build_match_performance_africa] 💾 Skriver till {out_path}")
-    azure_blob.put_bytes(CONTAINER, out_path, df_africa.to_parquet(index=False))
+    # 📦 Spara till Parquet
+    parquet_bytes = df.to_parquet(index=False, engine="pyarrow")
+    azure_blob.put_bytes(
+        container=CONTAINER,
+        blob_path=output_path,
+        data=parquet_bytes,
+        content_type="application/octet-stream",
+    )
 
-    print("[build_match_performance_africa] ✅ Klar")
+    print(f"[build_match_performance_africa] ✅ Uploaded {len(df)} rows → {output_path}")
 
+    # 👀 Preview
+    preview = df.groupby("player_id").head(3)
+    print("\n[build_match_performance_africa] 🔎 Sample:")
+    print(preview[[
+        "player_id", "season", "match_id",
+        "goals", "assists", "yellow_cards", "red_cards", "minutes_played",
+        "form_score", "form_score_5", "form_score_10", "form_score_20", "long_term_form"
+    ]].to_string(index=False))
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--league", required=True)
-    parser.add_argument("--season", required=True)
-    args = parser.parse_args()
-
-    build(args.league, args.season)
+    main()
