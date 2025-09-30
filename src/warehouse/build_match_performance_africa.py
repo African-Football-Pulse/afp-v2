@@ -1,86 +1,109 @@
-# src/warehouse/build_match_performance_africa.py
-
+import os
+import io
 import pandas as pd
 from src.storage import azure_blob
-
-CONTAINER = "afp"
-
-
-def compute_form_score(row):
-    """Beräkna ett enkelt form-score för en matchrad."""
-    goals = row.get("goals", 0)
-    assists = row.get("assists", 0)
-    minutes = row.get("minutes_played", 0)
-    cards = row.get("yellow_cards", 0) + 2 * row.get("red_cards", 0)
-
-    return goals * 4 + assists * 3 + (minutes / 90.0) - cards
+from src.warehouse.utils_ids import normalize_ids
 
 
-def rolling_form(df, window: int, col_name: str):
-    """Beräkna rolling form score för ett givet fönster."""
-    df[col_name] = (
-        df.sort_values("match_id")
-        .groupby("player_id")["form_score"]
-        .transform(lambda x: x.rolling(window, min_periods=1).mean())
-    )
-    return df
+def read_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
+    """Ladda en Parquet-fil från Azure Blob till DataFrame."""
+    blob_bytes = azure_blob.get_bytes(container, path)
+    return pd.read_parquet(io.BytesIO(blob_bytes), engine="pyarrow")
 
 
 def main():
-    print("[build_match_performance_africa] 🔄 Laddar warehouse/base/player_match_stats.parquet")
+    container = "afp"
 
-    # Ladda player_match_stats
-    path = "warehouse/base/player_match_stats.parquet"
-    blob_bytes = (
-        azure_blob._client()
-        .get_container_client(CONTAINER)
-        .get_blob_client(path)
-        .download_blob()
-        .readall()
+    # Paths
+    goals_path = "warehouse/metrics/goals_assists_africa.parquet"
+    cards_path = "warehouse/metrics/cards_africa.parquet"
+    players_path = "warehouse/base/players_flat.parquet"
+    output_path = "warehouse/metrics/toplists_africa.parquet"
+
+    print("[build_toplists_africa] 🔄 Start")
+
+    # Load datasets
+    df_goals = read_parquet_from_blob(container, goals_path)
+    df_cards = read_parquet_from_blob(container, cards_path)
+
+    df_players = (
+        read_parquet_from_blob(container, players_path)[
+            ["player_id", "name", "current_club", "country"]
+        ]
+        .rename(columns={"current_club": "club", "name": "player_name"})
     )
-    df = pd.read_parquet(pd.io.common.BytesIO(blob_bytes), engine="pyarrow")
 
-    if df.empty:
-        print("[build_match_performance_africa] ⚠️ Ingen data hittades")
-        return
+    # ---- Merge metrics ----
+    df = (
+        df_goals.merge(df_cards, on=["player_id", "season"], how="outer")
+        .merge(df_players, on="player_id", how="left")
+    )
 
-    # Konvertera minutes_played till int
-    if "minutes_played" in df.columns:
-        df["minutes_played"] = (
-            pd.to_numeric(df["minutes_played"], errors="coerce")
-            .fillna(0)
-            .astype(int)
-        )
-    else:
-        df["minutes_played"] = 0
+    # Normalisera ID-kolumner
+    df = normalize_ids(df, ["player_id"])
 
-    # Beräkna grundläggande form_score
-    df["form_score"] = df.apply(compute_form_score, axis=1)
+    # Fyll endast numeriska kolumner med 0
+    num_cols = ["total_goals", "total_assists", "goal_contributions", "total_cards"]
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna(0)
 
-    # Rolling windows
-    df = rolling_form(df, 5, "form_score_5")      # senaste 5 matcher
-    df = rolling_form(df, 10, "form_score_10")    # senaste 10 matcher
-    df = rolling_form(df, 100, "form_score_long") # långsiktigt (≈ 3 säsonger)
+    # ---- Build toplists ----
+    toplists = {}
 
-    # 📦 Spara till Parquet
-    parquet_bytes = df.to_parquet(index=False, engine="pyarrow")
-    output_path = "warehouse/metrics/match_performance_africa.parquet"
+    # Goals
+    toplists["top_scorers"] = (
+        df.groupby(["player_id", "player_name", "country", "club"])["total_goals"]
+        .sum()
+        .reset_index()
+        .sort_values("total_goals", ascending=False)
+        .head(20)
+    )
+
+    # Assists
+    toplists["top_assists"] = (
+        df.groupby(["player_id", "player_name", "country", "club"])["total_assists"]
+        .sum()
+        .reset_index()
+        .sort_values("total_assists", ascending=False)
+        .head(20)
+    )
+
+    # Goal contributions
+    toplists["top_contributions"] = (
+        df.groupby(["player_id", "player_name", "country", "club"])["goal_contributions"]
+        .sum()
+        .reset_index()
+        .sort_values("goal_contributions", ascending=False)
+        .head(20)
+    )
+
+    # Cards
+    toplists["bad_boys"] = (
+        df.groupby(["player_id", "player_name", "country", "club"])["total_cards"]
+        .sum()
+        .reset_index()
+        .sort_values("total_cards", ascending=False)
+        .head(20)
+    )
+
+    # ---- Save all toplists ----
+    out = pd.concat(
+        {name: tbl.reset_index(drop=True) for name, tbl in toplists.items()},
+        names=["toplist", "rank"]
+    ).reset_index(level="toplist").reset_index(drop=True)
+
+    parquet_bytes = out.to_parquet(index=False, engine="pyarrow")
     azure_blob.put_bytes(
-        container=CONTAINER,
+        container=container,
         blob_path=output_path,
         data=parquet_bytes,
-        content_type="application/octet-stream",
+        content_type="application/octet-stream"
     )
 
-    print(f"[build_match_performance_africa] ✅ Uploaded {len(df)} rows → {output_path}")
-
-    # 👀 Preview
-    print("\n[build_match_performance_africa] 🔎 Sample:")
-    print(
-        df[["player_id", "season", "form_score", "form_score_5", "form_score_10", "form_score_long"]]
-        .head(10)
-        .to_string(index=False)
-    )
+    print(f"[build_toplists_africa] ✅ Uploaded {len(out)} rows → {output_path}")
+    print("[build_toplists_africa] 🔎 Sample:")
+    print(out.head(15))
 
 
 if __name__ == "__main__":
