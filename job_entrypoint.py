@@ -51,6 +51,11 @@ def build_command():
         log("Selected job: PRODUCE (auto) → full pipeline via produce_auto")
         return ["python", "-m", "src.producer.produce_auto"]
 
+    # Standard warehouse → auto
+    if job_type == "warehouse":
+        log("Selected job: WAREHOUSE (auto) → full pipeline via warehouse_auto")
+        return ["python", "-m", "src.warehouse.warehouse_auto"]
+
     # Tillåt explicit modulväg, t.ex. src.collectors.collect_extract_weekly
     if job_type.startswith("src."):
         log(f"Selected job: custom module → {job_type}")
