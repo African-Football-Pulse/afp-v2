@@ -22,11 +22,11 @@ tasks:
 
   - job: src.warehouse.build_player_match_stats
     description: Build player match stats parquet
-    enabled: true
+    enabled: false
 
   - job: src.warehouse.build_player_totals
     description: Build player totals parquet
-    enabled: false
+    enabled: true
 
   - job: src.warehouse.build_countries_flat
     description: Build countries flat parquet
