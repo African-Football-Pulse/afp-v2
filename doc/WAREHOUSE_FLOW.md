@@ -62,3 +62,5 @@ Varje artefakt (RAW, BASE, METRICS, CONTENT) har en unik **ID** (A#, B#, M#, C#)
 
 ---
 
+## 🗺 Diagram
+Se [WAREHOUSE_FLOW.mmd](WAREHOUSE_FLOW.mmd) för ett visualiserat flöde i Mermaid.
