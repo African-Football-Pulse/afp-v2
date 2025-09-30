@@ -1,7 +1,13 @@
+# src/warehouse/build_toplists_africa.py
+
 import os
 import io
 import pandas as pd
 from src.storage import azure_blob
+from src.utils.normalize import normalize_ids  # om ni har lagt normalize_ids i utils
+
+
+CONTAINER = "afp"
 
 
 def read_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
@@ -11,7 +17,7 @@ def read_parquet_from_blob(container: str, path: str) -> pd.DataFrame:
 
 
 def main():
-    container = "afp"
+    print("[build_toplists_africa] 🔄 Start")
 
     # Paths
     goals_path = "warehouse/metrics/goals_assists_africa.parquet"
@@ -20,15 +26,25 @@ def main():
     output_path = "warehouse/metrics/toplists_africa.parquet"
 
     # Load datasets
-    df_goals = read_parquet_from_blob(container, goals_path)
-    df_cards = read_parquet_from_blob(container, cards_path)
-
+    df_goals = read_parquet_from_blob(CONTAINER, goals_path)
+    df_cards = read_parquet_from_blob(CONTAINER, cards_path)
     df_players = (
-        read_parquet_from_blob(container, players_path)[
+        read_parquet_from_blob(CONTAINER, players_path)[
             ["player_id", "name", "current_club", "country"]
         ]
         .rename(columns={"current_club": "club", "name": "player_name"})
     )
+
+    # Normalize IDs
+    df_goals = normalize_ids(df_goals, ["player_id"])
+    df_cards = normalize_ids(df_cards, ["player_id"])
+    df_players = normalize_ids(df_players, ["player_id"])
+
+    # Ensure season is string
+    if "season" in df_goals.columns:
+        df_goals["season"] = df_goals["season"].astype(str)
+    if "season" in df_cards.columns:
+        df_cards["season"] = df_cards["season"].astype(str)
 
     # ---- Merge metrics ----
     df = (
@@ -36,8 +52,10 @@ def main():
         .merge(df_players, on="player_id", how="left")
     )
 
-    # Fill NaNs
-    df = df.fillna(0)
+    # Fill NaNs with 0 for numeric cols
+    for col in ["total_goals", "total_assists", "goal_contributions", "total_cards"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
     # ---- Build toplists ----
     toplists = {}
@@ -86,7 +104,7 @@ def main():
 
     parquet_bytes = out.to_parquet(index=False, engine="pyarrow")
     azure_blob.put_bytes(
-        container=container,
+        container=CONTAINER,
         blob_path=output_path,
         data=parquet_bytes,
         content_type="application/octet-stream"
