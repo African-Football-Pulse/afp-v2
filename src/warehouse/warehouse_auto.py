@@ -43,12 +43,15 @@ def main():
             if f.endswith("_auto.py"):
                 continue  # undvik att kalla oss själva
             module = os.path.splitext(f.replace("src/", "").replace("/", "."))[0]
-            tasks.append({"job": module, "description": "auto-run"})
+            tasks.append({"job": module, "description": "auto-run", "enabled": True})
         print(f"[warehouse_auto] 🚀 Override: kör ALLA {len(tasks)} warehouse-moduler")
 
-    print(f"[warehouse_auto] 📋 Jobs som ska köras: {[t['job'] for t in tasks]}")
+    # Filtrera på enabled
+    enabled_tasks = [t for t in tasks if t.get("enabled", True)]
 
-    for task in tasks:
+    print(f"[warehouse_auto] 📋 Jobs som ska köras: {[t['job'] for t in enabled_tasks]}")
+
+    for task in enabled_tasks:
         job = task["job"]
         cmd = [job]
         run(cmd)
