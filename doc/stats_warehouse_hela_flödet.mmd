@@ -66,8 +66,6 @@ Varje artefakt (RAW, BASE, METRICS, CONTENT) har en unik **ID** (A#, B#, M#, C#)
 
 ```mermaid
 flowchart TD
-
-  %% RAW LAYER
   subgraph RAW["RAW (JSON-filer)"]
     A1["A1 players_africa_master.json"]
     A2["A2 players_africa_history.json"]
@@ -81,7 +79,6 @@ flowchart TD
     A10["A10 africa_fifa_codes.json"]
   end
 
-  %% BASE LAYER
   subgraph BASE["BASE Layer (Parquet)"]
     B1["B1 players_flat.parquet"]
     B2["B2 teams_flat.parquet"]
@@ -94,7 +91,6 @@ flowchart TD
     B9["B9 countries_flat.parquet"]
   end
 
-  %% METRICS LAYER
   subgraph METRICS["METRICS Layer (Parquet)"]
     M1["M1 goals_africa.parquet"]
     M2["M2 assists_africa.parquet"]
@@ -103,7 +99,6 @@ flowchart TD
     M5["M5 milestones.parquet"]
   end
 
-  %% CONTENT LAYER
   subgraph CONTENT["CONTENT (Sektioner)"]
     C1["C1 S.STATS.GOALSCORERS"]
     C2["C2 S.STATS.ASSISTS"]
@@ -112,7 +107,6 @@ flowchart TD
     C5["C5 S.STATS.MILESTONES"]
   end
 
-  %% Connections RAW -> BASE
   A1 --> B1
   A2 --> B1
   A3 --> B1
@@ -125,7 +119,6 @@ flowchart TD
   A9 --> B8
   A10 --> B9
 
-  %% Connections BASE -> METRICS
   B1 --> M1
   B6 --> M1
   B7 --> M1
@@ -139,7 +132,6 @@ flowchart TD
   B7 --> M4
   B8 --> M5
 
-  %% Connections METRICS -> CONTENT
   M1 --> C1
   M2 --> C2
   M3 --> C3
