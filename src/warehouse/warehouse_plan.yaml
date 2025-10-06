@@ -23,38 +23,38 @@ tasks:
   - id: B5
     job: src.warehouse.build_matches_events_flat
     description: Build matches + events flat parquet
-    enabled: false
+    enabled: true
 
   - id: B7
     job: src.warehouse.build_player_match_stats
     description: Build player match stats parquet
-    enabled: false
+    enabled: true
 
   - id: B8
     job: src.warehouse.build_player_totals
     description: Build player totals parquet
-    enabled: false
+    enabled: true
 
   - id: B9
     job: src.warehouse.build_countries_flat
     description: Build countries flat parquet
-    enabled: false
+    enabled: true
 
   # --- METRICS ---
   - id: M1
     job: src.warehouse.build_goals_assists_africa
     description: Build goals + assists metrics parquet
-    enabled: false
+    enabled: true
 
   - id: M3
     job: src.warehouse.build_clean_sheets_africa
     description: Build clean sheets metrics parquet
-    enabled: false
+    enabled: true
 
   - id: M4
     job: src.warehouse.build_match_performance_africa
     description: Build match performance metrics parquet
-    enabled: false
+    enabled: true
 
   - id: M5
     job: src.warehouse.build_toplists_africa
@@ -64,4 +64,4 @@ tasks:
   - id: M6
     job: src.warehouse.build_cards_africa
     description: Build cards metrics parquet
-    enabled: false
+    enabled: true
