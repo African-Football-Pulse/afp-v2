@@ -6,10 +6,10 @@ import os
 from glob import glob
 
 
-def run(cmd):
+def run(cmd, env=None):
     """Helper för att köra subprocess och logga"""
     print(f"[warehouse_auto] ▶️ Kör: {' '.join(cmd)}")
-    res = subprocess.run(["python", "-m"] + cmd, capture_output=True, text=True)
+    res = subprocess.run(["python", "-m"] + cmd, capture_output=True, text=True, env=env)
     if res.returncode != 0:
         print(res.stdout)
         print(res.stderr)
@@ -48,13 +48,19 @@ def main():
 
     # Filtrera på enabled
     enabled_tasks = [t for t in tasks if t.get("enabled", True)]
-
     print(f"[warehouse_auto] 📋 Jobs som ska köras: {[t['job'] for t in enabled_tasks]}")
+
+    # 🔧 Sätt standardvärden för SEASON/LEAGUE om de inte finns
+    base_env = os.environ.copy()
+    base_env["SEASON"] = base_env.get("SEASON", "2025-2026")
+    base_env["LEAGUE"] = base_env.get("LEAGUE", "premier_league")
+
+    print(f"[warehouse_auto] 🌍 Kör med SEASON={base_env['SEASON']}, LEAGUE={base_env['LEAGUE']}")
 
     for task in enabled_tasks:
         job = task["job"]
         cmd = [job]
-        run(cmd)
+        run(cmd, env=base_env)
 
     print(f"[warehouse_auto] ✅ Klar {today}")
 
