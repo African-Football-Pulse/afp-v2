@@ -16,8 +16,13 @@ def normalize_date(s):
 
 def get_latest_finished(matches):
     """Returnera senaste spelade datum ur matchlistan."""
+    # Hantera både list och dict-format
+    match_list = matches
+    if isinstance(matches, dict):
+        match_list = matches.get("matches", [])
+
     all_dates = []
-    for m in matches.get("matches", []):
+    for m in match_list:
         if m.get("status") == "finished" and m.get("date"):
             all_dates.append(normalize_date(m["date"]))
     if not all_dates:
@@ -32,9 +37,12 @@ def save_latest_round(league_id, season, matches):
         print(f"[collect_stats_fullseason] ⚠️ Inga färdiga matcher hittades för {league_id}")
         return
 
+    match_list = matches
+    if isinstance(matches, dict):
+        match_list = matches.get("matches", [])
+
     latest_matches = [
-        m for m in matches.get("matches", [])
-        if normalize_date(m.get("date")) == latest_date
+        m for m in match_list if normalize_date(m.get("date")) == latest_date
     ]
 
     if not latest_matches:
@@ -64,8 +72,6 @@ def main():
         print(f"[collect_stats_fullseason] Fetching full season for {league['name']} (id={league_id})")
 
         matches = collect_stats(league_id, season, mode="fullseason")
-
-        # Ladda upp senaste omgången direkt ur matches.json
         save_latest_round(league_id, season, matches)
 
 
