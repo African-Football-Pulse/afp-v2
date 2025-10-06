@@ -54,15 +54,3 @@ jobs:
               JOB_TYPE="${{ env.JOB_TYPE }}" \
               BLOB_PREFIX="${{ env.BLOB_PREFIX }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }}
-
-      - name: Ensure Warehouse Schedule (06:00 UTC)
-        run: |
-          echo "🔄 Ensuring scheduled trigger for Warehouse (06:00 UTC)"
-          az containerapp job patch \
-            --name "${{ env.ACA_JOB_NAME }}" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --set "properties.configuration.triggerType=Schedule" \
-            --set "properties.configuration.scheduleTriggerConfig.cronExpression=0 6 * * *" \
-            --set "properties.configuration.scheduleTriggerConfig.parallelism=1" \
-            --set "properties.configuration.scheduleTriggerConfig.replicaCompletionCount=1"
-
