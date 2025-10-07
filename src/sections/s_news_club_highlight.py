@@ -48,6 +48,7 @@ def build_section(args):
         f"Focus on the player {player} at {club}. "
         f"Make it engaging, but concise (about 3-4 sentences). "
         f"Do not include scores, raw URLs or metadata. "
+        f"Do not add generic openings like 'Welcome'."
         f"Do not add generic closings like 'Stay tuned'."
     )
 
