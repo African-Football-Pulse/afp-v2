@@ -85,6 +85,7 @@ def build_section(args):
             f"Each story should be 2–3 sentences, engaging and clear, "
             f"mentioning the player and club naturally. "
             f"Do not include scores, raw URLs or metadata. "
+            f"Do not add generic openings like 'Welcome'."
             f"Do not add generic closing lines like 'Stay tuned' or 'That's all for today'."
         )
     }
