@@ -1,24 +1,9 @@
 import os
 import io
 import pandas as pd
-from datetime import datetime
 from src.sections import utils
 from src.producer.gpt import run_gpt
 from src.storage import azure_blob
-
-
-def current_season(today=None):
-    """
-    Returnerar säsong i formatet 'YYYY-YYYY' baserat på dagens datum.
-    Premier League-säsonger börjar i augusti.
-    """
-    if today is None:
-        today = datetime.utcnow()
-    year = today.year
-    if today.month < 8:  # innan augusti → fortfarande förra säsongen
-        return f"{year-1}-{year}"
-    else:
-        return f"{year}-{year+1}"
 
 
 def build_section(args=None, **kwargs):
@@ -33,8 +18,8 @@ def build_section(args=None, **kwargs):
     blob_path = "warehouse/metrics/cards_africa.parquet"
     container = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-    # Beräkna aktuell säsong
-    season = current_season()
+    # 🧩 Använd gemensam säsongsfunktion
+    season = utils.current_season()
     print(f"[stats_discipline] Using season={season}")
 
     try:
@@ -45,23 +30,7 @@ def build_section(args=None, **kwargs):
         df = pd.read_parquet(io.BytesIO(data))
     except Exception as e:
         text = f"No discipline data available (failed to load {blob_path})."
-        payload = {
-            "slug": "stats_discipline",
-            "title": "Discipline Leaders",
-            "text": text,
-            "length_s": 0,
-            "sources": {"warehouse": blob_path},
-            "meta": {"persona": persona_id},
-            "type": "stats",
-            "model": "static",
-            "items": [],
-        }
-        manifest = {"script": text, "meta": {"persona": persona_id}}
-        print(f"[stats_discipline] Error loading blob: {e}")
-        return utils.write_outputs(section_code, day, league, lang, pod, manifest, "empty", payload)
-
-    if df.empty:
-        text = "No discipline data found."
+        print(f"[stats_discipline] Error: {e}")
         payload = {
             "slug": "stats_discipline",
             "title": "Discipline Leaders",
@@ -76,10 +45,14 @@ def build_section(args=None, **kwargs):
         manifest = {"script": text, "meta": {"persona": persona_id}}
         return utils.write_outputs(section_code, day, league, lang, pod, manifest, "empty", payload)
 
-    # 🧩 Filtrera på aktuell säsong (om kolumnen finns)
+    print(f"[stats_discipline] Total rows before filter: {len(df)}")
+
+    # Filtrera på aktuell säsong (om kolumn finns)
     if "season" in df.columns:
         df = df[df["season"] == season]
-        print(f"[stats_discipline] Filtered rows for season={season} → {len(df)}")
+        print(f"[stats_discipline] Rows after season filter: {len(df)}")
+    else:
+        print("[stats_discipline] No 'season' column found — using full dataset.")
 
     if df.empty:
         text = f"No discipline data found for season {season}."
@@ -94,7 +67,7 @@ def build_section(args=None, **kwargs):
             "model": "static",
             "items": [],
         }
-        manifest = {"script": text, "meta": {"persona": persona_id}}
+        manifest = {"script": text, "meta": {"persona": persona_id}, "season": season}
         return utils.write_outputs(section_code, day, league, lang, pod, manifest, "empty", payload)
 
     # Top 5 spelare med flest kort
@@ -131,7 +104,7 @@ def build_section(args=None, **kwargs):
     manifest = {
         "script": gpt_output,
         "meta": {"persona": persona_id},
-        "season": season
+        "season": season,
     }
 
     return utils.write_outputs(section_code, day, league, lang, pod, manifest, "success", payload)
