@@ -1,7 +1,7 @@
 name: Build + Deploy Produce (ACA)
 
 on:
-  workflow_dispatch:   # Endast manuell körning från GitHub
+  workflow_dispatch:   # Manuell körning från GitHub
 
 env:
   AZURE_RESOURCE_GROUP: afp-rg
@@ -10,6 +10,7 @@ env:
   IMAGE_NAME: afp-runner
   IMAGE_TAG: gh-4
   SECRET_BLOB_SAS_NAME: blob-container-sas-url
+  SECRET_SOCCERDATA_NAME: soccerdata-auth-key
   JOB_TYPE: produce
   # JOB_ARGS: "--section S.STATS.TOP_AFRICAN_PLAYERS --league premier_league"
 
@@ -21,31 +22,42 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout
+      - name: 🧾 Checkout
         uses: actions/checkout@v4
 
-      - name: Azure login (federated)
+      - name: 🔐 Azure login (Federated)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build image ref
+      - name: 🏗️ Build image ref
         run: |
           echo "IMAGE_REF=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
-          echo "IMAGE_REF=$IMAGE_REF"
+          echo "IMAGE_REF=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
 
-      - name: Login to ACR
+      - name: 🔑 Login to ACR
         run: az acr login -n ${{ env.ACR_NAME }}
 
-      - name: Docker build & push
+      - name: 🐳 Docker build & push
         run: |
           docker build -t "$IMAGE_REF" -f Dockerfile .
           docker push "$IMAGE_REF"
 
-      - name: Update ACA Job (image + env)
+      - name: 🧩 Ensure ACA Secrets exist (Blob + SoccerData)
         run: |
+          echo "🔄 Ensuring secrets for Produce job..."
+          az containerapp job secret set \
+            -n "${{ env.ACA_JOB_NAME }}" \
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --secrets \
+              ${{ env.SECRET_BLOB_SAS_NAME }}="${{ secrets.BLOB_CONTAINER_SAS_URL }}" \
+              ${{ env.SECRET_SOCCERDATA_NAME }}="${{ secrets.SOCCERDATA_AUTH_KEY }}"
+
+      - name: 🚀 Update ACA Job (image + env)
+        run: |
+          echo "🔄 Updating Container App Job..."
           az containerapp job update \
             --name "${{ env.ACA_JOB_NAME }}" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
@@ -53,4 +65,12 @@ jobs:
             --set-env-vars \
               JOB_TYPE="${{ env.JOB_TYPE }}" \
               BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }} \
+              SOCCERDATA_AUTH_KEY=secretref:${{ env.SECRET_SOCCERDATA_NAME }} \
               $( [ -n "${{ env.JOB_ARGS }}" ] && echo JOB_ARGS="${{ env.JOB_ARGS }}" )
+
+      - name: ✅ Confirm deployment
+        run: |
+          az containerapp job show \
+            -n "${{ env.ACA_JOB_NAME }}" \
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --query "{name:name, trigger:properties.configuration.triggerType, state:properties.provisioningState}" -o table
