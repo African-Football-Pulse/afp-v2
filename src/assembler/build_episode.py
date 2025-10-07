@@ -1,72 +1,48 @@
-import os, json, pathlib
+import os, json
 from datetime import datetime
 from typing import List
-from src.common.blob_io import get_container_client
 from jinja2 import Environment, FileSystemLoader
+from src.storage import azure_blob
 from src.tools.voice_map import load_voice_map
 
+# ---------- Miljövariabler ----------
 LEAGUE = os.getenv("LEAGUE", "premier_league")
-
 _raw_lang = os.getenv("LANG")
 LANG = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
-
 POD_ID = os.getenv("POD_ID", f"afp-{LEAGUE}-daily-{LANG}")
+READ_PREFIX = os.getenv("READ_PREFIX", "")
+WRITE_PREFIX = os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "assembler/"))
 
-USE_LOCAL   = os.getenv("USE_LOCAL", "0") == "1"
-LOCAL_ROOT  = pathlib.Path("/app/local_out")
+CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
+if not CONTAINER.strip():
+    raise RuntimeError("AZURE_STORAGE_CONTAINER missing or empty")
 
-READ_PREFIX  = "" if USE_LOCAL else os.getenv("READ_PREFIX", "")
-WRITE_PREFIX = "" if USE_LOCAL else os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "assembler/"))
-
-_CONTAINER = None  # sätts i main()
-
-def log(msg: str) -> None:
+# ---------- Logging ----------
+def log(msg: str):
     print(f"[assemble] {msg}", flush=True)
 
 def today() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d")
 
-def _ensure_parent(p: pathlib.Path) -> None:
-    p.parent.mkdir(parents=True, exist_ok=True)
-
 # ---------- I/O ----------
 def read_text(rel_path: str) -> str:
-    if USE_LOCAL:
-        p = LOCAL_ROOT / rel_path
-        return p.read_text(encoding="utf-8")
-    blob = _CONTAINER.get_blob_client(blob=READ_PREFIX + rel_path)  # type: ignore[attr-defined]
-    return blob.download_blob().readall().decode("utf-8")
+    """Läser text från Azure Blob"""
+    return azure_blob.get_text(CONTAINER, READ_PREFIX + rel_path)
 
-def write_text(rel_path: str, text: str, content_type: str) -> str:
-    if USE_LOCAL:
-        p = LOCAL_ROOT / rel_path
-        _ensure_parent(p)
-        p.write_text(text, encoding="utf-8")
-        return str(p)
-    blob = _CONTAINER.get_blob_client(blob=WRITE_PREFIX + rel_path)  # type: ignore[attr-defined]
-    blob.upload_blob(text.encode("utf-8"), overwrite=True, content_type=content_type)
+def write_text(rel_path: str, text: str, content_type: str):
+    """Skriver text till Azure Blob"""
+    azure_blob.put_text(CONTAINER, WRITE_PREFIX + rel_path, text, content_type)
     return WRITE_PREFIX + rel_path
 
 def list_section_manifests(date: str, league: str) -> List[str]:
-    base_prefix = f"sections/"
-    results: List[str] = []
-    if USE_LOCAL:
-        base = LOCAL_ROOT / base_prefix
-        if not base.exists():
-            return []
-        for p in base.rglob("section_manifest.json"):
-            posix = p.relative_to(LOCAL_ROOT).as_posix()
-            if f"/{date}/{league}/_/section_manifest.json" in posix:
-                results.append(posix)
-        return sorted(results)
-    else:
-        log(f"DEBUG: listing blobs with prefix={READ_PREFIX + base_prefix}")
-        for b in _CONTAINER.list_blobs(name_starts_with=READ_PREFIX + base_prefix):  # type: ignore[attr-defined]
-            name = b.name  # type: ignore[attr-defined]
-            if name.endswith("/section_manifest.json") and f"/{date}/{league}/_/" in name:
-                log(f"DEBUG: manifest match -> {name}")
-                results.append(name[len(READ_PREFIX):])
-        return sorted(results)
+    """Listar alla section_manifest.json för datum/league"""
+    base_prefix = f"{READ_PREFIX}sections/"
+    results = []
+    for b in azure_blob.list_prefix(CONTAINER, base_prefix):
+        if b.endswith("/section_manifest.json") and f"/{date}/{league}/_/" in b:
+            results.append(b[len(READ_PREFIX):])
+    log(f"found {len(results)} manifests")
+    return sorted(results)
 
 # ---------- Parser ----------
 def parse_section_text(section_id: str, date: str, league: str) -> dict:
@@ -79,12 +55,7 @@ def parse_section_text(section_id: str, date: str, league: str) -> dict:
     except Exception:
         return {"text": ""}
 
-    # Ta bort rubrikrader som börjar med '#'
-    clean_lines = []
-    for line in raw_text.splitlines():
-        if line.strip().startswith("#"):
-            continue
-        clean_lines.append(line)
+    clean_lines = [l for l in raw_text.splitlines() if not l.strip().startswith("#")]
     raw_text = "\n".join(clean_lines).strip()
 
     lines = []
@@ -93,16 +64,11 @@ def parse_section_text(section_id: str, date: str, league: str) -> dict:
         if not line:
             continue
         if line.startswith("**Expert 1:**") or line.startswith("Expert 1:"):
-            text = line.split(":", 1)[1].strip()
-            lines.append({"persona": "expert1", "text": text})
+            lines.append({"persona": "expert1", "text": line.split(":", 1)[1].strip()})
         elif line.startswith("**Expert 2:**") or line.startswith("Expert 2:"):
-            text = line.split(":", 1)[1].strip()
-            lines.append({"persona": "expert2", "text": text})
+            lines.append({"persona": "expert2", "text": line.split(":", 1)[1].strip()})
 
-    if lines:
-        return {"lines": lines}
-    else:
-        return {"text": raw_text}
+    return {"lines": lines} if lines else {"text": raw_text}
 
 # ---------- Rendering via Jinja ----------
 def render_episode(sections_meta, lang: str, mode: str = "script"):
@@ -113,19 +79,26 @@ def render_episode(sections_meta, lang: str, mode: str = "script"):
         sections=sections_dict,
         weekday=datetime.utcnow().weekday(),
         lang=lang,
-        mode=mode
+        mode=mode,
+        league=LEAGUE,
+        date=today()
     )
 
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str):
     manifests = list_section_manifests(date, league)
-    log(f"found manifests: {len(manifests)}")
     base = f"episodes/{date}/{league}/daily/{lang}/"
 
     if not manifests:
-        report = {"status": "no-episode", "reason": "no sections found", "date": date, "league": league, "lang": lang}
+        report = {
+            "status": "no-episode",
+            "reason": "no sections found",
+            "date": date,
+            "league": league,
+            "lang": lang
+        }
         write_text(base + "report.json", json.dumps(report, ensure_ascii=False, indent=2), "application/json")
-        log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}report.json")
+        log(f"wrote: {WRITE_PREFIX}{base}report.json")
         return
 
     sections_meta = []
@@ -133,30 +106,22 @@ def build_episode(date: str, league: str, lang: str):
         parts = m.split("/")
         section_id = parts[1] if len(parts) > 1 else "UNKNOWN"
         try:
-            raw = json.loads(read_text(m))
+            raw = azure_blob.get_json(CONTAINER, m)
             dur = int(raw.get("target_duration_s", 60))
         except Exception:
             dur = 60
-
         parsed = parse_section_text(section_id, date, league)
-
-        sections_meta.append({
-            "section_id": section_id,
-            "lang": lang,
-            "duration_s": dur,
-            **parsed
-        })
+        sections_meta.append({"section_id": section_id, "lang": lang, "duration_s": dur, **parsed})
 
     # 1. Rendera manus
     episode_script = render_episode(sections_meta, lang, mode="script")
 
-    # 2. Rendera vilka sektioner som används (som radlista från mallen)
+    # 2. Rendera vilka sektioner som används
     used_text = render_episode(sections_meta, lang, mode="used")
     used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
-
     log(f"used_sections (från mallen): {used_sections}")
 
-    # 3. Filtrera manifestet
+    # 3. Filtrera metadata
     filtered_meta = [s for s in sections_meta if s["section_id"] in used_sections]
 
     # 4. Voice map
@@ -177,16 +142,13 @@ def build_episode(date: str, league: str, lang: str):
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
     write_text(base + "episode_used.json", json.dumps(used_sections, ensure_ascii=False, indent=2), "application/json")
 
-    log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_manifest.json")
-    log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_script.txt")
-    log(f"wrote: {(WRITE_PREFIX or '[local]/')}{base}episode_used.json")
+    log(f"wrote: {WRITE_PREFIX}{base}episode_manifest.json")
+    log(f"wrote: {WRITE_PREFIX}{base}episode_script.txt")
+    log(f"wrote: {WRITE_PREFIX}{base}episode_used.json")
 
+# ---------- Main ----------
 def main():
-    mode = "LOCAL" if USE_LOCAL else "SAS"
-    log(f"start mode={mode} league={LEAGUE} lang={LANG}")
-    if not USE_LOCAL:
-        global _CONTAINER
-        _CONTAINER = get_container_client()
+    log(f"start assemble: league={LEAGUE} lang={LANG}")
     date = today()
     build_episode(date, LEAGUE, LANG)
     log("done")
