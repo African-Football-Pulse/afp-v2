@@ -1,0 +1,40 @@
+# =========================================================
+# 🎧 Episode Transitions Configuration
+# Defines how narration flows between sections and roles
+# =========================================================
+
+role_transitions:
+  news_anchor→expert:
+    en: "And now let’s bring in our expert for deeper analysis."
+    sw: "Na sasa tumkaribishe mtaalam wetu kwa uchambuzi wa kina."
+    ar: "والآن لنستمع إلى رأي خبيرنا لتحليل أعمق."
+  expert→news_anchor:
+    en: "Back to the headlines with our anchor."
+    sw: "Tunarudi kwa habari kuu na mtangazaji wetu."
+    ar: "والآن نعود إلى أبرز العناوين مع المذيع."
+  news_anchor→news_anchor:
+    en: "Next up, here are more updates from the Premier League."
+    sw: "Habari zaidi kutoka Ligi Kuu ya Uingereza zinakuja."
+    ar: "والآن، المزيد من التحديثات من الدوري الإنجليزي الممتاز."
+  expert→expert:
+    en: "Continuing with expert opinions, let’s hear another perspective."
+    sw: "Tukiendelea na maoni ya wataalam, hebu tusikie mtazamo mwingine."
+    ar: "نواصل بآراء الخبراء، فلنستمع إلى وجهة نظر أخرى."
+
+section_transitions:
+  S.GENERIC.INTRO.DAILY→S.NEWS.TOP3.GENERIC:
+    en: "Let’s start with today’s top three news stories from the Premier League."
+    sw: "Tuanze na habari tatu kuu za leo kutoka Ligi Kuu ya Uingereza."
+    ar: "لنبدأ مع أهم ثلاث أخبار من الدوري الإنجليزي الممتاز اليوم."
+  S.NEWS.TOP3.GENERIC→S.NEWS.TOP.AFRICAN.PLAYERS:
+    en: "Now, let’s shift focus to the standout African players making headlines this week."
+    sw: "Sasa, hebu tuangalie wachezaji wa Kiafrika waliovutia zaidi wiki hii."
+    ar: "والآن، لنسلط الضوء على اللاعبين الأفارقة الذين يتألقون هذا الأسبوع."
+  S.NEWS.TOP.AFRICAN.PLAYERS→S.OPINION.EXPERT.COMMENT:
+    en: "For a deeper take, here’s what our expert had to say."
+    sw: "Kwa uchambuzi zaidi, hebu tusikie maoni ya mtaalam wetu."
+    ar: "لتحليل أعمق، هذا ما قاله خبيرنا."
+  S.OPINION.EXPERT.COMMENT→S.STATS.TOP.PERFORMERS.ROUND:
+    en: "Now, let’s take a look at the top-performing African players from the latest round."
+    sw: "Sasa, hebu tuangalie wachezaji wa Kiafrika waliofanya vizuri zaidi katika raundi ya hivi karibuni."
+    ar: "والآن، دعونا نلقي نظرة على أفضل اللاعبين الأفارقة أداءً في الجولة الأخيرة."
