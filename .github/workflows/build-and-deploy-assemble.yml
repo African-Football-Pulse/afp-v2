@@ -1,27 +1,96 @@
-name: Build and Deploy Assemble
+name: Build + Deploy Assemble (ACA)
 
 on:
-  workflow_dispatch:    # Manuell trigger via Actions
+  workflow_dispatch:    # Manuell körning via Actions
   schedule:
-    - cron: "0 6 * * *" # Automatisk körning varje dag 06:00 UTC
+    - cron: "0 6 * * *"  # Automatisk körning varje dag 06:00 UTC
+
+env:
+  AZURE_RESOURCE_GROUP: afp-rg
+  ACA_JOB_NAME: afp-assemble-job
+  ACR_NAME: afpacr
+  IMAGE_NAME: afp-runner
+  IMAGE_TAG: gh-4
+  SECRET_BLOB_SAS_NAME: blob-container-sas-url
+  SECRET_SOCCERDATA_NAME: soccerdata-auth-key
+  JOB_TYPE: src.assembler.build_episode
+  LEAGUE: premier_league
+  LANG: en
+  READ_PREFIX: ""
+  WRITE_PREFIX: assembler/
 
 jobs:
-  assemble:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 🧾 Checkout
+        uses: actions/checkout@v4
 
-      - name: Build docker image
-        run: docker build -t afp .
+      - name: 🔐 Azure login (Federated)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Run assemble
+      - name: 🏗️ Build image ref
         run: |
-          docker run --rm \
-            -e JOB_TYPE=src.assembler.build_episode \
-            -e LEAGUE=premier_league \
-            -e LANG=en \
-            -e READ_PREFIX="" \
-            -e WRITE_PREFIX=assembler/ \
-            -e BLOB_CONTAINER_SAS_URL="${{ secrets.BLOB_CONTAINER_SAS_URL }}" \
-            afp
+          echo "IMAGE_REF=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+          echo "IMAGE_REF=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+
+      - name: 🔑 Login to ACR
+        run: az acr login -n ${{ env.ACR_NAME }}
+
+      - name: 🐳 Docker build & push
+        run: |
+          docker build -t "$IMAGE_REF" -f Dockerfile .
+          docker push "$IMAGE_REF"
+
+      - name: 🧩 Ensure ACA Secrets exist (Blob + SoccerData)
+        run: |
+          echo "🔄 Ensuring secrets for Assemble job..."
+          az containerapp job secret set \
+            -n "${{ env.ACA_JOB_NAME }}" \
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --secrets \
+              ${{ env.SECRET_BLOB_SAS_NAME }}="${{ secrets.BLOB_CONTAINER_SAS_URL }}" \
+              ${{ env.SECRET_SOCCERDATA_NAME }}="${{ secrets.SOCCERDATA_AUTH_KEY }}"
+
+      - name: 🕕 Ensure 06:00 UTC schedule
+        run: |
+          echo "🔄 Ensuring scheduled trigger (06:00 UTC)..."
+          az containerapp job update \
+            --name "${{ env.ACA_JOB_NAME }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --set "properties.configuration.triggerType=Schedule" \
+            --set "properties.configuration.scheduleTriggerConfig.cronExpression=0 6 * * *" \
+            --set "properties.configuration.scheduleTriggerConfig.parallelism=1" \
+            --set "properties.configuration.scheduleTriggerConfig.replicaCompletionCount=1" \
+            --set "properties.configuration.replicaRetryLimit=1"
+
+      - name: 🚀 Update ACA Job (image + env)
+        run: |
+          echo "🔄 Updating Assemble job..."
+          az containerapp job update \
+            --name "${{ env.ACA_JOB_NAME }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$IMAGE_REF" \
+            --set-env-vars \
+              JOB_TYPE="${{ env.JOB_TYPE }}" \
+              LEAGUE="${{ env.LEAGUE }}" \
+              LANG="${{ env.LANG }}" \
+              READ_PREFIX="${{ env.READ_PREFIX }}" \
+              WRITE_PREFIX="${{ env.WRITE_PREFIX }}" \
+              BLOB_CONTAINER_SAS_URL=secretref:${{ env.SECRET_BLOB_SAS_NAME }} \
+              SOCCERDATA_AUTH_KEY=secretref:${{ env.SECRET_SOCCERDATA_NAME }}
+
+      - name: ✅ Confirm deployment
+        run: |
+          az containerapp job show \
+            -n "${{ env.ACA_JOB_NAME }}" \
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --query "{name:name, trigger:properties.configuration.triggerType, state:properties.provisioningState}" -o table
