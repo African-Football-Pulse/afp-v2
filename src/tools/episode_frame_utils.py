@@ -1,38 +1,32 @@
-import yaml
-import os
+"""
+episode_frame_utils.py
+-------------------------------------
+Stub-version av tidigare frame-hanterare.
 
-def load_frame():
-    """
-    Laddar intro/outro-konfiguration från config/episode_frame.yaml.
-    """
-    path = "config/episode_frame.yaml"
-    if not os.path.exists(path):
-        print("[episode_frame_utils] ⚠️ episode_frame.yaml saknas")
-        return {}
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+Bakgrund:
+Förr användes denna modul för att lägga till EPISODE.INTRO och EPISODE.OUTRO
+baserat på episode_frame.yaml. Nu sköts detta helt av sektionerna:
+  - S.GENERIC.INTRO.DAILY / POSTMATCH
+  - S.GENERIC.OUTRO.DAILY
+
+Denna fil finns kvar enbart för bakåtkompatibilitet och loggning.
+-------------------------------------
+"""
+
+import logging
+
+logger = logging.getLogger("episode_frame_utils")
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[episode_frame_utils] %(message)s")
+handler.setFormatter(formatter)
+logger.handlers = [handler]
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 
 def insert_intro_outro(sections_meta, lang):
     """
-    Infogar enbart outro-sektionen i slutet av manuset.
-    Introsektioner (t.ex. S.GENERIC.INTRO.DAILY) hanteras redan via episode.jinja.
+    Stub-funktion. Returnerar sektionerna oförändrade.
     """
-    cfg = load_frame()
-    outro_text = cfg.get("outro", {}).get(lang)
-    enriched = list(sections_meta)
-
-    if outro_text:
-        enriched.append({
-            "section_id": "EPISODE.OUTRO",
-            "role": "news_anchor",
-            "lang": lang,
-            "text": outro_text,
-            "duration_s": 6,
-        })
-        print("[episode_frame_utils] ✅ Added outro section.")
-    else:
-        print("[episode_frame_utils] ℹ️ No outro text found in config.")
-
-    print(f"[episode_frame_utils] Total sections after outro insertion: {len(enriched)}")
-    return enriched
+    logger.info("Inactive — intro/outro handled by S.GENERIC sections.")
+    return sections_meta
