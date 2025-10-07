@@ -41,6 +41,19 @@ sections:
     description: Spotlight on one club based on recent news candidates
     role: news_anchor
 
+  S.GENERIC.OUTRO.DAILY:
+  module: s_generic_outro_daily
+  runner: build_section
+  description: Generic daily outro section
+  role: news_anchor
+
+S.GENERIC.OUTRO.POSTMATCH:
+  module: s_generic_outro_postmatch
+  runner: build_section
+  description: Generic outro section after weekend matches
+  role: news_anchor
+
+
   S.STATS.DRIVER:
     module: s_stats_driver
     runner: build_section
