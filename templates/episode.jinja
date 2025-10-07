@@ -22,6 +22,37 @@
   {% set episode_description = "Daily recap of the " + pretty_league + "." %}
 {% endif %}
 
+
+{# ========================================================= #}
+{# 🧩 MODE: SCRIPT → renderar manus                         #}
+{# ========================================================= #}
+{% if mode == "script" %}
+
+🎧 {{ episode_title }}
+{{ episode_description }}
+
+{% for sid, sec in sections.items() %}
+------------------------------------------------------------
+## {{ sid }}
+------------------------------------------------------------
+
+{% if sec.text %}
+{{ sec.text }}
+
+{% endif %}
+{% if sec.lines %}
+  {% for l in sec.lines %}
+{{ l.persona | capitalize }}: {{ l.text }}
+  {% endfor %}
+{% endif %}
+
+{% endfor %}
+{% endif %}
+
+
+{# ========================================================= #}
+{# 🧩 MODE: USED → listar sektioner som ska renderas        #}
+{# ========================================================= #}
 {% if mode == "used" %}
   {# ------------------------------------------------------- #}
   {# Måndag: Post-Match intro + alla NEWS                    #}
