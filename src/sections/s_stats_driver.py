@@ -22,9 +22,13 @@ def build_section(args=None, **kwargs):
     lang = getattr(args, "lang", "en")
     pod = getattr(args, "pod", "default_pod")
 
-    manifest = {"script": f"Stats driver executed for {league} on {day}"}
+    # 🧩 Dynamiskt fastställ aktuell säsong
+    season = utils.current_season()
+    logger.info(f"🏆 Running stats driver for {league}, season={season}, day={day}")
 
-    # Lista på subsektioner vi vill köra
+    manifest = {"script": f"Stats driver executed for {league} on {day} ({season})"}
+
+    # Lista på subsektioner som ska köras
     subsections = [
         ("S.STATS.TOP.CONTRIBUTORS.SEASON", "s_stats_top_contributors_season"),
         ("S.STATS.TOP.PERFORMERS.ROUND", "s_stats_top_performers_round"),
@@ -37,9 +41,19 @@ def build_section(args=None, **kwargs):
     for sub_code, module_name in subsections:
         logger.info("▶️ Startar %s", sub_code)
         try:
+            # Dynamisk import
             mod = importlib.import_module(f"src.sections.{module_name}")
+
+            # Uppdatera argumentobjekt
             setattr(args, "section", sub_code)
-            sub_kwargs = {"season": "2025-2026", "league_id": league, "round_dates": []}
+
+            # 🧩 Passa in säsong & ev round_dates
+            sub_kwargs = {
+                "season": season,
+                "league_id": league,
+                "round_dates": [],
+            }
+
             result = mod.build_section(args, **sub_kwargs)
 
             status = result.get("status", "unknown") if isinstance(result, dict) else "unknown"
@@ -64,5 +78,5 @@ def build_section(args=None, **kwargs):
         pod=pod,
         manifest=manifest,
         status="success",
-        payload={"subsections": results},
+        payload={"season": season, "subsections": results},
     )
