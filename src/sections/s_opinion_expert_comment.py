@@ -61,6 +61,8 @@ def build_section(args):
     instructions = (
         f"Write a short (~120 words) spoken-style expert comment in {lang} about this news:\n\n{news_text}\n\n"
         f"Stay natural, insightful, and record-ready. Present it as {expert_id.upper()} speaking."
+        f"Do not add generic openings like 'Welcome'."
+        f"Do not add generic closings like 'Stay tuned'."
     )
     prompt_config = {
         "persona": f"single_expert:{expert_id}",
