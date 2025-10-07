@@ -128,6 +128,10 @@ def build_episode(date: str, league: str, lang: str, pod: str):
     # 1. Rendera manus
     episode_script = render_episode(sections_meta, lang, mode="script")
 
+    log(f"[debug] sections_meta count={len(sections_meta)}")
+    log(f"[debug] first_section={json.dumps(sections_meta[0], ensure_ascii=False)[:300] if sections_meta else 'none'}")
+
+
     # 2. Rendera vilka sektioner som används
     used_text = render_episode(sections_meta, lang, mode="used")
     used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
