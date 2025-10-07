@@ -4,11 +4,9 @@ from src.storage import azure_blob
 
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 
-
 def log(msg: str):
     """Standardiserad loggning"""
     print(f"[news_utils] {msg}", flush=True)
-
 
 def load_feeds_config():
     """Ladda feeds från config/feeds.yaml (stöd för både feeds: och sources:)"""
@@ -24,16 +22,15 @@ def load_feeds_config():
     log(f"Loaded {len(feeds)} feeds from config: {feeds[:5]}{'...' if len(feeds) > 5 else ''}")
     return feeds
 
-
 def load_curated_news(day: str, league: str = "premier_league"):
     """
-    Ladda alla nyhets-items från curated/news/<feed>/<league>/<day>/items.json i Azure.
+    Ladda alla nyhets-items från collector/curated/news/<feed>/<league>/<day>/items.json i Azure.
     Returnerar en sammanslagen lista.
     """
     feeds = load_feeds_config()
     news_items = []
     for feed in feeds:
-        blob_path = f"curated/news/{feed}/{league}/{day}/items.json"
+        blob_path = f"collector/curated/news/{feed}/{league}/{day}/items.json"  # 🔧 fixad sökväg
         if azure_blob.exists(CONTAINER, blob_path):
             try:
                 items = azure_blob.get_json(CONTAINER, blob_path)
