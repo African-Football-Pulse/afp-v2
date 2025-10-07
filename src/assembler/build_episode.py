@@ -9,6 +9,10 @@ from src.tools.voice_map import load_voice_map
 LEAGUE = os.getenv("LEAGUE", "premier_league")
 _raw_lang = os.getenv("LANG")
 LANG = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
+
+# 🔄 Ny: POD matchar "pod" från produce/write_outputs
+POD = os.getenv("POD", "PL_daily_africa_en")
+
 POD_ID = os.getenv("POD_ID", f"afp-{LEAGUE}-daily-{LANG}")
 READ_PREFIX = os.getenv("READ_PREFIX", "")
 WRITE_PREFIX = os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "assembler/"))
@@ -34,27 +38,32 @@ def write_text(rel_path: str, text: str, content_type: str):
     azure_blob.put_text(CONTAINER, WRITE_PREFIX + rel_path, text, content_type)
     return WRITE_PREFIX + rel_path
 
-def list_section_manifests(date: str, league: str) -> List[str]:
-    """Listar alla section_manifest.json för datum/league"""
+# ---------- Hitta sektioner ----------
+def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
+    """
+    Listar alla section_manifest.json för datum/league/pod
+    """
     base_prefix = f"{READ_PREFIX}sections/"
     results = []
     for b in azure_blob.list_prefix(CONTAINER, base_prefix):
-        if b.endswith("/section_manifest.json") and f"/{date}/{league}/_/" in b:
+        # Anpassat till produce/write_outputs → sections/<section>/<day>/<league>/<pod>/section_manifest.json
+        if b.endswith("/section_manifest.json") and f"/{date}/{league}/{pod}/" in b:
             results.append(b[len(READ_PREFIX):])
-    log(f"found {len(results)} manifests")
+    log(f"found {len(results)} manifests for pod={pod}")
     return sorted(results)
 
 # ---------- Parser ----------
-def parse_section_text(section_id: str, date: str, league: str) -> dict:
+def parse_section_text(section_id: str, date: str, league: str, pod: str) -> dict:
     """
     Läser section.md och returnerar {"text": "..."} eller {"lines": [{"persona": "...", "text": "..."}]}
     """
-    md_path = f"sections/{section_id}/{date}/{league}/_/section.md"
+    md_path = f"sections/{section_id}/{date}/{league}/{pod}/section.md"
     try:
         raw_text = read_text(md_path).strip()
     except Exception:
         return {"text": ""}
 
+    # Ta bort rubrikrader
     clean_lines = [l for l in raw_text.splitlines() if not l.strip().startswith("#")]
     raw_text = "\n".join(clean_lines).strip()
 
@@ -85,17 +94,17 @@ def render_episode(sections_meta, lang: str, mode: str = "script"):
     )
 
 # ---------- Domänlogik ----------
-def build_episode(date: str, league: str, lang: str):
-    manifests = list_section_manifests(date, league)
+def build_episode(date: str, league: str, lang: str, pod: str):
+    manifests = list_section_manifests(date, league, pod)
     base = f"episodes/{date}/{league}/daily/{lang}/"
 
     if not manifests:
         report = {
             "status": "no-episode",
-            "reason": "no sections found",
+            "reason": f"no sections found for pod={pod}",
             "date": date,
             "league": league,
-            "lang": lang
+            "lang": lang,
         }
         write_text(base + "report.json", json.dumps(report, ensure_ascii=False, indent=2), "application/json")
         log(f"wrote: {WRITE_PREFIX}{base}report.json")
@@ -110,7 +119,7 @@ def build_episode(date: str, league: str, lang: str):
             dur = int(raw.get("target_duration_s", 60))
         except Exception:
             dur = 60
-        parsed = parse_section_text(section_id, date, league)
+        parsed = parse_section_text(section_id, date, league, pod)
         sections_meta.append({"section_id": section_id, "lang": lang, "duration_s": dur, **parsed})
 
     # 1. Rendera manus
@@ -129,6 +138,7 @@ def build_episode(date: str, league: str, lang: str):
 
     manifest = {
         "pod_id": POD_ID,
+        "pod": pod,
         "date": date,
         "type": "micro",
         "lang": lang,
@@ -148,9 +158,9 @@ def build_episode(date: str, league: str, lang: str):
 
 # ---------- Main ----------
 def main():
-    log(f"start assemble: league={LEAGUE} lang={LANG}")
+    log(f"start assemble: league={LEAGUE} lang={LANG} pod={POD}")
     date = today()
-    build_episode(date, LEAGUE, LANG)
+    build_episode(date, LEAGUE, LANG, POD)
     log("done")
 
 if __name__ == "__main__":
