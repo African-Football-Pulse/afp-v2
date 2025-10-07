@@ -4,6 +4,7 @@ from typing import List
 from jinja2 import Environment, FileSystemLoader
 from src.storage import azure_blob
 from src.tools.voice_map import load_voice_map
+from src.tools import transitions_utils  # 🧩 Ny import för övergångar
 
 # ---------- Miljövariabler ----------
 LEAGUE = os.getenv("LEAGUE", "premier_league")
@@ -25,18 +26,22 @@ if not CONTAINER.strip():
 def log(msg: str):
     print(f"[assemble] {msg}", flush=True)
 
+
 def today() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d")
+
 
 # ---------- I/O ----------
 def read_text(rel_path: str) -> str:
     """Läser text från Azure Blob"""
     return azure_blob.get_text(CONTAINER, READ_PREFIX + rel_path)
 
+
 def write_text(rel_path: str, text: str, content_type: str):
     """Skriver text till Azure Blob"""
     azure_blob.put_text(CONTAINER, WRITE_PREFIX + rel_path, text, content_type)
     return WRITE_PREFIX + rel_path
+
 
 # ---------- Hitta sektioner ----------
 def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
@@ -46,11 +51,11 @@ def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
     base_prefix = f"{READ_PREFIX}sections/"
     results = []
     for b in azure_blob.list_prefix(CONTAINER, base_prefix):
-        # Anpassat till produce/write_outputs → sections/<section>/<day>/<league>/<pod>/section_manifest.json
         if b.endswith("/section_manifest.json") and f"/{date}/{league}/{pod}/" in b:
             results.append(b[len(READ_PREFIX):])
     log(f"found {len(results)} manifests for pod={pod}")
     return sorted(results)
+
 
 # ---------- Parser ----------
 def parse_section_text(section_id: str, date: str, league: str, pod: str) -> dict:
@@ -63,7 +68,6 @@ def parse_section_text(section_id: str, date: str, league: str, pod: str) -> dic
     except Exception:
         return {"text": ""}
 
-    # Ta bort rubrikrader
     clean_lines = [l for l in raw_text.splitlines() if not l.strip().startswith("#")]
     raw_text = "\n".join(clean_lines).strip()
 
@@ -79,8 +83,6 @@ def parse_section_text(section_id: str, date: str, league: str, pod: str) -> dic
 
     return {"lines": lines} if lines else {"text": raw_text}
 
-    log(f"sections_meta sample: {json.dumps(sections_meta, ensure_ascii=False)[:300]}")
-
 
 # ---------- Rendering via Jinja ----------
 def render_episode(sections_meta, lang: str, mode: str = "script"):
@@ -93,8 +95,9 @@ def render_episode(sections_meta, lang: str, mode: str = "script"):
         lang=lang,
         mode=mode,
         league=LEAGUE,
-        date=today()
+        date=today(),
     )
+
 
 # ---------- Domänlogik ----------
 def build_episode(date: str, league: str, lang: str, pod: str):
@@ -120,25 +123,35 @@ def build_episode(date: str, league: str, lang: str, pod: str):
         try:
             raw = azure_blob.get_json(CONTAINER, m)
             dur = int(raw.get("target_duration_s", 60))
+            role = raw.get("role", "news_anchor")
         except Exception:
-            dur = 60
-        parsed = parse_section_text(section_id, date, league, pod)
-        sections_meta.append({"section_id": section_id, "lang": lang, "duration_s": dur, **parsed})
+            dur, role = 60, "news_anchor"
 
-    # 1. Rendera manus
-    episode_script = render_episode(sections_meta, lang, mode="script")
+        parsed = parse_section_text(section_id, date, league, pod)
+        sections_meta.append({"section_id": section_id, "role": role, "lang": lang, "duration_s": dur, **parsed})
 
     log(f"[debug] sections_meta count={len(sections_meta)}")
-    log(f"[debug] first_section={json.dumps(sections_meta[0], ensure_ascii=False)[:300] if sections_meta else 'none'}")
+    if sections_meta:
+        log(f"[debug] first_section={json.dumps(sections_meta[0], ensure_ascii=False)[:300]}")
 
+    # 🧩 Infoga övergångar mellan sektioner
+    sections_with_trans = transitions_utils.insert_transitions(sections_meta, lang)
+
+    # Logga varje infogad övergång
+    added_transitions = [s for s in sections_with_trans if s["section_id"].startswith("TRANSITION.")]
+    for t in added_transitions:
+        log(f"added transition: {t['section_id']} ({t['text'][:60]}...)")
+
+    # 1. Rendera manus
+    episode_script = render_episode(sections_with_trans, lang, mode="script")
 
     # 2. Rendera vilka sektioner som används
-    used_text = render_episode(sections_meta, lang, mode="used")
+    used_text = render_episode(sections_with_trans, lang, mode="used")
     used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
     log(f"used_sections (från mallen): {used_sections}")
 
     # 3. Filtrera metadata
-    filtered_meta = [s for s in sections_meta if s["section_id"] in used_sections]
+    filtered_meta = [s for s in sections_with_trans if s["section_id"] in used_sections]
 
     # 4. Voice map
     voice_map = load_voice_map(lang)
@@ -163,12 +176,14 @@ def build_episode(date: str, league: str, lang: str, pod: str):
     log(f"wrote: {WRITE_PREFIX}{base}episode_script.txt")
     log(f"wrote: {WRITE_PREFIX}{base}episode_used.json")
 
+
 # ---------- Main ----------
 def main():
     log(f"start assemble: league={LEAGUE} lang={LANG} pod={POD}")
     date = today()
     build_episode(date, LEAGUE, LANG, POD)
     log("done")
+
 
 if __name__ == "__main__":
     main()
