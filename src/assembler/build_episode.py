@@ -79,6 +79,9 @@ def parse_section_text(section_id: str, date: str, league: str, pod: str) -> dic
 
     return {"lines": lines} if lines else {"text": raw_text}
 
+    log(f"sections_meta sample: {json.dumps(sections_meta, ensure_ascii=False)[:300]}")
+
+
 # ---------- Rendering via Jinja ----------
 def render_episode(sections_meta, lang: str, mode: str = "script"):
     env = Environment(loader=FileSystemLoader("templates"))
