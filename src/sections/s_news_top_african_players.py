@@ -84,6 +84,8 @@ def build_section(args=None):
         f"The players are: {players_list}. "
         f"Explain briefly why they stood out, in 3–5 sentences overall. "
         f"Do not include scores, raw URLs or metadata."
+        f"Do not add generic openings like 'Welcome'."
+        f"Do not add generic closings like 'Stay tuned'."
     )
     prompt_config = {
         "persona": persona_block,
