@@ -5,7 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from src.storage import azure_blob
 from src.tools.voice_map import load_voice_map
 from src.tools import transitions_utils   # 🧩 Övergångar
-from src.tools import episode_frame_utils # 🧩 Intro/Outro-injektering
+from src.tools import episode_frame_utils # 🧩 Intro/Outro (stub i nuläget)
 
 # ---------- Miljövariabler ----------
 LEAGUE = os.getenv("LEAGUE", "premier_league")
@@ -14,8 +14,8 @@ LANG = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
 
 # 🔄 Ny: POD matchar "pod" från produce/write_outputs
 POD = os.getenv("POD", "PL_daily_africa_en")
-
 POD_ID = os.getenv("POD_ID", f"afp-{LEAGUE}-daily-{LANG}")
+
 READ_PREFIX = os.getenv("READ_PREFIX", "")
 WRITE_PREFIX = os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "assembler/"))
 
@@ -132,17 +132,16 @@ def build_episode(date: str, league: str, lang: str, pod: str):
     if sections_meta:
         log(f"[debug] first_section={json.dumps(sections_meta[0], ensure_ascii=False)[:300]}")
 
-    # 🧩 Infoga övergångar mellan sektioner
+    # 🧩 Infoga övergångar
     sections_with_trans = transitions_utils.insert_transitions(sections_meta, lang)
-
-    # Logga varje infogad övergång
     added_transitions = [s for s in sections_with_trans if s["section_id"].startswith("TRANSITION.")]
     for t in added_transitions:
         log(f"added transition: {t['section_id']} ({t['text'][:60]}...)")
 
-    # 🧩 Infoga intro/outro-frame (t.ex. EPISODE.INTRO / OUTRO)
+    # 🧩 Infoga intro/outro (stub loggar bara)
     sections_with_frame = episode_frame_utils.insert_intro_outro(sections_with_trans, lang)
-    log(f"[frame] intro/outro added → total sections: {len(sections_with_frame)}")
+    if len(sections_with_frame) != len(sections_with_trans):
+        log(f"[frame] intro/outro added → total sections: {len(sections_with_frame)}")
 
     # 1️⃣ Rendera manus
     episode_script = render_episode(sections_with_frame, lang, mode="script")
@@ -152,10 +151,10 @@ def build_episode(date: str, league: str, lang: str, pod: str):
     used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
     log(f"used_sections (från mallen): {used_sections}")
 
-    # 3️⃣ Filtrera metadata till de sektioner som används
+    # 3️⃣ Filtrera metadata
     filtered_meta = [s for s in sections_with_frame if s["section_id"] in used_sections]
 
-    # 4️⃣ Voice map (röstallokering)
+    # 4️⃣ Voice map
     voice_map = load_voice_map(lang)
 
     manifest = {
