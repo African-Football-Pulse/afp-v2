@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from datetime import datetime
 from typing import Dict, Any, Tuple
 from src.storage import azure_blob
 from src.producer import role_utils
@@ -113,3 +114,23 @@ def load_scored_enriched(day: str, league: str = "premier_league"):
         except json.JSONDecodeError:
             continue
     return items
+
+
+# -------------------------------------------------------
+# 🎯 Season utility
+# -------------------------------------------------------
+def current_season(today: datetime = None) -> str:
+    """
+    Returnerar aktuell säsong i format 'YYYY-YYYY'.
+    Premier League-säsonger börjar i augusti.
+    """
+    if today is None:
+        today = datetime.utcnow()
+    year = today.year
+    if today.month < 8:
+        season = f"{year-1}-{year}"
+    else:
+        season = f"{year}-{year+1}"
+
+    logger.info(f"[season_utils] current_season → {season}")
+    return season
