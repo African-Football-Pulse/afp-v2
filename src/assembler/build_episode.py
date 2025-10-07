@@ -4,7 +4,8 @@ from typing import List
 from jinja2 import Environment, FileSystemLoader
 from src.storage import azure_blob
 from src.tools.voice_map import load_voice_map
-from src.tools import transitions_utils  # 🧩 Ny import för övergångar
+from src.tools import transitions_utils   # 🧩 Övergångar
+from src.tools import episode_frame_utils # 🧩 Intro/Outro-injektering
 
 # ---------- Miljövariabler ----------
 LEAGUE = os.getenv("LEAGUE", "premier_league")
@@ -21,6 +22,7 @@ WRITE_PREFIX = os.getenv("BLOB_PREFIX", os.getenv("WRITE_PREFIX", "assembler/"))
 CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 if not CONTAINER.strip():
     raise RuntimeError("AZURE_STORAGE_CONTAINER missing or empty")
+
 
 # ---------- Logging ----------
 def log(msg: str):
@@ -45,9 +47,7 @@ def write_text(rel_path: str, text: str, content_type: str):
 
 # ---------- Hitta sektioner ----------
 def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
-    """
-    Listar alla section_manifest.json för datum/league/pod
-    """
+    """Listar alla section_manifest.json för datum/league/pod"""
     base_prefix = f"{READ_PREFIX}sections/"
     results = []
     for b in azure_blob.list_prefix(CONTAINER, base_prefix):
@@ -59,9 +59,7 @@ def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
 
 # ---------- Parser ----------
 def parse_section_text(section_id: str, date: str, league: str, pod: str) -> dict:
-    """
-    Läser section.md och returnerar {"text": "..."} eller {"lines": [{"persona": "...", "text": "..."}]}
-    """
+    """Läser section.md och returnerar text eller radvis persona-struktur"""
     md_path = f"sections/{section_id}/{date}/{league}/{pod}/section.md"
     try:
         raw_text = read_text(md_path).strip()
@@ -142,18 +140,22 @@ def build_episode(date: str, league: str, lang: str, pod: str):
     for t in added_transitions:
         log(f"added transition: {t['section_id']} ({t['text'][:60]}...)")
 
-    # 1. Rendera manus
-    episode_script = render_episode(sections_with_trans, lang, mode="script")
+    # 🧩 Infoga intro/outro-frame (t.ex. EPISODE.INTRO / OUTRO)
+    sections_with_frame = episode_frame_utils.insert_intro_outro(sections_with_trans, lang)
+    log(f"[frame] intro/outro added → total sections: {len(sections_with_frame)}")
 
-    # 2. Rendera vilka sektioner som används
-    used_text = render_episode(sections_with_trans, lang, mode="used")
+    # 1️⃣ Rendera manus
+    episode_script = render_episode(sections_with_frame, lang, mode="script")
+
+    # 2️⃣ Rendera vilka sektioner som används
+    used_text = render_episode(sections_with_frame, lang, mode="used")
     used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
     log(f"used_sections (från mallen): {used_sections}")
 
-    # 3. Filtrera metadata
-    filtered_meta = [s for s in sections_with_trans if s["section_id"] in used_sections]
+    # 3️⃣ Filtrera metadata till de sektioner som används
+    filtered_meta = [s for s in sections_with_frame if s["section_id"] in used_sections]
 
-    # 4. Voice map
+    # 4️⃣ Voice map (röstallokering)
     voice_map = load_voice_map(lang)
 
     manifest = {
@@ -167,7 +169,7 @@ def build_episode(date: str, league: str, lang: str, pod: str):
         "voice_map": voice_map,
     }
 
-    # 5. Skriv filer
+    # 5️⃣ Skriv resultat till Azure
     write_text(base + "episode_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
     write_text(base + "episode_used.json", json.dumps(used_sections, ensure_ascii=False, indent=2), "application/json")
