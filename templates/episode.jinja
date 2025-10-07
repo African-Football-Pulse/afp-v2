@@ -55,29 +55,39 @@
 {# ========================================================= #}
 {% if mode == "used" %}
   {# ------------------------------------------------------- #}
-  {# Måndag: Post-Match intro + alla NEWS                    #}
+  {# Måndag: Post-Match intro + alla NEWS + outro            #}
   {# ------------------------------------------------------- #}
   {% if weekday == 0 %}
 S.GENERIC.INTRO.POSTMATCH
     {% for sid, sec in sections.items() if sid.startswith("S.NEWS.") %}
 {{ sid }}
     {% endfor %}
+S.GENERIC.OUTRO.POSTMATCH
+
   {# ------------------------------------------------------- #}
-  {# Tisdag: Daily intro + Top3 + Stats                      #}
+  {# Tisdag: Daily intro + Top3 + African Players + outro    #}
   {# ------------------------------------------------------- #}
   {% elif weekday == 1 %}
 S.GENERIC.INTRO.DAILY
 S.NEWS.TOP3.GENERIC
 S.NEWS.TOP.AFRICAN.PLAYERS
+S.GENERIC.OUTRO.DAILY
+
   {# ------------------------------------------------------- #}
-  {# Torsdag: Daily intro + Highlight + Expert               #}
+  {# Torsdag: Daily intro + Highlight + Expert + outro       #}
   {# ------------------------------------------------------- #}
   {% elif weekday == 3 %}
 S.GENERIC.INTRO.DAILY
 S.NEWS.CLUB.HIGHLIGHT
 S.OPINION.EXPERT.COMMENT
+S.GENERIC.OUTRO.DAILY
+
+  {# ------------------------------------------------------- #}
+  {# Övriga dagar: Daily intro + Top3 + outro                #}
+  {# ------------------------------------------------------- #}
   {% else %}
 S.GENERIC.INTRO.DAILY
 S.NEWS.TOP3.GENERIC
+S.GENERIC.OUTRO.DAILY
   {% endif %}
 {% endif %}
