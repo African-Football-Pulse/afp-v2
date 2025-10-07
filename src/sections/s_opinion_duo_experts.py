@@ -70,6 +70,8 @@ def build_section(args):
             f"between {expert1.upper()} and {expert2.upper()}, "
             f"based on these stories:\n\n{news_text}\n\n"
             f"Make it conversational, record-ready, and avoid lists or placeholders."
+            f"Do not add generic openings like 'Welcome'."
+            f"Do not add generic closings like 'Stay tuned'."
         )
         prompt_config = {
             "persona": f"duo_experts:{expert1}+{expert2}",
