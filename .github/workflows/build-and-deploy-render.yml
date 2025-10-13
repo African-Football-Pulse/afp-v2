@@ -3,7 +3,6 @@ name: Build and Deploy Render
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 7 * * *"   # kör varje dag kl 07:00, justera om ni vill
 
 jobs:
   render:
