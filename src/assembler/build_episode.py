@@ -1,18 +1,33 @@
-import os, json
+#!/usr/bin/env python3
+"""
+Assemble – bygger en komplett episod utifrån producerade sektioner.
+
+Funktioner:
+ - Hämtar sektioner (section_manifest + section.md) från blob
+ - Låter GPT förädla texten
+ - Filtrerar bort låga rating-värden (<27)
+ - Bevarar roll-, persona-, och röstmetadata
+ - Lägger till övergångar och intro/outro
+ - Renderar manus och manifest baserat på weekday & rating
+"""
+
+import os, json, hashlib
 from datetime import datetime
 from typing import List
 from jinja2 import Environment, FileSystemLoader
+
 from src.storage import azure_blob
 from src.tools.voice_map import load_voice_map
-from src.tools import transitions_utils   # 🧩 Övergångar
-from src.tools import episode_frame_utils # 🧩 Intro/Outro (stub i nuläget)
+from src.tools import transitions_utils
+from src.tools import episode_frame_utils
+from src.tools import gpt_refine   # 🧠 ny modul för GPT-förädling
+
 
 # ---------- Miljövariabler ----------
 LEAGUE = os.getenv("LEAGUE", "premier_league")
 _raw_lang = os.getenv("LANG")
 LANG = _raw_lang if _raw_lang and not _raw_lang.startswith("C.") else "en"
 
-# 🔄 Ny: POD matchar "pod" från produce/write_outputs
 POD = os.getenv("POD", "PL_daily_africa_en")
 POD_ID = os.getenv("POD_ID", f"afp-{LEAGUE}-daily-{LANG}")
 
@@ -23,8 +38,10 @@ CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "afp")
 if not CONTAINER.strip():
     raise RuntimeError("AZURE_STORAGE_CONTAINER missing or empty")
 
+RATING_THRESHOLD = int(os.getenv("RATING_THRESHOLD", 27))
 
-# ---------- Logging ----------
+
+# ---------- Hjälpfunktioner ----------
 def log(msg: str):
     print(f"[assemble] {msg}", flush=True)
 
@@ -33,14 +50,16 @@ def today() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d")
 
 
+def text_hash(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
 # ---------- I/O ----------
 def read_text(rel_path: str) -> str:
-    """Läser text från Azure Blob"""
     return azure_blob.get_text(CONTAINER, READ_PREFIX + rel_path)
 
 
 def write_text(rel_path: str, text: str, content_type: str):
-    """Skriver text till Azure Blob"""
     azure_blob.put_text(CONTAINER, WRITE_PREFIX + rel_path, text, content_type)
     return WRITE_PREFIX + rel_path
 
@@ -57,32 +76,41 @@ def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
     return sorted(results)
 
 
-# ---------- Parser ----------
-def parse_section_text(section_id: str, date: str, league: str, pod: str) -> dict:
-    """Läser section.md och returnerar text eller radvis persona-struktur"""
+# ---------- Läs och GPT-förädla sektion ----------
+def load_and_refine_section(section_id: str, date: str, league: str, pod: str, lang: str) -> dict:
     md_path = f"sections/{section_id}/{date}/{league}/{pod}/section.md"
     try:
         raw_text = read_text(md_path).strip()
     except Exception:
-        return {"text": ""}
+        log(f"[warn] Missing section text for {section_id}")
+        return {"text": "", "original_text": ""}
 
+    # Rensa bort markdownrubriker
     clean_lines = [l for l in raw_text.splitlines() if not l.strip().startswith("#")]
     raw_text = "\n".join(clean_lines).strip()
 
+    # 🧠 GPT-förädling
+    improved_text = gpt_refine.refine_section_text(section_id, raw_text, lang)
+
+    # Detektera personas (Expert 1, Expert 2 osv.)
     lines = []
-    for line in raw_text.splitlines():
+    for line in improved_text.splitlines():
         line = line.strip()
         if not line:
             continue
-        if line.startswith("**Expert 1:**") or line.startswith("Expert 1:"):
+        if line.lower().startswith(("expert 1:", "**expert 1:**")):
             lines.append({"persona": "expert1", "text": line.split(":", 1)[1].strip()})
-        elif line.startswith("**Expert 2:**") or line.startswith("Expert 2:"):
+        elif line.lower().startswith(("expert 2:", "**expert 2:**")):
             lines.append({"persona": "expert2", "text": line.split(":", 1)[1].strip()})
 
-    return {"lines": lines} if lines else {"text": raw_text}
+    return {
+        "text": improved_text if not lines else "",
+        "lines": lines,
+        "original_text": raw_text
+    }
 
 
-# ---------- Rendering via Jinja ----------
+# ---------- Rendering ----------
 def render_episode(sections_meta, lang: str, mode: str = "script"):
     env = Environment(loader=FileSystemLoader("templates"))
     template = env.get_template("episode.jinja")
@@ -97,21 +125,17 @@ def render_episode(sections_meta, lang: str, mode: str = "script"):
     )
 
 
-# ---------- Domänlogik ----------
+# ---------- Huvudfunktion ----------
 def build_episode(date: str, league: str, lang: str, pod: str):
+    log(f"🏗️ start assemble: league={league} lang={lang} pod={pod}")
+
     manifests = list_section_manifests(date, league, pod)
     base = f"episodes/{date}/{league}/daily/{lang}/"
 
     if not manifests:
-        report = {
-            "status": "no-episode",
-            "reason": f"no sections found for pod={pod}",
-            "date": date,
-            "league": league,
-            "lang": lang,
-        }
+        report = {"status": "no-episode", "reason": "no sections found", "date": date}
         write_text(base + "report.json", json.dumps(report, ensure_ascii=False, indent=2), "application/json")
-        log(f"wrote: {WRITE_PREFIX}{base}report.json")
+        log("no manifests found – aborting assemble")
         return
 
     sections_meta = []
@@ -122,68 +146,86 @@ def build_episode(date: str, league: str, lang: str, pod: str):
             raw = azure_blob.get_json(CONTAINER, m)
             dur = int(raw.get("target_duration_s", 60))
             role = raw.get("role", "news_anchor")
-        except Exception:
-            dur, role = 60, "news_anchor"
+            rating = int(raw.get("rating", 30))
+            source = raw.get("source", "unknown")
+        except Exception as e:
+            log(f"[warn] failed to read manifest {m}: {e}")
+            dur, role, rating, source = 60, "news_anchor", 30, "unknown"
 
-        parsed = parse_section_text(section_id, date, league, pod)
-        sections_meta.append({"section_id": section_id, "role": role, "lang": lang, "duration_s": dur, **parsed})
+        parsed = load_and_refine_section(section_id, date, league, pod, lang)
+        sections_meta.append({
+            "section_id": section_id,
+            "role": role,
+            "lang": lang,
+            "duration_s": dur,
+            "rating": rating,
+            "source": source,
+            **parsed
+        })
 
-    log(f"[debug] sections_meta count={len(sections_meta)}")
-    if sections_meta:
-        log(f"[debug] first_section={json.dumps(sections_meta[0], ensure_ascii=False)[:300]}")
+    log(f"🔍 total sections before filter: {len(sections_meta)}")
 
-    # 🧩 Infoga övergångar
-    sections_with_trans = transitions_utils.insert_transitions(sections_meta, lang)
-    added_transitions = [s for s in sections_with_trans if s["section_id"].startswith("TRANSITION.")]
-    for t in added_transitions:
-        log(f"added transition: {t['section_id']} ({t['text'][:60]}...)")
+    # 🔎 Filtrera på rating
+    sections_meta = [s for s in sections_meta if s.get("rating", 0) >= RATING_THRESHOLD]
+    log(f"✅ kept {len(sections_meta)} sections with rating ≥ {RATING_THRESHOLD}")
 
-    # 🧩 Infoga intro/outro (stub loggar bara)
-    sections_with_frame = episode_frame_utils.insert_intro_outro(sections_with_trans, lang)
-    if len(sections_with_frame) != len(sections_with_trans):
-        log(f"[frame] intro/outro added → total sections: {len(sections_with_frame)}")
+    if not sections_meta:
+        report = {"status": "no-episode", "reason": "no high-rated sections", "date": date}
+        write_text(base + "report.json", json.dumps(report, ensure_ascii=False, indent=2), "application/json")
+        log("no eligible sections – aborting assemble")
+        return
 
-    # 1️⃣ Rendera manus
-    episode_script = render_episode(sections_with_frame, lang, mode="script")
+    # 🚫 Deduplicering via text-hash
+    seen_hashes = set()
+    unique_sections = []
+    for s in sections_meta:
+        h = text_hash(s.get("text", s.get("original_text", "")))
+        if h not in seen_hashes:
+            seen_hashes.add(h)
+            unique_sections.append(s)
+        else:
+            log(f"[dedupe] skipped duplicate section {s['section_id']}")
+    sections_meta = unique_sections
 
-    # 2️⃣ Rendera vilka sektioner som används
-    used_text = render_episode(sections_with_frame, lang, mode="used")
-    used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
-    log(f"used_sections (från mallen): {used_sections}")
+    # 🧩 Infoga övergångar och intro/outro
+    with_transitions = transitions_utils.insert_transitions(sections_meta, lang)
+    final_sections = episode_frame_utils.insert_intro_outro(with_transitions, lang)
 
-    # 3️⃣ Filtrera metadata
-    filtered_meta = [s for s in sections_with_frame if s["section_id"] in used_sections]
-
-    # 4️⃣ Voice map
+    # 🎙️ Voice map
     voice_map = load_voice_map(lang)
 
+    # 🪄 Rendera manus
+    episode_script = render_episode(final_sections, lang, mode="script")
+    used_text = render_episode(final_sections, lang, mode="used")
+    used_sections = [line.strip() for line in used_text.splitlines() if line.strip()]
+
+    # 🧾 Manifest
     manifest = {
         "pod_id": POD_ID,
         "pod": pod,
         "date": date,
         "type": "micro",
         "lang": lang,
-        "sections": filtered_meta,
-        "duration_s": sum(s["duration_s"] for s in filtered_meta),
+        "sections": final_sections,
+        "duration_s": sum(s["duration_s"] for s in final_sections),
         "voice_map": voice_map,
+        "weekday": datetime.utcnow().weekday(),
     }
 
-    # 5️⃣ Skriv resultat till Azure
+    # 💾 Skriv ut
     write_text(base + "episode_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2), "application/json")
     write_text(base + "episode_script.txt", episode_script, "text/plain; charset=utf-8")
     write_text(base + "episode_used.json", json.dumps(used_sections, ensure_ascii=False, indent=2), "application/json")
 
-    log(f"wrote: {WRITE_PREFIX}{base}episode_manifest.json")
-    log(f"wrote: {WRITE_PREFIX}{base}episode_script.txt")
-    log(f"wrote: {WRITE_PREFIX}{base}episode_used.json")
+    log(f"🎉 Episode built successfully with {len(final_sections)} sections.")
+    log(f"Files written under: {WRITE_PREFIX}{base}")
 
 
-# ---------- Main ----------
+# ---------- Entry ----------
 def main():
-    log(f"start assemble: league={LEAGUE} lang={LANG} pod={POD}")
     date = today()
     build_episode(date, LEAGUE, LANG, POD)
-    log("done")
+    log("done ✅")
 
 
 if __name__ == "__main__":
