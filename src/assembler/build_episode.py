@@ -2,25 +2,23 @@
 """
 Assemble – bygger en komplett episod utifrån producerade sektioner.
 
-Funktioner:
- - Hämtar sektioner (section_manifest + section.md) från blob
- - Låter GPT förädla texten
- - Filtrerar bort låga rating-värden (<27)
- - Bevarar roll-, persona-, och röstmetadata
- - Lägger till övergångar och intro/outro
- - Renderar manus och manifest baserat på weekday & rating
+Nyheter:
+ - Inline GPT-förädling av varje sektion (ingen separat modul)
+ - Filtrering på rating ≥ RATING_THRESHOLD
+ - Deduplicering av textinnehåll
+ - Dynamisk rendering baserad på weekday & rating
 """
 
 import os, json, hashlib
 from datetime import datetime
 from typing import List
 from jinja2 import Environment, FileSystemLoader
+from openai import OpenAI
 
 from src.storage import azure_blob
 from src.tools.voice_map import load_voice_map
 from src.tools import transitions_utils
 from src.tools import episode_frame_utils
-from src.tools import gpt_refine   # 🧠 ny modul för GPT-förädling
 
 
 # ---------- Miljövariabler ----------
@@ -39,6 +37,8 @@ if not CONTAINER.strip():
     raise RuntimeError("AZURE_STORAGE_CONTAINER missing or empty")
 
 RATING_THRESHOLD = int(os.getenv("RATING_THRESHOLD", 27))
+GPT_MODEL = os.getenv("GPT_MODEL", "gpt-5-turbo")
+client = OpenAI()
 
 
 # ---------- Hjälpfunktioner ----------
@@ -66,7 +66,6 @@ def write_text(rel_path: str, text: str, content_type: str):
 
 # ---------- Hitta sektioner ----------
 def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
-    """Listar alla section_manifest.json för datum/league/pod"""
     base_prefix = f"{READ_PREFIX}sections/"
     results = []
     for b in azure_blob.list_prefix(CONTAINER, base_prefix):
@@ -76,7 +75,7 @@ def list_section_manifests(date: str, league: str, pod: str) -> List[str]:
     return sorted(results)
 
 
-# ---------- Läs och GPT-förädla sektion ----------
+# ---------- Läs & förädla sektioner ----------
 def load_and_refine_section(section_id: str, date: str, league: str, pod: str, lang: str) -> dict:
     md_path = f"sections/{section_id}/{date}/{league}/{pod}/section.md"
     try:
@@ -85,14 +84,35 @@ def load_and_refine_section(section_id: str, date: str, league: str, pod: str, l
         log(f"[warn] Missing section text for {section_id}")
         return {"text": "", "original_text": ""}
 
-    # Rensa bort markdownrubriker
+    # 🧹 Rensa markdown
     clean_lines = [l for l in raw_text.splitlines() if not l.strip().startswith("#")]
     raw_text = "\n".join(clean_lines).strip()
 
-    # 🧠 GPT-förädling
-    improved_text = gpt_refine.refine_section_text(section_id, raw_text, lang)
+    # 🧠 GPT-förädling inline
+    improved_text = raw_text
+    try:
+        prompt = f"""
+        Improve the following podcast section text for clarity, spoken tone, and narrative flow in {lang}.
+        Keep meaning, facts, and structure intact. Do not shorten drastically.
+        Section ID: {section_id}.
+        ---
+        {raw_text}
+        """
+        response = client.chat.completions.create(
+            model=GPT_MODEL,
+            messages=[
+                {"role": "system", "content": "You are an editorial assistant improving podcast script text."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            max_tokens=800,
+        )
+        improved_text = response.choices[0].message.content.strip()
+        log(f"[gpt] refined section {section_id}")
+    except Exception as e:
+        log(f"[gpt] ⚠️ Skipping GPT refine for {section_id}: {e}")
 
-    # Detektera personas (Expert 1, Expert 2 osv.)
+    # 🎭 Identifiera personas (Expert 1, Expert 2 osv.)
     lines = []
     for line in improved_text.splitlines():
         line = line.strip()
@@ -106,7 +126,7 @@ def load_and_refine_section(section_id: str, date: str, league: str, pod: str, l
     return {
         "text": improved_text if not lines else "",
         "lines": lines,
-        "original_text": raw_text
+        "original_text": raw_text,
     }
 
 
@@ -175,7 +195,7 @@ def build_episode(date: str, league: str, lang: str, pod: str):
         log("no eligible sections – aborting assemble")
         return
 
-    # 🚫 Deduplicering via text-hash
+    # 🚫 Deduplicering
     seen_hashes = set()
     unique_sections = []
     for s in sections_meta:
